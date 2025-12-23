@@ -1,0 +1,12 @@
+# DART API를 사용한 재무제표 추출을 위한 의존성
+dart-fss>=0.4.3
+pandas>=1.5.0
+openpyxl>=3.0.0
+
+# 환경변수 로드
+python-dotenv>=1.0.0
+
+# 웹 서버
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-multipart>=0.0.6
