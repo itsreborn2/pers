@@ -1653,24 +1653,27 @@ def create_vcm_format(fs_data, excel_filepath=None):
 
     if excel_filepath and os.path.exists(excel_filepath):
         try:
-            bs_df = pd.read_excel(excel_filepath, sheet_name='재무상태표')
+            bs_df = pd.read_excel(excel_filepath, sheet_name='재무상태표', engine='openpyxl')
             print(f"[VCM] 엑셀에서 재무상태표 로드: {len(bs_df)}행, 컬럼: {list(bs_df.columns)}")
 
             # CIS(포괄손익계산서) 우선, 없으면 IS(손익계산서)
             try:
-                is_df = pd.read_excel(excel_filepath, sheet_name='포괄손익계산서')
+                is_df = pd.read_excel(excel_filepath, sheet_name='포괄손익계산서', engine='openpyxl')
                 print(f"[VCM] 엑셀에서 포괄손익계산서 로드: {len(is_df)}행")
             except:
-                is_df = pd.read_excel(excel_filepath, sheet_name='손익계산서')
+                is_df = pd.read_excel(excel_filepath, sheet_name='손익계산서', engine='openpyxl')
                 print(f"[VCM] 엑셀에서 손익계산서 로드: {len(is_df)}행")
         except Exception as e:
             print(f"[VCM] 엑셀 파일 읽기 실패, 원본 데이터 사용: {e}")
             bs_df = fs_data.get('bs')
-            is_df = fs_data.get('cis') or fs_data.get('is')
+            # DataFrame은 or 연산자로 비교 불가
+            cis_df = fs_data.get('cis')
+            is_df = cis_df if cis_df is not None and not cis_df.empty else fs_data.get('is')
     else:
         # 엑셀 파일 없으면 원본 사용
         bs_df = fs_data.get('bs')
-        is_df = fs_data.get('cis') or fs_data.get('is')
+        cis_df = fs_data.get('cis')
+        is_df = cis_df if cis_df is not None and not cis_df.empty else fs_data.get('is')
 
     if bs_df is None or is_df is None:
         print(f"[VCM] 필수 데이터 누락: bs={bs_df is not None}, is={is_df is not None}")
@@ -1979,20 +1982,8 @@ def create_vcm_format(fs_data, excel_filepath=None):
         당기순이익 = 세전이익 - (법인세 or 0)
         ebitda = 영업이익 + 감가상각비 + 무형상각비
         
-        values = {
-            '매출': 매출,
-        }
-
-        # 매출 하위 항목 동적 추가
-        for item_name in [item[0] for item in revenue_sub_items]:
-            values[f'  {item_name}'] = revenue_values.get(item_name) if revenue_values.get(item_name) else None
-
-        # 매출원가 추가
-        values['매출원가'] = 원가
-
-        # 매출원가 하위 항목 동적 추가
-        for item_name in [item[0] for item in cogs_sub_items]:
-            values[f'  {item_name}'] = cogs_values.get(item_name) if cogs_values.get(item_name) else None
+        # 매출/매출원가는 is_items에서 동적으로 추가됨 (부모 컬럼 포함)
+        values = {}
 
         # 매출총이익 및 판관비
         values.update({
@@ -2021,11 +2012,22 @@ def create_vcm_format(fs_data, excel_filepath=None):
         })
 
         # 손익계산서 세부항목 (부모 포함)
-        is_items = [
-            # 매출 (동적으로 추가됨)
-            # 매출원가 (동적으로 추가됨)
-            # 판관비 (위에서 추가됨)
-            # 영업외수익 세부항목
+        is_items = []
+
+        # 매출 세부항목 동적 추가
+        is_items.append(('매출', '', 매출))
+        for item_name in [item[0] for item in revenue_sub_items]:
+            val = revenue_values.get(item_name) or 0
+            is_items.append((item_name, '매출', val))
+
+        # 매출원가 세부항목 동적 추가
+        is_items.append(('매출원가', '', 원가))
+        for item_name in [item[0] for item in cogs_sub_items]:
+            val = cogs_values.get(item_name) or 0
+            is_items.append((item_name, '매출원가', val))
+
+        # 영업외수익 세부항목
+        is_items.extend([
             ('영업외수익', '', 영업외수익),
             ('이자수익', '영업외수익', 이자수익),
             ('배당금수익', '영업외수익', 배당금),
@@ -2049,7 +2051,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
             ('영업이익 [EBITDA]', 'EBITDA', 영업이익),
             ('감가상각비 [EBITDA]', 'EBITDA', 감가상각비),
             ('무형자산상각비 [EBITDA]', 'EBITDA', 무형상각비),
-        ]
+        ])
 
         # 첫 번째 연도에서 기존 항목 저장 (부모 없는 항목들)
         if year == fy_cols[0]:

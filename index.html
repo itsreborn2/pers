@@ -1819,18 +1819,53 @@
             // 판관비 동적 항목 선택
             const { topSgaItems, sgaCandidates, sgaItemValues } = selectTopSgaItems(isData, years);
 
+            // VCM 데이터에서 매출/매출원가 하위 항목 동적 추출
+            const vcmData = previewData?.vcm || [];
+            const revenueSubItems = vcmData
+                .filter(row => row['부모'] === '매출' && row['항목'] !== '매출')
+                .map(row => row['항목']);
+            const cogsSubItems = vcmData
+                .filter(row => row['부모'] === '매출원가' && row['항목'] !== '매출원가')
+                .map(row => row['항목']);
+
             // 손익계산서 항목 정의 (동적 생성)
             const isItems = [
-                { name: '매출', calc: 'revenue', isCategory: true },
-                { name: '상품매출', keywords: ['상품매출액', '상품매출'], excludes: ['원가'], isSubItem: true },
-                { name: '제품매출', keywords: ['제품매출액', '제품매출'], excludes: ['원가'], isSubItem: true },
-                { name: '기타매출', keywords: ['기타매출액', '기타매출'], excludes: ['원가'], isSubItem: true },
-                { name: '매출원가', calc: 'cogs', isCategory: true },
-                { name: '상품매출원가', keywords: ['상품매출원가'], isSubItem: true },
-                { name: '제품매출원가', keywords: ['제품매출원가'], isSubItem: true },
+                { name: '매출', calc: 'revenue', isCategory: true }
+            ];
+
+            // 매출 하위 항목 동적 추가 (VCM 데이터 기반)
+            if (revenueSubItems.length > 0) {
+                for (const itemName of revenueSubItems) {
+                    isItems.push({ name: itemName, keywords: [itemName], excludes: ['원가'], isSubItem: true });
+                }
+            } else {
+                // VCM 데이터가 없으면 기본값 사용
+                isItems.push(
+                    { name: '상품매출', keywords: ['상품매출액', '상품매출'], excludes: ['원가'], isSubItem: true },
+                    { name: '제품매출', keywords: ['제품매출액', '제품매출'], excludes: ['원가'], isSubItem: true },
+                    { name: '기타매출', keywords: ['기타매출액', '기타매출'], excludes: ['원가'], isSubItem: true }
+                );
+            }
+
+            isItems.push({ name: '매출원가', calc: 'cogs', isCategory: true });
+
+            // 매출원가 하위 항목 동적 추가 (VCM 데이터 기반)
+            if (cogsSubItems.length > 0) {
+                for (const itemName of cogsSubItems) {
+                    isItems.push({ name: itemName, keywords: [itemName], isSubItem: true });
+                }
+            } else {
+                // VCM 데이터가 없으면 기본값 사용
+                isItems.push(
+                    { name: '상품매출원가', keywords: ['상품매출원가'], isSubItem: true },
+                    { name: '제품매출원가', keywords: ['제품매출원가'], isSubItem: true }
+                );
+            }
+
+            isItems.push(
                 { name: '매출총이익', calc: 'grossProfit', isTotal: true },
                 { name: '판매비와관리비', calc: 'sga', isCategory: true }
-            ];
+            );
 
             // 동적 판관비 항목 추가 (상위 8개)
             for (const itemName of topSgaItems) {
@@ -2060,6 +2095,8 @@
                 if (vcmData && Array.isArray(vcmData)) {
                     let parentItem = null;
                     switch(calcType) {
+                        case 'revenue': parentItem = '매출'; break;
+                        case 'cogs': parentItem = '매출원가'; break;
                         case 'otherIncome': parentItem = '영업외수익'; break;
                         case 'otherExpense': parentItem = '영업외비용'; break;
                         case 'ebitda': parentItem = 'EBITDA'; break;
