@@ -1410,8 +1410,51 @@
             // 재무상태표 항목 정의 (excludes: 제외할 키워드)
             // 실제 계정과목명: 'Ⅰ.유동자산', '현금및현금성자산(주석3,19)', '자 산 총 계' 등
 
-            // 합산 항목의 상세 breakdown 반환 (툴팁용)
-            function getBsBreakdown(calcType, year) {
+            // VCM 데이터에서 부모 항목의 세부항목 찾기 (툴팁용)
+            function getVcmBreakdown(parentItem, year, vcmData) {
+                const breakdown = [];
+                if (!vcmData || !Array.isArray(vcmData)) return breakdown;
+
+                // '부모' 컬럼이 parentItem인 항목들 찾기
+                vcmData.forEach(row => {
+                    const parent = row['부모'];
+                    const item = row['항목'];
+                    const val = row[year];
+
+                    if (parent === parentItem && val !== null && val !== undefined && val !== 0) {
+                        breakdown.push({
+                            name: item,
+                            value: parseFloat(val) || 0
+                        });
+                    }
+                });
+
+                return breakdown;
+            }
+
+            // 합산 항목의 상세 breakdown 반환 (툴팁용) - VCM 우선, 없으면 기존 로직
+            function getBsBreakdown(calcType, year, vcmData) {
+                // VCM 데이터에서 세부항목 찾기 시도
+                if (vcmData && Array.isArray(vcmData)) {
+                    let parentItem = null;
+                    switch(calcType) {
+                        case 'tradeReceivables': parentItem = '매출채권및기타채권'; break;
+                        case 'currentTradePayables': parentItem = '매입채무및기타채무'; break;
+                        case 'nonCurrentTradePayables': parentItem = '매입채무및기타채무 [비유동]'; break;
+                        case 'otherEquity': parentItem = '기타자본구성요소'; break;
+                        case 'longTermInvestments': parentItem = '장기투자자산'; break;
+                        case 'otherCurrentLiabilities': parentItem = '기타유동부채'; break;
+                    }
+
+                    if (parentItem) {
+                        const vcmBreakdown = getVcmBreakdown(parentItem, year, vcmData);
+                        if (vcmBreakdown.length > 0) {
+                            return vcmBreakdown;
+                        }
+                    }
+                }
+
+                // VCM에 없으면 기존 로직 사용
                 const breakdown = [];
                 switch(calcType) {
                     case 'tradeReceivables':
@@ -1860,9 +1903,9 @@
                         // VCM 데이터 사용 (단위 변환)
                         val = parseValue(vcmRow[y]);
 
-                        // 합산 항목인 경우 툴팁 생성
+                        // 합산 항목인 경우 VCM에서 세부항목 찾아 툴팁 생성
                         if (item.calc) {
-                            const breakdown = getBsBreakdown(item.calc, y);
+                            const breakdown = getBsBreakdown(item.calc, y, vcmData);
                             if (!item.isCategory && breakdown.length >= 1) {
                                 isMultipleItems = true;
                                 tooltip = breakdown.map(b => `${b.name}: ${fmt(b.value)}`).join('\n');
@@ -1874,7 +1917,7 @@
                         if (item.calc) {
                             val = calcBsValue(item.calc, y);
                             // 각 연도별 툴팁 생성 (카테고리 행은 제외 - 이미 회색으로 합계임을 표시)
-                            const breakdown = getBsBreakdown(item.calc, y);
+                            const breakdown = getBsBreakdown(item.calc, y, vcmData);
                             if (!item.isCategory && breakdown.length >= 1) {  // 1개 이상이면 합산 내역 표시
                                 isMultipleItems = true;
                                 tooltip = breakdown.map(b => `${b.name}: ${fmt(b.value)}`).join('\n');
@@ -1902,9 +1945,20 @@
                 if (nwcRow && nwcRow[y] !== null && nwcRow[y] !== undefined) {
                     // 백엔드 VCM 값 사용 (단위 변환)
                     nwc = parseValue(nwcRow[y]);
-                    const 유동자산 = findValue(bsData, ['Ⅰ.유동자산', '유동자산'], y, ['비유동']) || 0;
-                    const 유동부채 = findValue(bsData, ['유동부채'], y, ['비유동']) || 0;
-                    tooltip = `[${y} 계산식]\n유동자산: ${fmt(유동자산)}\n- 유동부채: ${fmt(유동부채)}\n= NWC: ${fmt(nwc)}`;
+
+                    // VCM에서 NWC 세부항목 가져오기
+                    const nwcBreakdown = getVcmBreakdown('NWC', y, vcmData);
+                    if (nwcBreakdown.length > 0) {
+                        tooltip = `[${y} 계산식]\n`;
+                        nwcBreakdown.forEach(b => {
+                            tooltip += `${b.name.replace(' [NWC]', '')}: ${fmt(b.value)}\n`;
+                        });
+                        tooltip += `= NWC: ${fmt(nwc)}`;
+                    } else {
+                        const 유동자산 = findValue(bsData, ['Ⅰ.유동자산', '유동자산'], y, ['비유동']) || 0;
+                        const 유동부채 = findValue(bsData, ['유동부채'], y, ['비유동']) || 0;
+                        tooltip = `[${y} 계산식]\n유동자산: ${fmt(유동자산)}\n- 유동부채: ${fmt(유동부채)}\n= NWC: ${fmt(nwc)}`;
+                    }
                 } else {
                     // VCM 데이터 없으면 직접 계산
                     const 유동자산 = findValue(bsData, ['Ⅰ.유동자산', '유동자산'], y, ['비유동']) || 0;
@@ -1929,27 +1983,47 @@
                     // 백엔드 VCM 값 사용 (단위 변환)
                     netDebt = parseValue(netDebtRow[y]);
 
-                    // 툴팁용 세부 데이터
-                    const 단기차입금 = findValue(bsData, ['단기차입금'], y) || 0;
-                    const 유동성장기차입금 = findValueWithCategory(bsData, ['유동성장기차입금', '유동성장기부채'], y, '유동부채') || 0;
-                    const 유동성사채 = findValueWithCategory(bsData, ['유동성사채', '1년내상환사채'], y, '유동부채') || 0;
-                    const 사채 = findValueWithCategory(bsData, ['사채'], y, '비유동부채', ['유동성', '차입금']) || 0;
-                    const 장기차입금 = findValueWithCategory(bsData, ['장기차입금'], y, '비유동부채', ['유동성', '사채']) || 0;
-                    const 총차입금 = 단기차입금 + 유동성장기차입금 + 유동성사채 + 사채 + 장기차입금;
-                    const 현금 = findValue(bsData, ['현금및현금성자산'], y) || 0;
-                    const 단기금융 = findValue(bsData, ['단기금융상품', '단기금융자산'], y) || 0;
-                    const 총현금성자산 = 현금 + 단기금융;
+                    // VCM에서 Net Debt 세부항목 가져오기
+                    const netDebtBreakdown = getVcmBreakdown('Net Debt', y, vcmData);
+                    if (netDebtBreakdown.length > 0) {
+                        tooltip = `[${y} 계산식]\n`;
+                        let 총차입금 = 0;
+                        let 총현금성자산 = 0;
 
-                    tooltip = `[${y} 계산식]\n총차입금:\n`;
-                    if (단기차입금) tooltip += `  단기차입금: ${fmt(단기차입금)}\n`;
-                    if (유동성장기차입금) tooltip += `  유동성장기차입금: ${fmt(유동성장기차입금)}\n`;
-                    if (유동성사채) tooltip += `  유동성사채: ${fmt(유동성사채)}\n`;
-                    if (사채) tooltip += `  사채: ${fmt(사채)}\n`;
-                    if (장기차입금) tooltip += `  장기차입금: ${fmt(장기차입금)}\n`;
-                    tooltip += `= ${fmt(총차입금)}\n\n총현금성자산:\n`;
-                    if (현금) tooltip += `  현금: ${fmt(현금)}\n`;
-                    if (단기금융) tooltip += `  단기금융: ${fmt(단기금융)}\n`;
-                    tooltip += `= ${fmt(총현금성자산)}\n\nNet Debt: ${fmt(netDebt)}`;
+                        netDebtBreakdown.forEach(b => {
+                            const name = b.name.replace(' [NetDebt]', '');
+                            if (b.value > 0) {
+                                tooltip += `+ ${name}: ${fmt(b.value)}\n`;
+                                총차입금 += b.value;
+                            } else if (b.value < 0) {
+                                tooltip += `- ${name}: ${fmt(Math.abs(b.value))}\n`;
+                                총현금성자산 += Math.abs(b.value);
+                            }
+                        });
+                        tooltip += `= Net Debt: ${fmt(netDebt)}`;
+                    } else {
+                        // VCM 세부항목 없으면 기존 로직
+                        const 단기차입금 = findValue(bsData, ['단기차입금'], y) || 0;
+                        const 유동성장기차입금 = findValueWithCategory(bsData, ['유동성장기차입금', '유동성장기부채'], y, '유동부채') || 0;
+                        const 유동성사채 = findValueWithCategory(bsData, ['유동성사채', '1년내상환사채'], y, '유동부채') || 0;
+                        const 사채 = findValueWithCategory(bsData, ['사채'], y, '비유동부채', ['유동성', '차입금']) || 0;
+                        const 장기차입금 = findValueWithCategory(bsData, ['장기차입금'], y, '비유동부채', ['유동성', '사채']) || 0;
+                        const 총차입금 = 단기차입금 + 유동성장기차입금 + 유동성사채 + 사채 + 장기차입금;
+                        const 현금 = findValue(bsData, ['현금및현금성자산'], y) || 0;
+                        const 단기금융 = findValue(bsData, ['단기금융상품', '단기금융자산'], y) || 0;
+                        const 총현금성자산 = 현금 + 단기금융;
+
+                        tooltip = `[${y} 계산식]\n총차입금:\n`;
+                        if (단기차입금) tooltip += `  단기차입금: ${fmt(단기차입금)}\n`;
+                        if (유동성장기차입금) tooltip += `  유동성장기차입금: ${fmt(유동성장기차입금)}\n`;
+                        if (유동성사채) tooltip += `  유동성사채: ${fmt(유동성사채)}\n`;
+                        if (사채) tooltip += `  사채: ${fmt(사채)}\n`;
+                        if (장기차입금) tooltip += `  장기차입금: ${fmt(장기차입금)}\n`;
+                        tooltip += `= ${fmt(총차입금)}\n\n- 현금성자산:\n`;
+                        if (현금) tooltip += `  현금: ${fmt(현금)}\n`;
+                        if (단기금융) tooltip += `  단기금융: ${fmt(단기금융)}\n`;
+                        tooltip += `= ${fmt(총현금성자산)}\n\nNet Debt: ${fmt(netDebt)}`;
+                    }
                 } else {
                     // VCM 데이터 없으면 직접 계산
                     const 단기차입금 = findValue(bsData, ['단기차입금'], y) || 0;
@@ -1969,7 +2043,7 @@
                     if (유동성사채) tooltip += `  유동성사채: ${fmt(유동성사채)}\n`;
                     if (사채) tooltip += `  사채: ${fmt(사채)}\n`;
                     if (장기차입금) tooltip += `  장기차입금: ${fmt(장기차입금)}\n`;
-                    tooltip += `= ${fmt(총차입금)}\n\n총현금성자산:\n`;
+                    tooltip += `= ${fmt(총차입금)}\n\n- 현금성자산:\n`;
                     if (현금) tooltip += `  현금: ${fmt(현금)}\n`;
                     if (단기금융) tooltip += `  단기금융: ${fmt(단기금융)}\n`;
                     tooltip += `= ${fmt(총현금성자산)}\n\nNet Debt: ${fmt(netDebt)}`;
@@ -1981,7 +2055,21 @@
             bsTableHtml += '</tbody></table>';
             
             // 손익계산서 합산 항목의 상세 breakdown 반환 (툴팁용)
-            function getIsBreakdown(calcType, year) {
+            function getIsBreakdown(calcType, year, vcmData) {
+                // VCM 데이터에서 세부항목 찾기 시도
+                if (vcmData && Array.isArray(vcmData)) {
+                    let parentItem = null;
+                    switch(calcType) {
+                        case 'otherIncome': parentItem = '영업외수익'; break;
+                        case 'otherExpense': parentItem = '영업외비용'; break;
+                        case 'ebitda': parentItem = 'EBITDA'; break;
+                    }
+                    if (parentItem) {
+                        const vcmBreakdown = getVcmBreakdown(parentItem, year, vcmData);
+                        if (vcmBreakdown.length > 0) return vcmBreakdown;
+                    }
+                }
+
                 const breakdown = [];
 
                 // 동적 SGA 항목 처리
@@ -2254,7 +2342,7 @@
 
                         // 합산 항목인 경우 툴팁 생성
                         if (item.calc) {
-                            const breakdown = getIsBreakdown(item.calc, y);
+                            const breakdown = getIsBreakdown(item.calc, y, vcmData);
                             if (!item.isCategory && breakdown.length >= 1) {
                                 isMultipleItems = true;
                                 tooltip = breakdown.map(b => `${b.name}: ${fmt(b.value)}`).join('\n');
@@ -2266,7 +2354,7 @@
                         if (item.calc) {
                             val = calcValue(item.calc, y);
                             // 각 연도별 툴팁 생성 (카테고리 행은 제외 - 이미 회색으로 합계임을 표시)
-                            const breakdown = getIsBreakdown(item.calc, y);
+                            const breakdown = getIsBreakdown(item.calc, y, vcmData);
                             if (!item.isCategory && breakdown.length >= 1) {  // 1개 이상이면 합산 내역 표시
                                 isMultipleItems = true;
                                 tooltip = breakdown.map(b => `${b.name}: ${fmt(b.value)}`).join('\n');
