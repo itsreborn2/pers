@@ -1134,13 +1134,11 @@
             let unitDivisor = 1_000_000;  // 기본: 백만원
             let unitLabel = '백만원';
 
-            if (maxAbsValue >= 1_000_000_000_000) {  // 1조 이상
+            // 단위 자동 선택: 억원 또는 백만원 (천만원 단위 제거 - 재무제표 표준에 맞춤)
+            if (maxAbsValue >= 10_000_000_000_000) {  // 10조 이상
                 unitDivisor = 100_000_000;  // 억원
                 unitLabel = '억원';
-            } else if (maxAbsValue >= 100_000_000_000) {  // 천억(1,000억) 이상
-                unitDivisor = 10_000_000;  // 천만원
-                unitLabel = '천만원';
-            } else if (maxAbsValue >= 10_000_000_000) {  // 백억(100억) 이상
+            } else if (maxAbsValue >= 1_000_000) {  // 100만원 이상
                 unitDivisor = 1_000_000;  // 백만원
                 unitLabel = '백만원';
             }
@@ -1370,16 +1368,12 @@
 
                 // 단위별 최소 표시 단위 (백만원 기준)
                 // 백만원 단위: 1 = 백만원 → 정수만
-                // 천만원 단위: 0.1 = 백만원 → 소수점 첫째 자리
                 // 억원 단위: 0.01 = 백만원 → 소수점 둘째 자리
                 let minDisplayValue, decimalPlaces;
 
                 if (unitLabel === '백만원') {
                     minDisplayValue = 1;      // 백만원 미만은 표시 안 함
                     decimalPlaces = 0;        // 정수만
-                } else if (unitLabel === '천만원') {
-                    minDisplayValue = 0.1;    // 백만원 미만은 표시 안 함
-                    decimalPlaces = 1;        // 소수점 첫째 자리까지
                 } else {  // 억원
                     minDisplayValue = 0.01;   // 백만원 미만은 표시 안 함
                     decimalPlaces = 2;        // 소수점 둘째 자리까지
@@ -1810,7 +1804,7 @@
                 { name: '퇴직급여채무', keywords: ['퇴직급여채무', '퇴직급여충당부채', '확정급여채무', '순확정급여부채', '충당부채'], isSubItem: true },
                 { name: '부채총계', keywords: ['부채총계'], isTotal: true },
                 { name: '자본금', keywords: ['자본금'], excludes: ['잉여금'], isSubItem: true },
-                { name: '이익잉여금', keywords: ['이익잉여금', '미처분이익잉여금'], isSubItem: true },
+                { name: '이익잉여금', keywords: ['이익잉여금', '미처분이익잉여금', '결손금'], isSubItem: true },
                 { name: '기타자본구성요소', calc: 'otherEquity', isSubItem: true },
                 { name: '자본총계', keywords: ['자본총계'], isTotal: true },
                 { name: '부채와자본총계', keywords: ['부채와자본총계', '부채및자본총계'], isTotal: true },
