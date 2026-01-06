@@ -1134,11 +1134,13 @@
             let unitDivisor = 1_000_000;  // 기본: 백만원
             let unitLabel = '백만원';
 
-            // 단위 자동 선택: 억원 또는 백만원 (천만원 단위 제거 - 재무제표 표준에 맞춤)
-            if (maxAbsValue >= 10_000_000_000_000) {  // 10조 이상
+            if (maxAbsValue >= 1_000_000_000_000) {  // 1조 이상
                 unitDivisor = 100_000_000;  // 억원
                 unitLabel = '억원';
-            } else if (maxAbsValue >= 1_000_000) {  // 100만원 이상
+            } else if (maxAbsValue >= 100_000_000_000) {  // 천억(1,000억) 이상
+                unitDivisor = 10_000_000;  // 천만원
+                unitLabel = '천만원';
+            } else if (maxAbsValue >= 10_000_000_000) {  // 백억(100억) 이상
                 unitDivisor = 1_000_000;  // 백만원
                 unitLabel = '백만원';
             }
@@ -1368,12 +1370,16 @@
 
                 // 단위별 최소 표시 단위 (백만원 기준)
                 // 백만원 단위: 1 = 백만원 → 정수만
+                // 천만원 단위: 0.1 = 백만원 → 소수점 첫째 자리
                 // 억원 단위: 0.01 = 백만원 → 소수점 둘째 자리
                 let minDisplayValue, decimalPlaces;
 
                 if (unitLabel === '백만원') {
                     minDisplayValue = 1;      // 백만원 미만은 표시 안 함
                     decimalPlaces = 0;        // 정수만
+                } else if (unitLabel === '천만원') {
+                    minDisplayValue = 0.1;    // 백만원 미만은 표시 안 함
+                    decimalPlaces = 1;        // 소수점 첫째 자리까지
                 } else {  // 억원
                     minDisplayValue = 0.01;   // 백만원 미만은 표시 안 함
                     decimalPlaces = 2;        // 소수점 둘째 자리까지
@@ -1434,7 +1440,7 @@
                     switch(calcType) {
                         case 'tradeReceivables': parentItem = '매출채권및기타채권'; break;
                         case 'currentTradePayables': parentItem = '매입채무및기타채무'; break;
-                        case 'nonCurrentTradePayables': parentItem = '매입채무및기타채무 [비유동]'; break;
+                        case 'nonCurrentTradePayables': parentItem = '매입채무및기타채무[비유동]'; break;
                         case 'otherEquity': parentItem = '기타자본구성요소'; break;
                         case 'longTermInvestments': parentItem = '장기투자자산'; break;
                         case 'otherCurrentLiabilities': parentItem = '기타유동부채'; break;
@@ -1778,88 +1784,74 @@
                 return { topSgaItems, sgaCandidates, sgaItemValues };
             }
 
-            const bsItems = [
-                { name: '유동자산', keywords: ['유동자산'], excludes: ['비유동'], isCategory: true },
-                { name: '현금및현금성자산', keywords: ['현금및현금성자산'], isSubItem: true },
-                { name: '단기금융상품', keywords: ['단기금융상품', '금융자산'], excludes: ['비유동'], isSubItem: true },
-                { name: '재고자산', keywords: ['재고자산'], isSubItem: true },
-                { name: '매출채권및기타채권', calc: 'tradeReceivables', isSubItem: true },
-                { name: '기타비금융자산', calc: 'otherCurrentAssets', isSubItem: true },
-                { name: '비유동자산', keywords: ['비유동자산'], isCategory: true },
-                { name: '유형자산', keywords: ['유형자산'], excludes: ['무형', '처분', '투자'], isSubItem: true },
-                { name: '무형자산', keywords: ['무형자산'], excludes: ['상각'], isSubItem: true },
-                { name: '장기투자자산', calc: 'longTermInvestments', isSubItem: true },
-                { name: '보증금', keywords: ['보증금', '임차보증금', '장기보증금', '비유동기타자산'], isSubItem: true },
-                { name: '자산총계', keywords: ['자산총계'], isTotal: true },
-                { name: '유동부채', keywords: ['유동부채'], excludes: ['비유동'], isCategory: true },
-                { name: '매입채무및기타채무', calc: 'currentTradePayables', isSubItem: true },
-                { name: '단기차입금', keywords: ['단기차입금'], isSubItem: true },
-                { name: '유동성장기차입금', calc: 'currentLongTermDebt', isSubItem: true },
-                { name: '유동성사채', calc: 'currentBonds', isSubItem: true },
-                { name: '기타유동부채', calc: 'otherCurrentLiab', isSubItem: true },
-                { name: '비유동부채', keywords: ['비유동부채'], isCategory: true },
-                { name: '매입채무및기타채무', calc: 'nonCurrentTradePayables', isSubItem: true },
-                { name: '사채', calc: 'nonCurrentBonds', isSubItem: true },
-                { name: '장기차입금', calc: 'longTermDebt', isSubItem: true },
-                { name: '퇴직급여채무', keywords: ['퇴직급여채무', '퇴직급여충당부채', '확정급여채무', '순확정급여부채', '충당부채'], isSubItem: true },
-                { name: '부채총계', keywords: ['부채총계'], isTotal: true },
-                { name: '자본금', keywords: ['자본금'], excludes: ['잉여금'], isSubItem: true },
-                { name: '이익잉여금', keywords: ['이익잉여금', '미처분이익잉여금', '결손금'], isSubItem: true },
-                { name: '기타자본구성요소', calc: 'otherEquity', isSubItem: true },
-                { name: '자본총계', keywords: ['자본총계'], isTotal: true },
-                { name: '부채와자본총계', keywords: ['부채와자본총계', '부채및자본총계'], isTotal: true },
-            ];
+            // 동적 bsItems 생성 - VCM 데이터에서 직접 읽기
+            const vcmData = previewData?.vcm || [];
+            const bsItems = [];
+
+            // VCM 데이터에서 재무상태표 항목만 추출 (NWC 이전까지)
+            const categoryNames = ['유동자산', '비유동자산', '유동부채', '비유동부채'];
+            const totalNames = ['자산총계', '부채총계', '자본총계', '부채와자본총계'];
+            // 정확한 매칭으로 손익계산서 시작점 판단 (매출채권 등과 혼동 방지)
+            const stopNames = ['NWC', 'Net Debt'];
+
+            for (const row of vcmData) {
+                const name = row['항목'];
+                const parent = row['부모'];
+
+                // NWC, Net Debt 이후는 손익계산서이므로 제외 (정확히 일치할 때만)
+                if (stopNames.includes(name)) break;
+                if (!name) continue;
+
+                // 세부 항목 (부모가 있는 항목) - 테이블에서 제외, 툴팁에서만 사용
+                if (parent && parent !== '') {
+                    continue;  // 세부항목은 툴팁으로만 표시
+                }
+
+                // 카테고리 (유동자산, 비유동자산 등)
+                if (categoryNames.includes(name)) {
+                    bsItems.push({ name: name, isCategory: true, fromVcm: true });
+                }
+                // 총계 (자산총계, 부채총계 등)
+                else if (totalNames.includes(name)) {
+                    bsItems.push({ name: name, isTotal: true, fromVcm: true });
+                }
+                // 일반 항목
+                else {
+                    bsItems.push({ name: name, isSubItem: true, fromVcm: true });
+                }
+            }
+
+            // VCM 데이터가 없으면 기본 구조 사용 (fallback)
+            if (bsItems.length === 0) {
+                bsItems.push(
+                    { name: '유동자산', keywords: ['유동자산'], excludes: ['비유동'], isCategory: true },
+                    { name: '현금및현금성자산', keywords: ['현금및현금성자산'], isSubItem: true },
+                    { name: '비유동자산', keywords: ['비유동자산'], isCategory: true },
+                    { name: '자산총계', keywords: ['자산총계'], isTotal: true },
+                    { name: '유동부채', keywords: ['유동부채'], excludes: ['비유동'], isCategory: true },
+                    { name: '비유동부채', keywords: ['비유동부채'], isCategory: true },
+                    { name: '부채총계', keywords: ['부채총계'], isTotal: true },
+                    { name: '자본총계', keywords: ['자본총계'], isTotal: true }
+                );
+            }
+
+            console.log('[VCM] 동적 bsItems 생성:', bsItems.length, '개 항목');
 
             // 판관비 동적 항목 선택
             const { topSgaItems, sgaCandidates, sgaItemValues } = selectTopSgaItems(isData, years);
 
-            // VCM 데이터에서 매출/매출원가 하위 항목 동적 추출
-            const vcmData = previewData?.vcm || [];
-            const revenueSubItems = vcmData
-                .filter(row => row['부모'] === '매출' && row['항목'] !== '매출')
-                .map(row => row['항목']);
-            const cogsSubItems = vcmData
-                .filter(row => row['부모'] === '매출원가' && row['항목'] !== '매출원가')
-                .map(row => row['항목']);
-
             // 손익계산서 항목 정의 (동적 생성)
             const isItems = [
-                { name: '매출', calc: 'revenue', isCategory: true }
-            ];
-
-            // 매출 하위 항목 동적 추가 (VCM 데이터 기반)
-            if (revenueSubItems.length > 0) {
-                for (const itemName of revenueSubItems) {
-                    isItems.push({ name: itemName, keywords: [itemName], excludes: ['원가'], isSubItem: true });
-                }
-            } else {
-                // VCM 데이터가 없으면 기본값 사용
-                isItems.push(
-                    { name: '상품매출', keywords: ['상품매출액', '상품매출'], excludes: ['원가'], isSubItem: true },
-                    { name: '제품매출', keywords: ['제품매출액', '제품매출'], excludes: ['원가'], isSubItem: true },
-                    { name: '기타매출', keywords: ['기타매출액', '기타매출'], excludes: ['원가'], isSubItem: true }
-                );
-            }
-
-            isItems.push({ name: '매출원가', calc: 'cogs', isCategory: true });
-
-            // 매출원가 하위 항목 동적 추가 (VCM 데이터 기반)
-            if (cogsSubItems.length > 0) {
-                for (const itemName of cogsSubItems) {
-                    isItems.push({ name: itemName, keywords: [itemName], isSubItem: true });
-                }
-            } else {
-                // VCM 데이터가 없으면 기본값 사용
-                isItems.push(
-                    { name: '상품매출원가', keywords: ['상품매출원가'], isSubItem: true },
-                    { name: '제품매출원가', keywords: ['제품매출원가'], isSubItem: true }
-                );
-            }
-
-            isItems.push(
+                { name: '매출', calc: 'revenue', isCategory: true },
+                { name: '상품매출', keywords: ['상품매출액', '상품매출'], excludes: ['원가'], isSubItem: true },
+                { name: '제품매출', keywords: ['제품매출액', '제품매출'], excludes: ['원가'], isSubItem: true },
+                { name: '기타매출', keywords: ['기타매출액', '기타매출'], excludes: ['원가'], isSubItem: true },
+                { name: '매출원가', calc: 'cogs', isCategory: true },
+                { name: '상품매출원가', keywords: ['상품매출원가'], isSubItem: true },
+                { name: '제품매출원가', keywords: ['제품매출원가'], isSubItem: true },
                 { name: '매출총이익', calc: 'grossProfit', isTotal: true },
                 { name: '판매비와관리비', calc: 'sga', isCategory: true }
-            );
+            ];
 
             // 동적 판관비 항목 추가 (상위 8개)
             for (const itemName of topSgaItems) {
@@ -1899,8 +1891,32 @@
                     let tooltip = '';
                     let isMultipleItems = false;
 
-                    // VCM 데이터에서 먼저 찾기 시도
-                    const vcmData = previewData?.vcm || [];
+                    // VCM 데이터에서 값 찾기
+                    const vcmDataList = previewData?.vcm || [];
+
+                    // VCM 동적 항목인 경우 직접 매칭
+                    if (item.fromVcm) {
+                        const vcmRow = vcmDataList.find(row => row['항목'] === item.name);
+                        if (vcmRow && vcmRow[y] !== null && vcmRow[y] !== undefined) {
+                            val = parseValue(vcmRow[y]);
+
+                            // 세부 항목 툴팁 생성 (부모가 이 항목인 행들)
+                            const children = vcmDataList.filter(row => row['부모'] === item.name);
+                            if (children.length > 0) {
+                                const childValues = children
+                                    .filter(c => c[y] !== null && c[y] !== undefined)
+                                    .map(c => `${c['항목']}: ${fmt(parseValue(c[y]))}`);
+                                if (childValues.length > 0) {
+                                    tooltip = `[${y} 세부내역]\n${childValues.join('\n')}`;
+                                    isMultipleItems = true;
+                                }
+                            }
+                        }
+                        bsTableHtml += `<td class="${isMultipleItems ? 'calc-cell' : ''}" title="${tooltip}">${fmt(val)}</td>`;
+                        return; // 다음 연도로
+                    }
+
+                    // 기존 로직 (fromVcm이 아닌 경우)
                     const vcmItemName = item.name === '매입채무및기타채무' ?
                         (rowClass.includes('category') ? null : '매입채무및기타채무') :
                         item.name;
@@ -1908,12 +1924,8 @@
                     // 비유동 매입채무및기타채무는 별도 처리
                     let vcmRow;
                     if (item.name === '매입채무및기타채무' && !item.isCategory) {
-                        // 현재 처리 중인 항목이 유동부채 섹션인지 비유동부채 섹션인지 확인
-                        // bsItems 배열에서 현재 위치 찾기
                         const currentIndex = bsItems.indexOf(item);
                         let isNonCurrent = false;
-
-                        // 현재 항목 이전에 '비유동부채'가 있고 '부채총계'는 없으면 비유동 섹션
                         for (let i = currentIndex - 1; i >= 0; i--) {
                             if (bsItems[i].name === '부채총계') break;
                             if (bsItems[i].name === '비유동부채') {
@@ -1922,19 +1934,15 @@
                             }
                             if (bsItems[i].name === '유동부채') break;
                         }
-
-                        vcmRow = vcmData.find(row => row['항목'] === (isNonCurrent ? '매입채무및기타채무 [비유동]' : '매입채무및기타채무'));
+                        vcmRow = vcmDataList.find(row => row['항목'] === (isNonCurrent ? '매입채무및기타채무[비유동]' : '매입채무및기타채무'));
                     } else if (vcmItemName) {
-                        vcmRow = vcmData.find(row => row['항목'] === vcmItemName);
+                        vcmRow = vcmDataList.find(row => row['항목'] === vcmItemName);
                     }
 
                     if (vcmRow && vcmRow[y] !== null && vcmRow[y] !== undefined) {
-                        // VCM 데이터 사용 (단위 변환)
                         val = parseValue(vcmRow[y]);
-
-                        // 합산 항목인 경우 VCM에서 세부항목 찾아 툴팁 생성
                         if (item.calc) {
-                            const breakdown = getBsBreakdown(item.calc, y, vcmData);
+                            const breakdown = getBsBreakdown(item.calc, y, vcmDataList);
                             if (!item.isCategory && breakdown.length >= 1) {
                                 isMultipleItems = true;
                                 tooltip = breakdown.map(b => `${b.name}: ${fmt(b.value)}`).join('\n');
@@ -1946,7 +1954,7 @@
                         if (item.calc) {
                             val = calcBsValue(item.calc, y);
                             // 각 연도별 툴팁 생성 (카테고리 행은 제외 - 이미 회색으로 합계임을 표시)
-                            const breakdown = getBsBreakdown(item.calc, y, vcmData);
+                            const breakdown = getBsBreakdown(item.calc, y, vcmDataList);
                             if (!item.isCategory && breakdown.length >= 1) {  // 1개 이상이면 합산 내역 표시
                                 isMultipleItems = true;
                                 tooltip = breakdown.map(b => `${b.name}: ${fmt(b.value)}`).join('\n');
@@ -2089,8 +2097,6 @@
                 if (vcmData && Array.isArray(vcmData)) {
                     let parentItem = null;
                     switch(calcType) {
-                        case 'revenue': parentItem = '매출'; break;
-                        case 'cogs': parentItem = '매출원가'; break;
                         case 'otherIncome': parentItem = '영업외수익'; break;
                         case 'otherExpense': parentItem = '영업외비용'; break;
                         case 'ebitda': parentItem = 'EBITDA'; break;

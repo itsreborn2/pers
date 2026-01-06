@@ -568,7 +568,7 @@ async def extract_financial_data(
 
             # VCM 포맷 데이터도 preview_data에 추가
             if 'VCM전용포맷' in xl.sheet_names:
-                vcm_df = pd.read_excel(filepath, sheet_name='VCM전용포맷')
+                vcm_df = pd.read_excel(filepath, sheet_name='VCM전용포맷', engine='openpyxl')
                 if vcm_df is not None and not vcm_df.empty:
                     task['preview_data']['vcm'] = safe_dataframe_to_json(vcm_df)
                     print(f"[EXTRACT] preview_data['vcm'] 생성: {len(task['preview_data']['vcm'])}개 행")
@@ -1666,14 +1666,15 @@ def create_vcm_format(fs_data, excel_filepath=None):
         except Exception as e:
             print(f"[VCM] 엑셀 파일 읽기 실패, 원본 데이터 사용: {e}")
             bs_df = fs_data.get('bs')
-            # DataFrame은 or 연산자로 비교 불가
-            cis_df = fs_data.get('cis')
-            is_df = cis_df if cis_df is not None and not cis_df.empty else fs_data.get('is')
+            is_df = fs_data.get('cis')
+            if is_df is None or (isinstance(is_df, pd.DataFrame) and is_df.empty):
+                is_df = fs_data.get('is')
     else:
         # 엑셀 파일 없으면 원본 사용
         bs_df = fs_data.get('bs')
-        cis_df = fs_data.get('cis')
-        is_df = cis_df if cis_df is not None and not cis_df.empty else fs_data.get('is')
+        is_df = fs_data.get('cis')
+        if is_df is None or (isinstance(is_df, pd.DataFrame) and is_df.empty):
+            is_df = fs_data.get('is')
 
     if bs_df is None or is_df is None:
         print(f"[VCM] 필수 데이터 누락: bs={bs_df is not None}, is={is_df is not None}")
@@ -1683,11 +1684,11 @@ def create_vcm_format(fs_data, excel_filepath=None):
     notes_dfs = []
     if excel_filepath and os.path.exists(excel_filepath):
         try:
-            xl = pd.ExcelFile(excel_filepath)
+            xl = pd.ExcelFile(excel_filepath, engine='openpyxl')
             for sheet in xl.sheet_names:
                 # 손익 관련 주석 시트 찾기
                 if any(kw in sheet for kw in ['손익주석', '포괄손익주석', 'IS주석']):
-                    note_df = pd.read_excel(excel_filepath, sheet_name=sheet)
+                    note_df = pd.read_excel(excel_filepath, sheet_name=sheet, engine='openpyxl')
                     if not note_df.empty and '계정과목' in note_df.columns:
                         notes_dfs.append(note_df)
                         print(f"[VCM] 주석 시트 로드: {sheet}, {len(note_df)}개 행")
@@ -1718,14 +1719,46 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     is_xbrl = True
     
     # XBRL에서 계정과목 컬럼 찾기 (label_ko가 포함된 튜플 컬럼)
+    bs_account_col = '계정과목'  # BS용 기본값
+    bs_fy_col_map = {}  # BS용 연도 컬럼 매핑
+
     if is_xbrl:
+        # IS/CIS용 계정과목 컬럼
         for c in is_df.columns:
             if isinstance(c, tuple):
                 for part in c:
                     if isinstance(part, str) and 'label_ko' in part:
                         account_col = c
                         break
-    
+        # BS용 계정과목 컬럼 (별도로 찾기)
+        for c in bs_df.columns:
+            if isinstance(c, tuple):
+                for part in c:
+                    if isinstance(part, str) and 'label_ko' in part:
+                        bs_account_col = c
+                        print(f"[VCM] BS 계정과목 컬럼: {bs_account_col}")
+                        break
+        # BS용 연도 컬럼 찾기 (XBRL 형식)
+        for c in bs_df.columns:
+            if isinstance(c, tuple) and len(c) >= 2:
+                date_part = c[0]
+                # BS는 특정 시점 (20241231 형식) 또는 기간 (20240101-20241231 형식) 모두 가능
+                if isinstance(date_part, str):
+                    if '-' in date_part and len(date_part) == 17:
+                        # '20240101-20241231' 형식 - 연결재무제표만 사용
+                        if '연결' in str(c[1]):
+                            year = date_part.split('-')[1][:4]  # 종료 연도 사용
+                            bs_fy_col_map[c] = f'FY{year}'
+                    elif len(date_part) == 8 and date_part.isdigit():
+                        # '20241231' 형식 (BS 특정 시점)
+                        if '연결' in str(c[1]):
+                            year = date_part[:4]
+                            bs_fy_col_map[c] = f'FY{year}'
+        print(f"[VCM] BS 연도 컬럼: {list(bs_fy_col_map.values())}")
+    else:
+        bs_account_col = account_col  # 감사보고서 형식이면 동일
+        bs_fy_col_map = fy_col_map  # 감사보고서 형식이면 동일
+
     if not fy_col_map:
         print(f"[VCM] 연도 컬럼을 찾을 수 없음")
         return None
@@ -1743,7 +1776,180 @@ def create_vcm_format(fs_data, excel_filepath=None):
         s = re.sub(r'\(주석[0-9,]+\)', '', s)
         s = re.sub(r'\(손실\)', '', s)
         return s
-    
+
+    # 주석 참조 제거 함수 (매칭용) - 값은 유지하고 계정명만 정규화
+    def strip_note_ref(s):
+        """계정과목명에서 주석 참조 제거 (예: '유형자산(주2,4,8)' → '유형자산')"""
+        if not s: return ''
+        s = re.sub(r'\(주[\d,\s]+\)', '', str(s))
+        s = re.sub(r'\(주석[\d,\s]+\)', '', s)
+        return s.strip()
+
+    # ========== 섹션 기반 재무상태표 파싱 ==========
+    def parse_bs_sections(df, year_col, acc_col):
+        """재무상태표를 섹션별로 파싱하여 모든 항목 추출
+
+        Args:
+            df: 재무상태표 DataFrame
+            year_col: 연도 컬럼명
+            acc_col: 계정과목 컬럼명 (BS용)
+
+        Returns:
+            dict: {
+                '유동자산': [{'name': '현금및현금성자산', 'value': 1000000}, ...],
+                '비유동자산': [...],
+                '유동부채': [...],
+                '비유동부채': [...],
+                '자본': [...],
+                '총계': {'자산총계': val, '부채총계': val, '자본총계': val}
+            }
+        """
+        sections = {
+            '유동자산': [],
+            '비유동자산': [],
+            '유동부채': [],
+            '비유동부채': [],
+            '자본': [],
+            '총계': {}
+        }
+
+        # 섹션 마커 패턴 (로마숫자/숫자 prefix 허용)
+        section_patterns = {
+            '유동자산': r'^(Ⅰ|I|1)?\.?\s*유동자산$',
+            '비유동자산': r'^(Ⅱ|II|2)?\.?\s*비유동자산$',
+            '유동부채': r'^(Ⅰ|I|1)?\.?\s*유동부채$',
+            '비유동부채': r'^(Ⅱ|II|2)?\.?\s*비유동부채$',
+            '자본': r'^(Ⅰ|I|1)?\.?\s*자본$',  # '자본금' 제외 (정확히 '자본'만 매칭)
+        }
+
+        # 종료 마커 (다음 섹션 시작 또는 총계)
+        end_markers = {
+            '유동자산': ['비유동자산', '자산총계'],
+            '비유동자산': ['자산총계', '부채', '유동부채'],
+            '유동부채': ['비유동부채', '부채총계'],
+            '비유동부채': ['부채총계', '자본'],
+            '자본': ['자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계'],
+        }
+
+        # 총계 마커
+        total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계']
+
+        current_section = None
+
+        for idx, row in df.iterrows():
+            raw_acc = str(row.get(acc_col, '')).strip()
+            if not raw_acc or raw_acc == 'nan':
+                continue
+
+            # 정규화된 계정명 (주석 참조 제거)
+            acc_normalized = strip_note_ref(raw_acc)
+            acc_clean = normalize(acc_normalized)
+
+            # 값 추출
+            val = row.get(year_col)
+            val_num = None
+            if pd.notna(val):
+                try:
+                    val_num = float(str(val).replace(',', ''))
+                except:
+                    pass
+
+            # 섹션 시작 감지
+            section_found = False
+            for section_name, pattern in section_patterns.items():
+                if re.match(pattern, acc_clean, re.IGNORECASE):
+                    current_section = section_name
+                    section_found = True
+                    print(f"[섹션파싱] {section_name} 시작: {raw_acc}")
+                    break
+
+            if section_found:
+                continue
+
+            # 총계 항목 처리
+            is_total = False
+            for marker in total_markers:
+                if marker in acc_clean or acc_clean == normalize(marker):
+                    sections['총계'][acc_clean] = val_num
+                    is_total = True
+                    # 자산총계, 부채총계 도달 시 해당 섹션 종료
+                    if '자산총계' in acc_clean:
+                        current_section = None
+                    elif '부채총계' in acc_clean:
+                        current_section = None
+                    break
+
+            if is_total:
+                continue
+
+            # 현재 섹션에 항목 추가
+            if current_section:
+                # 종료 마커 체크
+                should_end = False
+                for end_marker in end_markers.get(current_section, []):
+                    if normalize(end_marker) in acc_clean:
+                        should_end = True
+                        break
+
+                if should_end:
+                    current_section = None
+                elif val_num is not None and val_num != 0:
+                    # 하위 섹션 헤더가 아닌 실제 항목만 추가
+                    # (자산, 부채, 투자자산 같은 중간 헤더 제외)
+                    if not re.match(r'^(자산|부채|자본|투자자산|당좌자산)$', acc_clean):
+                        sections[current_section].append({
+                            'name': acc_normalized,  # 원본 계정명 유지 (주석 참조만 제거)
+                            'value': val_num
+                        })
+
+        return sections
+
+    # 섹션 데이터에서 값 찾기 (parse_bs_sections 결과 사용)
+    def find_in_section(section_items, keywords, excludes=[]):
+        """섹션 내 항목에서 키워드로 값 찾기"""
+        for item in section_items:
+            name = normalize(item['name'])
+            excluded = any(normalize(ex) in name for ex in excludes)
+            if excluded:
+                continue
+            for kw in keywords:
+                if normalize(kw) in name:
+                    return item['value']
+        return None
+
+    def sum_in_section(section_items, keywords_list):
+        """섹션 내 여러 항목의 합계"""
+        total = 0
+        for item in section_items:
+            name = normalize(item['name'])
+            for keywords in keywords_list:
+                if isinstance(keywords, str):
+                    keywords = [keywords]
+                for kw in keywords:
+                    if normalize(kw) in name:
+                        total += item['value'] or 0
+                        break
+        return total
+
+    def get_unmatched_items(section_items, matched_keywords_list):
+        """매칭되지 않은 항목들 반환 (기타 항목용)"""
+        unmatched = []
+        for item in section_items:
+            name = normalize(item['name'])
+            is_matched = False
+            for keywords in matched_keywords_list:
+                if isinstance(keywords, str):
+                    keywords = [keywords]
+                for kw in keywords:
+                    if normalize(kw) in name:
+                        is_matched = True
+                        break
+                if is_matched:
+                    break
+            if not is_matched:
+                unmatched.append(item)
+        return unmatched
+
     # 값 찾기 함수 (is_df + notes_dfs에서 검색) - 원 단위 그대로 반환
     def find_val(df, keywords, year, excludes=[]):
         # 1) 먼저 주 DataFrame(is_df)에서 검색
@@ -1982,8 +2188,20 @@ def create_vcm_format(fs_data, excel_filepath=None):
         당기순이익 = 세전이익 - (법인세 or 0)
         ebitda = 영업이익 + 감가상각비 + 무형상각비
         
-        # 매출/매출원가는 is_items에서 동적으로 추가됨 (부모 컬럼 포함)
-        values = {}
+        values = {
+            '매출': 매출,
+        }
+
+        # 매출 하위 항목 동적 추가
+        for item_name in [item[0] for item in revenue_sub_items]:
+            values[f'  {item_name}'] = revenue_values.get(item_name) if revenue_values.get(item_name) else None
+
+        # 매출원가 추가
+        values['매출원가'] = 원가
+
+        # 매출원가 하위 항목 동적 추가
+        for item_name in [item[0] for item in cogs_sub_items]:
+            values[f'  {item_name}'] = cogs_values.get(item_name) if cogs_values.get(item_name) else None
 
         # 매출총이익 및 판관비
         values.update({
@@ -2012,22 +2230,11 @@ def create_vcm_format(fs_data, excel_filepath=None):
         })
 
         # 손익계산서 세부항목 (부모 포함)
-        is_items = []
-
-        # 매출 세부항목 동적 추가
-        is_items.append(('매출', '', 매출))
-        for item_name in [item[0] for item in revenue_sub_items]:
-            val = revenue_values.get(item_name) or 0
-            is_items.append((item_name, '매출', val))
-
-        # 매출원가 세부항목 동적 추가
-        is_items.append(('매출원가', '', 원가))
-        for item_name in [item[0] for item in cogs_sub_items]:
-            val = cogs_values.get(item_name) or 0
-            is_items.append((item_name, '매출원가', val))
-
-        # 영업외수익 세부항목
-        is_items.extend([
+        is_items = [
+            # 매출 (동적으로 추가됨)
+            # 매출원가 (동적으로 추가됨)
+            # 판관비 (위에서 추가됨)
+            # 영업외수익 세부항목
             ('영업외수익', '', 영업외수익),
             ('이자수익', '영업외수익', 이자수익),
             ('배당금수익', '영업외수익', 배당금),
@@ -2051,7 +2258,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
             ('영업이익 [EBITDA]', 'EBITDA', 영업이익),
             ('감가상각비 [EBITDA]', 'EBITDA', 감가상각비),
             ('무형자산상각비 [EBITDA]', 'EBITDA', 무형상각비),
-        ])
+        ]
 
         # 첫 번째 연도에서 기존 항목 저장 (부모 없는 항목들)
         if year == fy_cols[0]:
@@ -2080,208 +2287,559 @@ def create_vcm_format(fs_data, excel_filepath=None):
     # ========== 재무상태표 항목 추가 ==========
     # 재무상태표에서 값 찾기 (원 단위 그대로)
     def find_bs_val(keywords, year, excludes=[]):
+        # BS용 컬럼 사용 (IS와 다를 수 있음)
         for _, row in bs_df.iterrows():
-            acc = normalize(str(row.get(account_col, '')))
+            acc = normalize(str(row.get(bs_account_col, '')))
             excluded = any(normalize(ex) in acc for ex in excludes)
             if excluded: continue
             for kw in keywords:
                 if normalize(kw) in acc:
-                    val = row.get(year)
+                    # BS 연도 컬럼 매핑 사용
+                    bs_year = year
+                    if bs_fy_col_map and fy_col_map:
+                        year_str = fy_col_map.get(year, '')
+                        for bs_col, bs_year_str in bs_fy_col_map.items():
+                            if bs_year_str == year_str:
+                                bs_year = bs_col
+                                break
+                    val = row.get(bs_year)
                     if pd.notna(val):
                         try:
-                            # 원 단위 그대로 반환 (프론트에서 동적 변환)
                             return float(str(val).replace(',', ''))
                         except:
                             pass
         return None
 
     # 재무상태표 행 생성 (부모 컬럼 포함, 세부항목 별도 저장)
-    bs_rows = []
+    all_bs_items_by_year = {}  # {year_str: bs_items list}
+
+    # ========== 섹션 기반 파싱으로 모든 연도 데이터 수집 ==========
+    all_sections = {}  # {year: parsed_sections}
+
+    # BS용 연도 컬럼이 있으면 사용, 없으면 IS 연도 컬럼 사용
+    bs_fy_cols = sorted(bs_fy_col_map.keys(), key=lambda c: bs_fy_col_map[c]) if bs_fy_col_map else fy_cols
+    bs_col_display = bs_fy_col_map if bs_fy_col_map else fy_col_map
+
+    for bs_year in bs_fy_cols:
+        year_str = bs_col_display[bs_year]
+        all_sections[year_str] = parse_bs_sections(bs_df, bs_year, bs_account_col)
+        print(f"[VCM] {year_str} 섹션 파싱 완료: 유동자산 {len(all_sections[year_str]['유동자산'])}개, 비유동자산 {len(all_sections[year_str]['비유동자산'])}개 항목")
 
     # 항목 정의: (항목명, 부모, 값계산함수)
     # 부모가 있으면 세부항목, 없으면 합계 항목
 
     for year in fy_cols:
         year_str = fy_col_map[year]
+        sections = all_sections.get(year_str, {'유동자산': [], '비유동자산': [], '유동부채': [], '비유동부채': [], '자본': [], '총계': {}})
 
-        # ========== 자산 항목 ==========
-        유동자산 = find_bs_val(['유동자산'], year, ['비유동']) or 0
-        현금 = find_bs_val(['현금및현금성자산'], year) or 0
-        단기금융상품 = find_bs_val(['단기금융상품'], year) or 0
-        재고자산 = find_bs_val(['재고자산'], year) or 0
+        # ========== 자산 항목 (섹션 기반) ==========
+        # 유동자산 섹션에서 항목 찾기
+        유동자산_items = sections['유동자산']
+        비유동자산_items = sections['비유동자산']
+        유동부채_items = sections['유동부채']
+        비유동부채_items = sections['비유동부채']
+        자본_items = sections['자본']
+        총계 = sections['총계']
 
-        # 매출채권및기타채권 세부항목
-        매출채권 = find_bs_val(['매출채권'], year, ['장기']) or 0
-        미수금 = find_bs_val(['미수금'], year) or 0
-        미수수익 = find_bs_val(['미수수익'], year) or 0
-        선급금 = find_bs_val(['선급금'], year) or 0
-        선급비용 = find_bs_val(['선급비용'], year) or 0
-        매출채권및기타채권 = 매출채권 + 미수금 + 미수수익 + 선급금 + 선급비용
+        # 유동자산 총계 (섹션 합계 또는 총계에서)
+        유동자산 = 총계.get('유동자산') or sum(item['value'] for item in 유동자산_items) or find_bs_val(['유동자산'], year, ['비유동']) or 0
 
-        기타비금융자산 = find_bs_val(['기타유동자산', '기타비금융자산'], year) or 0
+        # 주요 항목 찾기 (섹션 우선, fallback으로 키워드 검색)
+        현금 = find_in_section(유동자산_items, ['현금및현금성자산', '현금']) or find_bs_val(['현금및현금성자산'], year) or 0
 
-        비유동자산 = find_bs_val(['비유동자산'], year) or 0
-        유형자산 = find_bs_val(['유형자산'], year, ['무형', '처분']) or 0
-        무형자산 = find_bs_val(['무형자산'], year, ['상각']) or 0
+        # 단기투자자산: 단기금융상품 + 당기손익-공정가치측정금융자산 + 기타포괄손익-공정가치 등
+        단기금융상품_직접 = find_in_section(유동자산_items, ['단기금융상품']) or find_bs_val(['단기금융상품'], year) or 0
+        당기손익FVPL_유동 = find_in_section(유동자산_items, ['당기손익-공정가치측정금융자산', '당기손익공정가치측정금융자산', 'FVPL금융자산']) or 0
+        기타포괄FVOCI_유동 = find_in_section(유동자산_items, ['기타포괄손익-공정가치측정금융자산', '기타포괄손익공정가치측정금융자산']) or 0
+        단기금융상품 = 단기금융상품_직접 + 당기손익FVPL_유동 + 기타포괄FVOCI_유동
 
-        # 장기투자자산 세부항목
-        장기금융상품 = find_bs_val(['장기금융상품'], year) or 0
-        매도가능증권 = find_bs_val(['매도가능증권', '매도가능금융자산'], year) or 0
-        지분법투자 = find_bs_val(['지분법적용투자', '관계기업투자', '종속기업투자'], year) or 0
+        재고자산 = find_in_section(유동자산_items, ['재고자산']) or find_bs_val(['재고자산'], year) or 0
+
+        # 매출채권및기타채권 세부항목 (섹션에서 찾기)
+        매출채권 = find_in_section(유동자산_items, ['매출채권'], ['장기', '손실', '처분']) or find_bs_val(['매출채권'], year, ['장기']) or 0
+        미수금 = find_in_section(유동자산_items, ['미수금'], ['장기']) or find_bs_val(['미수금'], year) or 0
+        미수수익 = find_in_section(유동자산_items, ['미수수익']) or find_bs_val(['미수수익'], year) or 0
+        선급금 = find_in_section(유동자산_items, ['선급금']) or find_bs_val(['선급금'], year) or 0
+        선급비용 = find_in_section(유동자산_items, ['선급비용']) or find_bs_val(['선급비용'], year) or 0
+        계약자산_유동 = find_in_section(유동자산_items, ['계약자산']) or 0
+        기타금융자산_유동 = find_in_section(유동자산_items, ['기타금융자산']) or 0
+        매출채권및기타채권 = 매출채권 + 미수금 + 미수수익 + 선급금 + 선급비용 + 계약자산_유동 + 기타금융자산_유동
+
+        # 기타비금융자산 (매칭되지 않은 유동자산 항목들)
+        matched_유동자산_keywords = [
+            ['현금및현금성자산', '현금'], ['단기금융상품'], ['당기손익-공정가치측정금융자산', '당기손익공정가치측정금융자산'],
+            ['기타포괄손익-공정가치측정금융자산'], ['재고자산'],
+            ['매출채권'], ['미수금'], ['미수수익'], ['선급금'], ['선급비용'], ['계약자산'], ['기타금융자산'],
+            ['법인세'], ['매각예정']
+        ]
+        기타유동자산_items = get_unmatched_items(유동자산_items, matched_유동자산_keywords)
+        기타비금융자산 = sum(item['value'] for item in 기타유동자산_items) if 기타유동자산_items else (find_bs_val(['기타유동자산', '기타비금융자산'], year) or 0)
+
+        # ========== 비유동자산 항목 (섹션 기반) ==========
+        비유동자산 = 총계.get('비유동자산') or sum(item['value'] for item in 비유동자산_items) or find_bs_val(['비유동자산'], year) or 0
+        유형자산 = find_in_section(비유동자산_items, ['유형자산'], ['무형', '처분', '사용권']) or find_bs_val(['유형자산'], year, ['무형', '처분']) or 0
+        무형자산 = find_in_section(비유동자산_items, ['무형자산'], ['상각', '손상']) or find_bs_val(['무형자산'], year, ['상각']) or 0
+        사용권자산 = find_in_section(비유동자산_items, ['사용권자산']) or 0
+
+        # 장기투자자산 세부항목 (섹션 기반)
+        장기금융상품 = find_in_section(비유동자산_items, ['장기금융상품', '장기투자자산']) or find_bs_val(['장기금융상품'], year) or 0
+        매도가능증권 = find_in_section(비유동자산_items, ['매도가능증권', '매도가능금융자산', '기타포괄손익-공정가치']) or find_bs_val(['매도가능증권', '매도가능금융자산'], year) or 0
+        지분법투자 = find_in_section(비유동자산_items, ['지분법적용투자', '관계기업투자', '종속기업투자']) or find_bs_val(['지분법적용투자', '관계기업투자', '종속기업투자'], year) or 0
         장기투자자산 = 장기금융상품 + 매도가능증권 + 지분법투자
 
-        보증금 = find_bs_val(['보증금', '임차보증금'], year) or 0
-        자산총계 = find_bs_val(['자산총계'], year) or 0
+        보증금 = find_in_section(비유동자산_items, ['보증금', '임차보증금']) or find_bs_val(['보증금', '임차보증금'], year) or 0
 
-        # ========== 부채 항목 ==========
-        유동부채 = find_bs_val(['유동부채'], year, ['비유동']) or 0
+        # 매출채권및기타채권 (비유동) - 장기매출채권 등
+        장기매출채권 = find_in_section(비유동자산_items, ['매출채권', '장기매출채권']) or 0
+        자산총계 = 총계.get('자산총계') or find_bs_val(['자산총계'], year) or 0
 
-        # 유동 매입채무및기타채무 세부항목 (프론트와 동일하게 8개)
-        매입채무 = find_bs_val(['매입채무'], year, ['장기']) or 0
-        미지급금_유동 = find_bs_val(['미지급금'], year, ['장기']) or 0
-        미지급비용_유동 = find_bs_val(['미지급비용'], year, ['장기']) or 0
-        선수금_유동 = find_bs_val(['선수금'], year, ['장기']) or 0
-        선수수익_유동 = find_bs_val(['선수수익'], year, ['장기']) or 0
-        예수금_유동 = find_bs_val(['예수금'], year, ['장기']) or 0
-        예수보증금_유동 = find_bs_val(['예수보증금'], year, ['장기', '임대']) or 0
-        연차충당부채 = find_bs_val(['연차충당부채', '연차수당충당부채'], year) or 0
-        유동매입채무및기타채무 = 매입채무 + 미지급금_유동 + 미지급비용_유동 + 선수금_유동 + 선수수익_유동 + 예수금_유동 + 예수보증금_유동 + 연차충당부채
+        # ========== 부채 항목 (섹션 기반) ==========
+        유동부채 = 총계.get('유동부채') or sum(item['value'] for item in 유동부채_items) or find_bs_val(['유동부채'], year, ['비유동']) or 0
 
-        단기차입금 = find_bs_val(['단기차입금'], year) or 0
-        유동성장기차입금 = find_bs_val(['유동성장기부채', '유동성장기차입금'], year) or 0
-        유동성사채 = find_bs_val(['유동성사채'], year) or 0
+        # 유동 매입채무및기타채무 세부항목 (섹션 기반)
+        매입채무 = find_in_section(유동부채_items, ['매입채무'], ['장기']) or find_bs_val(['매입채무'], year, ['장기']) or 0
+        미지급금_유동 = find_in_section(유동부채_items, ['미지급금'], ['장기']) or find_bs_val(['미지급금'], year, ['장기']) or 0
+        미지급비용_유동 = find_in_section(유동부채_items, ['미지급비용'], ['장기']) or find_bs_val(['미지급비용'], year, ['장기']) or 0
+        선수금_유동 = find_in_section(유동부채_items, ['선수금'], ['장기']) or find_bs_val(['선수금'], year, ['장기']) or 0
+        선수수익_유동 = find_in_section(유동부채_items, ['선수수익'], ['장기']) or find_bs_val(['선수수익'], year, ['장기']) or 0
+        예수금_유동 = find_in_section(유동부채_items, ['예수금'], ['장기']) or find_bs_val(['예수금'], year, ['장기']) or 0
+        계약부채_유동 = find_in_section(유동부채_items, ['계약부채']) or 0
+        예수보증금_유동 = find_in_section(유동부채_items, ['예수보증금'], ['장기', '임대']) or find_bs_val(['예수보증금'], year, ['장기', '임대']) or 0
+        연차충당부채 = find_in_section(유동부채_items, ['연차충당부채', '연차수당충당부채']) or find_bs_val(['연차충당부채', '연차수당충당부채'], year) or 0
+        유동매입채무및기타채무 = 매입채무 + 미지급금_유동 + 미지급비용_유동 + 선수금_유동 + 선수수익_유동 + 예수금_유동 + 예수보증금_유동 + 연차충당부채 + 계약부채_유동
 
-        # 기타유동부채 세부항목
-        미지급법인세 = find_bs_val(['미지급법인세', '당기법인세부채'], year) or 0
-        기타유동부채_기타 = find_bs_val(['기타유동부채'], year) or 0
-        기타유동부채 = 미지급법인세 + 기타유동부채_기타
+        # 차입금 항목 (섹션 기반) - 전환사채, 전환우선주부채 등 포함
+        단기차입금 = find_in_section(유동부채_items, ['단기차입금']) or find_bs_val(['단기차입금'], year) or 0
+        유동성장기차입금 = find_in_section(유동부채_items, ['유동성장기부채', '유동성장기차입금']) or find_bs_val(['유동성장기부채', '유동성장기차입금'], year) or 0
+        유동성사채 = find_in_section(유동부채_items, ['유동성사채']) or find_bs_val(['유동성사채'], year) or 0
+        전환사채_유동 = find_in_section(유동부채_items, ['전환사채']) or find_bs_val(['전환사채'], year) or 0
+        상환전환우선주부채 = find_in_section(유동부채_items, ['상환전환우선주부채', 'RCPS부채']) or 0
+        전환우선주부채 = find_in_section(유동부채_items, ['전환우선주부채', 'CPS부채'], ['상환']) or 0  # 상환전환우선주부채 제외
 
-        비유동부채 = find_bs_val(['비유동부채'], year) or 0
+        # 유동차입부채 합계 (사용자 포맷에 맞춤)
+        유동차입부채 = 단기차입금 + 유동성장기차입금 + 유동성사채 + 전환사채_유동 + 상환전환우선주부채 + 전환우선주부채
 
-        # 비유동 매입채무및기타채무 세부항목
-        장기매입채무 = find_bs_val(['장기매입채무'], year) or 0
-        장기미지급금 = find_bs_val(['장기미지급금'], year) or 0
-        장기미지급비용 = find_bs_val(['장기미지급비용'], year) or 0
-        장기선수금 = find_bs_val(['장기선수금'], year) or 0
-        장기선수수익 = find_bs_val(['장기선수수익'], year) or 0
-        장기예수금 = find_bs_val(['장기예수금'], year) or 0
-        임대보증금 = find_bs_val(['임대보증금'], year) or 0
-        예수보증금_비유동 = find_bs_val(['예수보증금', '장기예수보증금'], year) or 0
-        비유동매입채무및기타채무 = 장기매입채무 + 장기미지급금 + 장기미지급비용 + 장기선수금 + 장기선수수익 + 장기예수금 + 임대보증금 + 예수보증금_비유동
+        # 기타금융부채 (리스부채 등) - 차입금에 포함된 항목 제외
+        리스부채_유동 = find_in_section(유동부채_items, ['리스부채', '금융리스부채']) or 0
+        파생상품부채_유동 = find_in_section(유동부채_items, ['파생상품부채']) or 0
+        기타금융부채_유동 = find_in_section(유동부채_items, ['기타금융부채'], ['리스', '파생']) or 0
 
-        사채 = find_bs_val(['사채'], year, ['유동성']) or 0
-        장기차입금 = find_bs_val(['장기차입금'], year, ['유동성']) or 0
-        퇴직급여채무 = find_bs_val(['퇴직급여충당부채', '퇴직급여채무', '확정급여채무'], year) or 0
-        부채총계 = find_bs_val(['부채총계'], year) or 0
+        # 기타유동부채 세부항목 (섹션 기반)
+        미지급법인세 = find_in_section(유동부채_items, ['미지급법인세', '당기법인세부채']) or find_bs_val(['미지급법인세', '당기법인세부채'], year) or 0
+        충당부채_유동 = find_in_section(유동부채_items, ['충당부채', '단기충당부채'], ['연차', '퇴직']) or 0
 
-        # ========== 자본 항목 ==========
-        자본금 = find_bs_val(['자본금'], year, ['잉여금']) or 0
-        이익잉여금 = find_bs_val(['이익잉여금', '미처분이익잉여금'], year) or 0
+        # 기타유동부채 (매칭되지 않은 유동부채 항목들)
+        matched_유동부채_keywords = [
+            ['매입채무'], ['미지급금'], ['미지급비용'], ['선수금'], ['선수수익'], ['예수금'], ['예수보증금'],
+            ['연차충당부채'], ['계약부채'], ['단기차입금'], ['유동성장기부채', '유동성장기차입금'],
+            ['유동성사채'], ['전환사채'], ['상환전환우선주부채'], ['전환우선주부채'],
+            ['리스부채', '금융리스부채'], ['파생상품부채'], ['기타금융부채'],
+            ['미지급법인세', '당기법인세부채'], ['충당부채']
+        ]
+        기타유동부채_items = get_unmatched_items(유동부채_items, matched_유동부채_keywords)
+        기타유동부채_기타 = sum(item['value'] for item in 기타유동부채_items) if 기타유동부채_items else (find_bs_val(['기타유동부채'], year) or 0)
+        # 기타금융부채 합계 (리스부채, 파생상품부채 등 포함)
+        기타금융부채_합계 = 리스부채_유동 + 파생상품부채_유동 + 기타금융부채_유동
+        기타유동부채 = 미지급법인세 + 기타유동부채_기타 + 충당부채_유동 + 기타금융부채_합계
 
-        # 기타자본구성요소 세부항목
-        자본잉여금 = find_bs_val(['자본잉여금'], year) or 0
-        자본조정 = find_bs_val(['자본조정'], year) or 0
-        기타포괄손익누계액 = find_bs_val(['기타포괄손익누계액'], year) or 0
-        기타자본 = 자본잉여금 + 자본조정 + 기타포괄손익누계액
+        # ========== 비유동부채 항목 (섹션 기반) ==========
+        비유동부채 = 총계.get('비유동부채') or sum(item['value'] for item in 비유동부채_items) or find_bs_val(['비유동부채'], year) or 0
 
-        자본총계 = find_bs_val(['자본총계'], year) or 0
-        부채와자본총계 = find_bs_val(['부채와자본총계', '부채및자본총계'], year) or 0
+        # 비유동 매입채무및기타채무 세부항목 (섹션 기반)
+        장기매입채무 = find_in_section(비유동부채_items, ['장기매입채무', '매입채무']) or find_bs_val(['장기매입채무'], year) or 0
+        장기미지급금 = find_in_section(비유동부채_items, ['장기미지급금', '비유동미지급금']) or find_bs_val(['장기미지급금'], year) or 0
+        장기미지급비용 = find_in_section(비유동부채_items, ['장기미지급비용']) or find_bs_val(['장기미지급비용'], year) or 0
+        장기선수금 = find_in_section(비유동부채_items, ['장기선수금']) or find_bs_val(['장기선수금'], year) or 0
+        장기선수수익 = find_in_section(비유동부채_items, ['장기선수수익']) or find_bs_val(['장기선수수익'], year) or 0
+        장기예수금 = find_in_section(비유동부채_items, ['장기예수금']) or find_bs_val(['장기예수금'], year) or 0
+        임대보증금 = find_in_section(비유동부채_items, ['임대보증금']) or find_bs_val(['임대보증금'], year) or 0
+        예수보증금_비유동 = find_in_section(비유동부채_items, ['예수보증금', '장기예수보증금']) or find_bs_val(['예수보증금', '장기예수보증금'], year) or 0
+        계약부채_비유동 = find_in_section(비유동부채_items, ['계약부채']) or 0
+        비유동매입채무및기타채무 = 장기매입채무 + 장기미지급금 + 장기미지급비용 + 장기선수금 + 장기선수수익 + 장기예수금 + 임대보증금 + 예수보증금_비유동 + 계약부채_비유동
+
+        사채 = find_in_section(비유동부채_items, ['사채'], ['유동성']) or find_bs_val(['사채'], year, ['유동성']) or 0
+        장기차입금 = find_in_section(비유동부채_items, ['장기차입금', '비유동차입부채'], ['유동성']) or find_bs_val(['장기차입금'], year, ['유동성']) or 0
+        퇴직급여채무 = find_in_section(비유동부채_items, ['퇴직급여충당부채', '퇴직급여채무', '확정급여채무', '순확정급여부채']) or find_bs_val(['퇴직급여충당부채', '퇴직급여채무', '확정급여채무'], year) or 0
+        기타금융부채_비유동 = find_in_section(비유동부채_items, ['기타금융부채', '금융리스부채', '리스부채']) or 0
+        충당부채_비유동 = find_in_section(비유동부채_items, ['충당부채', '장기충당부채'], ['퇴직']) or 0
+        부채총계 = 총계.get('부채총계') or find_bs_val(['부채총계'], year) or 0
+
+        # ========== 자본 항목 (섹션 기반) ==========
+        자본금 = find_in_section(자본_items, ['자본금'], ['잉여금']) or find_bs_val(['자본금'], year, ['잉여금']) or 0
+        이익잉여금 = find_in_section(자본_items, ['이익잉여금', '미처분이익잉여금', '결손금']) or find_bs_val(['이익잉여금', '미처분이익잉여금'], year) or 0
+
+        # 기타자본구성요소 세부항목 (섹션 기반)
+        자본잉여금 = find_in_section(자본_items, ['자본잉여금']) or find_bs_val(['자본잉여금'], year) or 0
+        자본조정 = find_in_section(자본_items, ['자본조정']) or find_bs_val(['자본조정'], year) or 0
+        기타포괄손익누계액 = find_in_section(자본_items, ['기타포괄손익누계액']) or find_bs_val(['기타포괄손익누계액'], year) or 0
+        기타자본항목 = find_in_section(자본_items, ['기타자본', '기타자본구성요소', '기타자본항목']) or 0
+        기타자본 = 자본잉여금 + 자본조정 + 기타포괄손익누계액 + 기타자본항목
+
+        자본총계 = 총계.get('자본총계') or find_bs_val(['자본총계'], year) or 0
+        부채와자본총계 = 총계.get('부채와자본총계') or 총계.get('부채및자본총계') or find_bs_val(['부채와자본총계', '부채및자본총계'], year) or 0
 
         # ========== 계산 항목 ==========
         nwc = 유동자산 - 유동부채
-        총차입금 = 단기차입금 + 유동성장기차입금 + 유동성사채 + 장기차입금 + 사채
+        # 총차입금: 유동차입부채 + 장기차입금 + 사채 (리스부채는 제외)
+        총차입금 = 유동차입부채 + 장기차입금 + 사채
         net_debt = 총차입금 - 현금 - 단기금융상품
 
-        # 항목 정의: (항목명, 부모, 값)
-        # 부모가 빈 문자열이면 합계/카테고리 항목
-        bs_items = [
-            # 자산
-            ('유동자산', '', 유동자산),
-            ('현금및현금성자산', '', 현금),
-            ('단기금융상품', '', 단기금융상품),
-            ('재고자산', '', 재고자산),
-            ('매출채권및기타채권', '', 매출채권및기타채권),
-            ('매출채권', '매출채권및기타채권', 매출채권),
-            ('미수금', '매출채권및기타채권', 미수금),
-            ('미수수익', '매출채권및기타채권', 미수수익),
-            ('선급금', '매출채권및기타채권', 선급금),
-            ('선급비용', '매출채권및기타채권', 선급비용),
-            ('기타비금융자산', '', 기타비금융자산),
-            ('비유동자산', '', 비유동자산),
-            ('유형자산', '', 유형자산),
-            ('무형자산', '', 무형자산),
-            ('장기투자자산', '', 장기투자자산),
-            ('장기금융상품', '장기투자자산', 장기금융상품),
-            ('매도가능증권', '장기투자자산', 매도가능증권),
-            ('지분법투자', '장기투자자산', 지분법투자),
-            ('보증금', '', 보증금),
-            ('자산총계', '', 자산총계),
-            # 부채
-            ('유동부채', '', 유동부채),
-            ('매입채무및기타채무', '', 유동매입채무및기타채무),
-            ('매입채무', '매입채무및기타채무', 매입채무),
-            ('미지급금', '매입채무및기타채무', 미지급금_유동),
-            ('미지급비용', '매입채무및기타채무', 미지급비용_유동),
-            ('선수금', '매입채무및기타채무', 선수금_유동),
-            ('선수수익', '매입채무및기타채무', 선수수익_유동),
-            ('예수금', '매입채무및기타채무', 예수금_유동),
-            ('예수보증금', '매입채무및기타채무', 예수보증금_유동),
-            ('연차충당부채', '매입채무및기타채무', 연차충당부채),
-            ('단기차입금', '', 단기차입금),
-            ('유동성장기차입금', '', 유동성장기차입금),
-            ('유동성사채', '', 유동성사채),
-            ('기타유동부채', '', 기타유동부채),
-            ('미지급법인세', '기타유동부채', 미지급법인세),
-            ('기타유동부채_기타', '기타유동부채', 기타유동부채_기타),
-            ('비유동부채', '', 비유동부채),
-            ('매입채무및기타채무 [비유동]', '', 비유동매입채무및기타채무),
-            ('장기매입채무', '매입채무및기타채무 [비유동]', 장기매입채무),
-            ('장기미지급금', '매입채무및기타채무 [비유동]', 장기미지급금),
-            ('장기미지급비용', '매입채무및기타채무 [비유동]', 장기미지급비용),
-            ('장기선수금', '매입채무및기타채무 [비유동]', 장기선수금),
-            ('장기선수수익', '매입채무및기타채무 [비유동]', 장기선수수익),
-            ('장기예수금', '매입채무및기타채무 [비유동]', 장기예수금),
-            ('임대보증금', '매입채무및기타채무 [비유동]', 임대보증금),
-            ('예수보증금 [비유동]', '매입채무및기타채무 [비유동]', 예수보증금_비유동),
-            ('사채', '', 사채),
-            ('장기차입금', '', 장기차입금),
-            ('퇴직급여채무', '', 퇴직급여채무),
-            ('부채총계', '', 부채총계),
-            # 자본
-            ('자본금', '', 자본금),
-            ('이익잉여금', '', 이익잉여금),
-            ('기타자본구성요소', '', 기타자본),
-            ('자본잉여금', '기타자본구성요소', 자본잉여금),
-            ('자본조정', '기타자본구성요소', 자본조정),
-            ('기타포괄손익누계액', '기타자본구성요소', 기타포괄손익누계액),
-            ('자본총계', '', 자본총계),
-            ('부채와자본총계', '', 부채와자본총계),
-            # 계산 항목
-            ('NWC', '', nwc),
-            ('유동자산 [NWC]', 'NWC', 유동자산),
-            ('유동부채 [NWC]', 'NWC', 유동부채),
-            ('Net Debt', '', net_debt),
-            ('단기차입금 [NetDebt]', 'Net Debt', 단기차입금),
-            ('유동성장기차입금 [NetDebt]', 'Net Debt', 유동성장기차입금),
-            ('유동성사채 [NetDebt]', 'Net Debt', 유동성사채),
-            ('장기차입금 [NetDebt]', 'Net Debt', 장기차입금),
-            ('사채 [NetDebt]', 'Net Debt', 사채),
-            ('현금및현금성자산 [NetDebt]', 'Net Debt', -현금),
-            ('단기금융상품 [NetDebt]', 'Net Debt', -단기금융상품),
-        ]
+        # ========== 동적 VCM 구조 생성 ==========
+        # 섹션 원본 항목을 표준 카테고리로 그룹화하고 세부항목도 표시
 
-        # 첫 번째 연도에서 항목 구조 생성
-        if year == fy_cols[0]:
+        # 카테고리 매핑 정의 (키워드 -> 카테고리명)
+        def categorize_item(item_name, section_type):
+            """원본 항목명을 표준 카테고리로 분류"""
+            name_norm = normalize(item_name)
+
+            if section_type == '유동자산':
+                if any(k in name_norm for k in ['현금및현금성자산', '현금']):
+                    return '현금및현금성자산'
+                elif any(k in name_norm for k in ['단기금융상품', '당기손익-공정가치', '당기손익공정가치',
+                                                   '기타포괄손익-공정가치', '기타포괄손익공정가치', 'FVPL', 'FVOCI']):
+                    return '단기투자자산'
+                elif any(k in name_norm for k in ['매출채권', '미수금', '미수수익', '선급금', '선급비용',
+                                                   '계약자산', '기타금융자산']):
+                    return '매출채권및기타채권'
+                elif any(k in name_norm for k in ['재고자산', '상품', '제품', '원재료']):
+                    return '재고자산'
+                elif any(k in name_norm for k in ['법인세자산', '당기법인세자산']):
+                    return '당기법인세자산'
+                elif any(k in name_norm for k in ['매각예정', '처분자산집단']):
+                    return '매각예정자산'
+                else:
+                    return '기타유동자산'  # 유동자산의 기타 항목
+
+            elif section_type == '비유동자산':
+                if any(k in name_norm for k in ['유형자산']) and '무형' not in name_norm:
+                    return '유형자산'
+                elif any(k in name_norm for k in ['무형자산']):
+                    return '무형자산'
+                elif any(k in name_norm for k in ['매출채권', '기타금융자산', '보증금', '임차보증금']):
+                    return '매출채권및기타채권'
+                elif any(k in name_norm for k in ['장기금융상품', '당기손익-공정가치', '기타포괄손익-공정가치',
+                                                   '관계기업투자', '종속기업투자', '지분법', '매도가능']):
+                    return '장기투자자산'
+                else:
+                    return '기타비유동자산'  # 비유동자산의 기타 항목
+
+            elif section_type == '유동부채':
+                if any(k in name_norm for k in ['매입채무', '미지급금', '미지급비용', '선수금', '선수수익',
+                                                 '예수금', '예수보증금', '계약부채']):
+                    return '매입채무및기타채무'
+                elif any(k in name_norm for k in ['단기차입금', '유동성장기', '유동성사채', '전환사채',
+                                                   '상환전환우선주', '전환우선주']):
+                    return '유동차입부채'
+                elif any(k in name_norm for k in ['충당부채']) and '리스' not in name_norm:
+                    return '단기충당부채'
+                elif any(k in name_norm for k in ['매각예정부채', '매각예정비유동부채']):
+                    return '매각예정부채'
+                elif any(k in name_norm for k in ['법인세부채', '당기법인세부채', '미지급법인세']):
+                    return '당기법인세부채'
+                elif any(k in name_norm for k in ['리스부채', '파생상품부채', '기타금융부채']):
+                    return '기타금융부채'
+                else:
+                    return '기타비금융부채'
+
+            elif section_type == '비유동부채':
+                if any(k in name_norm for k in ['매입채무', '미지급금', '미지급비용', '선수금', '선수수익',
+                                                 '예수금', '예수보증금', '임대보증금', '계약부채']):
+                    return '매입채무및기타채무'
+                elif any(k in name_norm for k in ['장기차입금', '사채', '비유동차입부채']):
+                    return '비유동차입부채'
+                elif any(k in name_norm for k in ['충당부채', '장기충당부채']) and '리스' not in name_norm:
+                    return '장기충당부채'
+                elif any(k in name_norm for k in ['리스부채', '파생상품부채', '기타금융부채']):
+                    return '기타금융부채'
+                else:
+                    return '기타비금융부채'
+
+            return None
+
+        # 섹션별로 항목을 카테고리로 그룹화
+        def group_items_by_category(items, section_type):
+            """섹션 항목들을 카테고리로 그룹화하고 합계 계산"""
+            groups = {}
+            for item in items:
+                category = categorize_item(item['name'], section_type)
+                if category:
+                    if category not in groups:
+                        groups[category] = {'total': 0, 'items': []}
+                    groups[category]['total'] += item['value']
+                    groups[category]['items'].append(item)
+            return groups
+
+        # 유동자산 그룹화
+        유동자산_groups = group_items_by_category(유동자산_items, '유동자산')
+        비유동자산_groups = group_items_by_category(비유동자산_items, '비유동자산')
+        유동부채_groups = group_items_by_category(유동부채_items, '유동부채')
+        비유동부채_groups = group_items_by_category(비유동부채_items, '비유동부채')
+
+        # ===== 동적 VCM 생성 설정 =====
+        MAX_ITEMS = 6  # 각 섹션당 최대 표시 항목 수
+
+        # 필수 항목 정의 (항상 표시해야 하는 카테고리)
+        유동자산_필수 = ['현금및현금성자산', '매출채권및기타채권']
+        비유동자산_필수 = []  # 금액 기준으로만 정렬
+        유동부채_필수 = ['매입채무및기타채무', '유동차입부채']
+        비유동부채_필수 = ['비유동차입부채']
+
+        def select_top_items(groups, required_cats, max_items, section_name):
+            """
+            필수 항목 + 금액 큰 순으로 상위 N개 선택, 나머지는 '기타'로 합산
+            """
+            # 모든 카테고리를 금액 기준 정렬
+            all_cats = []
+            for cat, grp in groups.items():
+                if grp['total'] and grp['total'] != 0:
+                    all_cats.append({
+                        'name': cat,
+                        'total': grp['total'],
+                        'items': grp['items'],
+                        'is_required': cat in required_cats
+                    })
+
+            # 금액 절댓값 기준 내림차순 정렬
+            all_cats.sort(key=lambda x: abs(x['total']), reverse=True)
+
+            # 필수 항목과 옵션 항목 분리
+            required = [c for c in all_cats if c['is_required']]
+            optional = [c for c in all_cats if not c['is_required']]
+
+            # 선택할 항목 결정
+            selected = []
+            기타_total = 0
+            기타_items = []
+
+            # 1. 필수 항목 먼저 추가
+            for cat in required:
+                selected.append(cat)
+
+            # 2. 남은 슬롯에 금액 큰 순으로 추가
+            remaining_slots = max_items - len(selected)
+            for i, cat in enumerate(optional):
+                if i < remaining_slots:
+                    selected.append(cat)
+                else:
+                    # 나머지는 기타로 합산
+                    기타_total += cat['total']
+                    기타_items.extend(cat['items'])
+
+            # 선택된 항목들을 금액 기준으로 다시 정렬
+            selected.sort(key=lambda x: abs(x['total']), reverse=True)
+
+            return selected, 기타_total, 기타_items
+
+        # 동적 bs_items 생성
+        bs_items = []
+
+        # ===== 유동자산 =====
+        bs_items.append(('유동자산', '', 유동자산))
+
+        selected_유동자산, 기타유동자산_total, 기타유동자산_items = select_top_items(
+            유동자산_groups, 유동자산_필수, MAX_ITEMS, '유동자산'
+        )
+
+        for cat_info in selected_유동자산:
+            cat = cat_info['name']
+            bs_items.append((cat, '', cat_info['total']))
+            # 세부 항목 (2개 이상일 때만 표시)
+            if len(cat_info['items']) > 1:
+                # 세부항목도 금액 순 정렬 (카테고리명과 같은 항목 제외)
+                sorted_items = sorted(
+                    [i for i in cat_info['items'] if normalize(i['name']) != normalize(cat)],
+                    key=lambda x: abs(x['value']), reverse=True
+                )
+                for item in sorted_items[:3]:  # 세부항목은 최대 3개
+                    bs_items.append((item['name'], cat, item['value']))
+
+        # 기타유동자산 (남은 항목 합계)
+        if 기타유동자산_total and abs(기타유동자산_total) > 0:
+            bs_items.append(('기타유동자산', '', 기타유동자산_total))
+
+        # 매각예정자산 (유동자산 섹션에 포함)
+        매각예정자산 = find_bs_val(['매각예정비유동자산', '매각예정자산', '처분자산집단'], year) or 0
+        if 매각예정자산:
+            bs_items.append(('매각예정자산', '', 매각예정자산))
+
+        # ===== 비유동자산 =====
+        bs_items.append(('비유동자산', '', 비유동자산))
+
+        # 비유동자산 카테고리명 매핑 (유동과 구분 필요한 항목)
+        비유동자산_카테고리_표시명 = {
+            '매출채권및기타채권': '매출채권및기타채권[비유동]',
+        }
+
+        selected_비유동자산, 기타비유동자산_total, _ = select_top_items(
+            비유동자산_groups, 비유동자산_필수, MAX_ITEMS, '비유동자산'
+        )
+
+        for cat_info in selected_비유동자산:
+            cat = cat_info['name']
+            cat_display = 비유동자산_카테고리_표시명.get(cat, cat)
+            bs_items.append((cat_display, '', cat_info['total']))
+            if len(cat_info['items']) > 1:
+                sorted_items = sorted(
+                    [i for i in cat_info['items'] if normalize(i['name']) != normalize(cat)],
+                    key=lambda x: abs(x['value']), reverse=True
+                )
+                for item in sorted_items[:3]:
+                    bs_items.append((item['name'], cat_display, item['value']))
+
+        if 기타비유동자산_total and abs(기타비유동자산_total) > 0:
+            bs_items.append(('기타비유동자산', '', 기타비유동자산_total))
+
+        bs_items.append(('자산총계', '', 자산총계))
+
+        # ===== 유동부채 =====
+        bs_items.append(('유동부채', '', 유동부채))
+
+        selected_유동부채, 기타유동부채_total, _ = select_top_items(
+            유동부채_groups, 유동부채_필수, MAX_ITEMS, '유동부채'
+        )
+
+        for cat_info in selected_유동부채:
+            cat = cat_info['name']
+            bs_items.append((cat, '', cat_info['total']))
+            if len(cat_info['items']) > 1:
+                sorted_items = sorted(
+                    [i for i in cat_info['items'] if normalize(i['name']) != normalize(cat)],
+                    key=lambda x: abs(x['value']), reverse=True
+                )
+                for item in sorted_items[:3]:
+                    bs_items.append((item['name'], cat, item['value']))
+
+        if 기타유동부채_total and abs(기타유동부채_total) > 0:
+            bs_items.append(('기타유동부채', '', 기타유동부채_total))
+
+        # 매각예정부채 별도 추출 (섹션 외부에 있을 수 있음)
+        매각예정부채 = find_bs_val(['매각예정비유동부채', '매각예정부채'], year) or 0
+        if 매각예정부채:
+            bs_items.append(('매각예정부채', '', 매각예정부채))
+
+        # ===== 비유동부채 =====
+        bs_items.append(('비유동부채', '', 비유동부채))
+
+        # 비유동부채 카테고리명 매핑 (유동과 구분 필요한 항목)
+        비유동부채_카테고리_표시명 = {
+            '매입채무및기타채무': '매입채무및기타채무[비유동]',
+            '기타금융부채': '기타금융부채[비유동]',
+            '기타비금융부채': '기타비금융부채[비유동]',
+        }
+
+        selected_비유동부채, 기타비유동부채_total, _ = select_top_items(
+            비유동부채_groups, 비유동부채_필수, MAX_ITEMS, '비유동부채'
+        )
+
+        for cat_info in selected_비유동부채:
+            cat = cat_info['name']
+            cat_display = 비유동부채_카테고리_표시명.get(cat, cat)
+            bs_items.append((cat_display, '', cat_info['total']))
+            if len(cat_info['items']) > 1:
+                sorted_items = sorted(
+                    [i for i in cat_info['items'] if normalize(i['name']) != normalize(cat)],
+                    key=lambda x: abs(x['value']), reverse=True
+                )
+                for item in sorted_items[:3]:
+                    bs_items.append((item['name'], cat_display, item['value']))
+
+        if 기타비유동부채_total and abs(기타비유동부채_total) > 0:
+            bs_items.append(('기타비유동부채[비유동]', '', 기타비유동부채_total))
+
+        bs_items.append(('부채총계', '', 부채총계))
+
+        # ===== 자본 =====
+        bs_items.append(('자본금', '', 자본금))
+        bs_items.append(('이익잉여금', '', 이익잉여금))
+        bs_items.append(('기타자본구성요소', '', 기타자본))
+        # 자본 세부항목
+        for item in 자본_items:
+            name_norm = normalize(item['name'])
+            if '자본금' not in name_norm and '이익잉여금' not in name_norm and '결손금' not in name_norm:
+                if any(k in name_norm for k in ['자본잉여금', '주식발행초과금', '자본조정', '기타포괄손익', '기타자본']):
+                    bs_items.append((item['name'], '기타자본구성요소', item['value']))
+
+        bs_items.append(('자본총계', '', 자본총계))
+        bs_items.append(('부채와자본총계', '', 부채와자본총계))
+
+        # ===== 계산 항목 =====
+        bs_items.append(('NWC', '', nwc))
+        bs_items.append(('유동자산 [NWC]', 'NWC', 유동자산))
+        bs_items.append(('유동부채 [NWC]', 'NWC', 유동부채))
+
+        # Net Debt 계산: 유동차입부채 + 비유동차입부채 - 현금 - 단기투자자산
+        유동차입부채_합계 = 유동부채_groups.get('유동차입부채', {}).get('total', 0)
+        비유동차입부채_합계 = 비유동부채_groups.get('비유동차입부채', {}).get('total', 0)
+        현금_합계 = 유동자산_groups.get('현금및현금성자산', {}).get('total', 0)
+        단기투자자산_합계 = 유동자산_groups.get('단기투자자산', {}).get('total', 0)
+        net_debt = 유동차입부채_합계 + 비유동차입부채_합계 - 현금_합계 - 단기투자자산_합계
+
+        bs_items.append(('Net Debt', '', net_debt))
+        bs_items.append(('유동차입부채 [NetDebt]', 'Net Debt', 유동차입부채_합계))
+        bs_items.append(('비유동차입부채 [NetDebt]', 'Net Debt', 비유동차입부채_합계))
+        bs_items.append(('현금및현금성자산 [NetDebt]', 'Net Debt', -현금_합계))
+        bs_items.append(('단기투자자산 [NetDebt]', 'Net Debt', -단기투자자산_합계))
+
+        # 항목 순서와 값을 저장
+        all_bs_items_by_year[year_str] = bs_items
+
+    # ========== 마스터 순서 결정 및 값 병합 ==========
+    # 모든 연도의 항목을 올바른 순서로 병합
+    master_order = []  # [(항목명, 부모)]
+    master_order_set = set()
+
+    # 각 연도의 bs_items를 순회하며 마스터 순서 구축
+    # 최신 연도부터 처리하여 최신 데이터의 순서를 우선
+    for year_str in sorted(all_bs_items_by_year.keys(), reverse=True):
+        bs_items = all_bs_items_by_year[year_str]
+
+        # 첫 번째(최신) 연도는 순서 그대로 사용
+        if not master_order:
             for item_name, parent, val in bs_items:
-                bs_rows.append({'항목': item_name, '부모': parent})
+                master_order.append((item_name, parent))
+                master_order_set.add(item_name)
+        else:
+            # 이후 연도: 새 항목만 적절한 위치에 삽입
+            insert_idx = 0
+            for item_name, parent, val in bs_items:
+                if item_name not in master_order_set:
+                    # 새 항목: 올바른 위치에 삽입
+                    master_order.insert(insert_idx, (item_name, parent))
+                    master_order_set.add(item_name)
+                else:
+                    # 기존 항목: 현재 위치 찾기
+                    for i, (name, _) in enumerate(master_order):
+                        if name == item_name:
+                            insert_idx = i
+                            break
+                insert_idx += 1
 
-        # 각 연도별 값 저장
-        for i, (item_name, parent, val) in enumerate(bs_items):
-            if i < len(bs_rows):
-                bs_rows[i][year_str] = round(val) if val is not None and val != 0 else None
+    # 마스터 순서대로 bs_rows 생성
+    bs_rows = []
+    item_to_row = {}
+    for item_name, parent in master_order:
+        row = {'항목': item_name, '부모': parent}
+        bs_rows.append(row)
+        item_to_row[item_name] = row
+
+    # 각 연도의 값 채우기
+    for year_str, bs_items in all_bs_items_by_year.items():
+        for item_name, parent, val in bs_items:
+            if item_name in item_to_row:
+                item_to_row[item_name][year_str] = round(val) if val is not None and val != 0 else None
+
+    # 빈 행 필터링 (모든 연도에서 값이 없는 행 제거)
+    year_cols = sorted(all_bs_items_by_year.keys())
+    filtered_bs_rows = []
+    for row in bs_rows:
+        has_value = any(row.get(y) is not None and row.get(y) != 0 for y in year_cols)
+        if has_value:
+            filtered_bs_rows.append(row)
+        else:
+            print(f"[VCM] 빈 행 제거: {row.get('항목')}")
 
     # 재무상태표 + 손익계산서 순서로 결합
-    all_rows = bs_rows + rows
+    all_rows = filtered_bs_rows + rows
 
     return pd.DataFrame(all_rows)
 
@@ -2587,8 +3145,8 @@ if __name__ == "__main__":
     print("=" * 50)
     print("DART 재무제표 추출기 서버")
     print("=" * 50)
-    print("서버 시작: http://localhost:8080")
+    print("서버 시작: http://localhost:8000")
     print("종료: Ctrl+C")
     print("=" * 50)
-    
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
