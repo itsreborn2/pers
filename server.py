@@ -2584,6 +2584,25 @@ def create_vcm_format(fs_data, excel_filepath=None):
         유동부채_필수 = ['매입채무및기타채무', '유동차입부채']
         비유동부채_필수 = ['비유동차입부채']
 
+        def is_redundant_child(parent_name, child_name):
+            """
+            세부항목이 부모와 중복되는지 확인
+            - 부모가 자식 이름을 포함하거나 그 반대인 경우 (장기충당부채 vs 충당부채)
+            - 둘 다 '기타'를 포함하는 경우 (기타유동자산 vs 기타비금융자산)
+            """
+            parent_norm = normalize(parent_name).replace('[비유동]', '').replace('[netdebt]', '').replace('[nwc]', '')
+            child_norm = normalize(child_name)
+
+            # 이름이 서로 포함 관계인 경우 (장기충당부채 ↔ 충당부채)
+            if parent_norm in child_norm or child_norm in parent_norm:
+                return True
+
+            # 둘 다 '기타'를 포함하는 경우
+            if '기타' in parent_norm and '기타' in child_norm:
+                return True
+
+            return False
+
         def select_top_items(groups, required_cats, max_items, section_name):
             """
             필수 항목 + 금액 큰 순으로 상위 N개 선택, 나머지는 '기타'로 합산
@@ -2643,19 +2662,26 @@ def create_vcm_format(fs_data, excel_filepath=None):
         for cat_info in selected_유동자산:
             cat = cat_info['name']
             bs_items.append((cat, '', cat_info['total']))
-            # 세부 항목 (2개 이상일 때만 표시)
-            if len(cat_info['items']) > 1:
-                # 세부항목도 금액 순 정렬 (카테고리명과 같은 항목 제외)
-                sorted_items = sorted(
-                    [i for i in cat_info['items'] if normalize(i['name']) != normalize(cat)],
-                    key=lambda x: abs(x['value']), reverse=True
-                )
+            # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
+            valid_items = [
+                i for i in cat_info['items']
+                if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat, i['name'])
+            ]
+            # 유효한 세부항목이 2개 이상이거나, 1개라도 의미있으면 표시
+            if len(valid_items) >= 2 or (len(valid_items) == 1 and len(cat_info['items']) > 1):
+                sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
                 for item in sorted_items[:3]:  # 세부항목은 최대 3개
                     bs_items.append((item['name'], cat, item['value']))
 
         # 기타유동자산 (남은 항목 합계)
         if 기타유동자산_total and abs(기타유동자산_total) > 0:
             bs_items.append(('기타유동자산', '', 기타유동자산_total))
+            # 기타유동자산에 포함된 세부항목들 (중복 항목 제외)
+            valid_기타유동 = [i for i in 기타유동자산_items if not is_redundant_child('기타유동자산', i['name'])]
+            if len(valid_기타유동) >= 2:  # 의미있는 세부항목이 2개 이상일 때만 표시
+                sorted_기타유동 = sorted(valid_기타유동, key=lambda x: abs(x['value']), reverse=True)
+                for item in sorted_기타유동[:5]:
+                    bs_items.append((item['name'], '기타유동자산', item['value']))
 
         # 매각예정자산 (유동자산 섹션에 포함)
         매각예정자산 = find_bs_val(['매각예정비유동자산', '매각예정자산', '처분자산집단'], year) or 0
@@ -2670,7 +2696,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
             '매출채권및기타채권': '매출채권및기타채권[비유동]',
         }
 
-        selected_비유동자산, 기타비유동자산_total, _ = select_top_items(
+        selected_비유동자산, 기타비유동자산_total, 기타비유동자산_items = select_top_items(
             비유동자산_groups, 비유동자산_필수, MAX_ITEMS, '비유동자산'
         )
 
@@ -2678,39 +2704,55 @@ def create_vcm_format(fs_data, excel_filepath=None):
             cat = cat_info['name']
             cat_display = 비유동자산_카테고리_표시명.get(cat, cat)
             bs_items.append((cat_display, '', cat_info['total']))
-            if len(cat_info['items']) > 1:
-                sorted_items = sorted(
-                    [i for i in cat_info['items'] if normalize(i['name']) != normalize(cat)],
-                    key=lambda x: abs(x['value']), reverse=True
-                )
+            # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
+            valid_items = [
+                i for i in cat_info['items']
+                if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat_display, i['name'])
+            ]
+            if len(valid_items) >= 2 or (len(valid_items) == 1 and len(cat_info['items']) > 1):
+                sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
                 for item in sorted_items[:3]:
                     bs_items.append((item['name'], cat_display, item['value']))
 
         if 기타비유동자산_total and abs(기타비유동자산_total) > 0:
             bs_items.append(('기타비유동자산', '', 기타비유동자산_total))
+            # 기타비유동자산에 포함된 세부항목들 (중복 항목 제외)
+            valid_기타비유동 = [i for i in 기타비유동자산_items if not is_redundant_child('기타비유동자산', i['name'])]
+            if len(valid_기타비유동) >= 2:
+                sorted_기타비유동 = sorted(valid_기타비유동, key=lambda x: abs(x['value']), reverse=True)
+                for item in sorted_기타비유동[:5]:
+                    bs_items.append((item['name'], '기타비유동자산', item['value']))
 
         bs_items.append(('자산총계', '', 자산총계))
 
         # ===== 유동부채 =====
         bs_items.append(('유동부채', '', 유동부채))
 
-        selected_유동부채, 기타유동부채_total, _ = select_top_items(
+        selected_유동부채, 기타유동부채_total, 기타유동부채_items = select_top_items(
             유동부채_groups, 유동부채_필수, MAX_ITEMS, '유동부채'
         )
 
         for cat_info in selected_유동부채:
             cat = cat_info['name']
             bs_items.append((cat, '', cat_info['total']))
-            if len(cat_info['items']) > 1:
-                sorted_items = sorted(
-                    [i for i in cat_info['items'] if normalize(i['name']) != normalize(cat)],
-                    key=lambda x: abs(x['value']), reverse=True
-                )
+            # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
+            valid_items = [
+                i for i in cat_info['items']
+                if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat, i['name'])
+            ]
+            if len(valid_items) >= 2 or (len(valid_items) == 1 and len(cat_info['items']) > 1):
+                sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
                 for item in sorted_items[:3]:
                     bs_items.append((item['name'], cat, item['value']))
 
         if 기타유동부채_total and abs(기타유동부채_total) > 0:
             bs_items.append(('기타유동부채', '', 기타유동부채_total))
+            # 기타유동부채에 포함된 세부항목들 (중복 항목 제외)
+            valid_기타유동부채 = [i for i in 기타유동부채_items if not is_redundant_child('기타유동부채', i['name'])]
+            if len(valid_기타유동부채) >= 2:
+                sorted_기타유동부채 = sorted(valid_기타유동부채, key=lambda x: abs(x['value']), reverse=True)
+                for item in sorted_기타유동부채[:5]:
+                    bs_items.append((item['name'], '기타유동부채', item['value']))
 
         # 매각예정부채 별도 추출 (섹션 외부에 있을 수 있음)
         매각예정부채 = find_bs_val(['매각예정비유동부채', '매각예정부채'], year) or 0
@@ -2727,7 +2769,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
             '기타비금융부채': '기타비금융부채[비유동]',
         }
 
-        selected_비유동부채, 기타비유동부채_total, _ = select_top_items(
+        selected_비유동부채, 기타비유동부채_total, 기타비유동부채_items = select_top_items(
             비유동부채_groups, 비유동부채_필수, MAX_ITEMS, '비유동부채'
         )
 
@@ -2735,16 +2777,24 @@ def create_vcm_format(fs_data, excel_filepath=None):
             cat = cat_info['name']
             cat_display = 비유동부채_카테고리_표시명.get(cat, cat)
             bs_items.append((cat_display, '', cat_info['total']))
-            if len(cat_info['items']) > 1:
-                sorted_items = sorted(
-                    [i for i in cat_info['items'] if normalize(i['name']) != normalize(cat)],
-                    key=lambda x: abs(x['value']), reverse=True
-                )
+            # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
+            valid_items = [
+                i for i in cat_info['items']
+                if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat_display, i['name'])
+            ]
+            if len(valid_items) >= 2 or (len(valid_items) == 1 and len(cat_info['items']) > 1):
+                sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
                 for item in sorted_items[:3]:
                     bs_items.append((item['name'], cat_display, item['value']))
 
         if 기타비유동부채_total and abs(기타비유동부채_total) > 0:
-            bs_items.append(('기타비유동부채[비유동]', '', 기타비유동부채_total))
+            bs_items.append(('기타비유동부채', '', 기타비유동부채_total))
+            # 기타비유동부채에 포함된 세부항목들 (중복 항목 제외)
+            valid_기타비유동부채 = [i for i in 기타비유동부채_items if not is_redundant_child('기타비유동부채', i['name'])]
+            if len(valid_기타비유동부채) >= 2:
+                sorted_기타비유동부채 = sorted(valid_기타비유동부채, key=lambda x: abs(x['value']), reverse=True)
+                for item in sorted_기타비유동부채[:5]:
+                    bs_items.append((item['name'], '기타비유동부채', item['value']))
 
         bs_items.append(('부채총계', '', 부채총계))
 
