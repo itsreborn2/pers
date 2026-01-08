@@ -2358,7 +2358,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
     # ========== 판관비 상위 6개 항목 미리 결정 (모든 연도 합계 기준) ==========
     def get_sga_items_for_year(is_df, year):
         """특정 연도의 모든 판관비 항목 값을 반환"""
-        급여 = find_val(is_df, ['급여'], year, ['퇴직', '연차']) or 0
+        급여 = find_val(is_df, ['급여', '직원급여', '종업원급여'], year, ['퇴직', '연차']) or 0
         퇴직급여 = find_val(is_df, ['퇴직급여'], year) or 0
         복리후생비 = find_val(is_df, ['복리후생비'], year) or 0
         기타장기종업원급여 = find_val(is_df, ['기타장기종업원급여'], year) or 0
