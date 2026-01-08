@@ -1784,6 +1784,163 @@
                 return { topSgaItems, sgaCandidates, sgaItemValues };
             }
 
+            // ========== 새로운 단순화된 렌더링 (vcm_display 사용) ==========
+            const vcmDisplay = previewData?.vcm_display || [];
+            const vcmMeta = previewData?.vcm || [];
+
+            // vcm_display가 있으면 단순화된 렌더링 사용
+            if (vcmDisplay.length > 0 && vcmMeta.length > 0) {
+                console.log('[VCM] 단순화된 렌더링 사용 (vcm_display 기반)');
+
+                // 타입 조회 헬퍼 (vcm 메타데이터에서)
+                function getItemType(itemName) {
+                    const meta = vcmMeta.find(r => r['항목'] === itemName);
+                    return meta ? meta['타입'] : 'item';
+                }
+
+                // 부모 조회 헬퍼 (툴팁용)
+                function getItemParent(itemName) {
+                    const meta = vcmMeta.find(r => r['항목'] === itemName);
+                    return meta ? meta['부모'] : '';
+                }
+
+                // 자식 항목들 조회 (툴팁용)
+                function getChildItems(parentName, year) {
+                    const children = vcmMeta.filter(r => r['부모'] === parentName);
+                    return children.map(c => {
+                        const displayRow = vcmDisplay.find(d => d['항목'] === c['항목']);
+                        return {
+                            name: c['항목'],
+                            value: displayRow ? displayRow[year] : ''
+                        };
+                    }).filter(c => c.value && c.value !== '');
+                }
+
+                // 타입별 CSS 클래스
+                function getRowClass(type) {
+                    switch(type) {
+                        case 'category': return 'category-row';
+                        case 'total': return 'total-row';
+                        case 'highlight': return 'total-row highlight-row';
+                        case 'percent': return 'percent-row';
+                        default: return '';
+                    }
+                }
+
+                function getTdClass(type) {
+                    return (type === 'subitem' || type === 'percent') ? 'sub-item' : '';
+                }
+
+                // 테이블 헤더 (단위: 천만원 - 백엔드에서 변환됨)
+                let headerHtml = `<tr><th>(단위: 천만원)</th>`;
+                years.forEach(y => { headerHtml += `<th>${y}</th>`; });
+                headerHtml += '</tr>';
+
+                // ========== 재무상태표 렌더링 ==========
+                // 재무상태표: 유동자산 ~ 부채와자본총계 + NWC + Net Debt
+                const bsEndItems = ['NWC', 'Net Debt'];  // 재무상태표 마지막에 포함될 항목
+                const isStartNames = ['매출'];
+                let bsTableHtml = '<table class="vcm-table"><thead>' + headerHtml + '</thead><tbody>';
+
+                for (const row of vcmDisplay) {
+                    const itemName = row['항목'];
+                    if (!itemName) continue;
+
+                    // 손익계산서 시작 지점 (매출)에서 BS 종료
+                    if (itemName.trim() === '매출') break;
+
+                    // NWC/Net Debt 하위항목은 제외 (툴팁에서만 표시)
+                    if (itemName.includes('[NWC]') || itemName.includes('[NetDebt]')) continue;
+
+                    const itemType = getItemType(itemName);
+                    const rowClass = getRowClass(itemType);
+                    const tdClass = getTdClass(itemType);
+
+                    // 툴팁 생성 (자식 항목이 있으면)
+                    let tooltip = '';
+                    const parentName = itemName.trim();
+                    const children = getChildItems(parentName, years[0]);
+                    if (children.length > 0) {
+                        tooltip = children.map(c => `${c.name}: ${c.value}`).join('\n');
+                    }
+
+                    bsTableHtml += `<tr class="${rowClass}"><td class="${tdClass}" title="${tooltip}">${itemName}</td>`;
+                    years.forEach(y => {
+                        let val = row[y];
+                        // 숫자인 경우 천 단위 콤마 추가
+                        if (typeof val === 'number' && !isNaN(val)) {
+                            val = val.toLocaleString('ko-KR');
+                        } else if (val === null || val === undefined) {
+                            val = '';
+                        }
+                        bsTableHtml += `<td>${val}</td>`;
+                    });
+                    bsTableHtml += '</tr>';
+                }
+                bsTableHtml += '</tbody></table>';
+
+                // ========== 손익계산서 렌더링 ==========
+                let isTableHtml = '<table class="vcm-table"><thead>' + headerHtml + '</thead><tbody>';
+                let foundIsStart = false;
+
+                for (const row of vcmDisplay) {
+                    const itemName = row['항목'];
+                    if (!itemName) continue;
+
+                    // IS 시작 지점 (매출부터)
+                    if (itemName.trim() === '매출') foundIsStart = true;
+                    if (!foundIsStart) continue;
+
+                    // NWC, Net Debt 관련 항목은 재무상태표에 표시되므로 제외
+                    if (itemName.includes('NWC') || itemName.includes('Net Debt')) continue;
+                    if (itemName.includes('[NWC]') || itemName.includes('[NetDebt]')) continue;
+
+                    const itemType = getItemType(itemName);
+                    const rowClass = getRowClass(itemType);
+                    const tdClass = getTdClass(itemType);
+
+                    // 툴팁 생성 (자식 항목이 있으면)
+                    let tooltip = '';
+                    const parentName = itemName.trim();
+                    const children = getChildItems(parentName, years[0]);
+                    if (children.length > 0) {
+                        tooltip = children.map(c => `${c.name}: ${c.value}`).join('\n');
+                    }
+
+                    isTableHtml += `<tr class="${rowClass}"><td class="${tdClass}" title="${tooltip}">${itemName}</td>`;
+                    years.forEach(y => {
+                        let val = row[y];
+                        // 숫자인 경우 천 단위 콤마 추가
+                        if (typeof val === 'number' && !isNaN(val)) {
+                            val = val.toLocaleString('ko-KR');
+                        } else if (val === null || val === undefined) {
+                            val = '';
+                        }
+                        isTableHtml += `<td>${val}</td>`;
+                    });
+                    isTableHtml += '</tr>';
+                }
+                isTableHtml += '</tbody></table>';
+
+                // 최종 HTML 반환 (기존 형식 유지)
+                return `
+                    <div class="vcm-container">
+                        <div class="vcm-section">
+                            <div class="vcm-title">재무상태표</div>
+                            ${bsTableHtml}
+                        </div>
+                        <div class="vcm-section">
+                            <div class="vcm-title">손익계산서</div>
+                            ${isTableHtml}
+                        </div>
+                    </div>
+                    <p class="preview-info">* Source: 전자공시시스템 (DART)</p>
+                `;
+            }
+
+            // ========== 기존 복잡한 렌더링 (fallback) ==========
+            console.log('[VCM] 기존 렌더링 사용 (vcm_display 없음)');
+
             // 동적 bsItems 생성 - VCM 데이터에서 직접 읽기
             const vcmData = previewData?.vcm || [];
             const bsItems = [];
@@ -1881,6 +2038,25 @@
             // 재무상태표 테이블 생성
             let bsTableHtml = '<table class="vcm-table"><thead>' + headerHtml + '</thead><tbody>';
             bsItems.forEach(item => {
+                // 빈 행 필터링: 모든 연도에 값이 없으면 건너뜀
+                const vcmDataList = previewData?.vcm || [];
+                const hasAnyValue = years.some(y => {
+                    if (item.fromVcm) {
+                        const vcmRow = vcmDataList.find(row => row['항목'] === item.name);
+                        if (vcmRow && vcmRow[y] !== null && vcmRow[y] !== undefined && vcmRow[y] !== 0) return true;
+                    }
+                    if (item.calc) {
+                        const calcVal = calcBsValue(item.calc, y);
+                        if (calcVal !== null && calcVal !== undefined && calcVal !== 0) return true;
+                    }
+                    return false;
+                });
+
+                // 카테고리 행(자산, 부채 등 대분류)은 항상 표시, 나머지는 값이 있을 때만 표시
+                if (!item.isCategory && !item.isTotal && !hasAnyValue) {
+                    return; // 빈 행 건너뜀
+                }
+
                 let rowClass = item.isCategory ? 'category-row' : (item.isTotal ? 'total-row' : '');
                 let tdClass = item.isSubItem ? 'sub-item' : '';
 
@@ -2355,10 +2531,45 @@
                 }
             }
             
+            // VCM 항목 매칭 헬퍼 함수 (상품매출 vs 상품매출액 등 유연하게 매칭)
+            function findVcmRow(vcmData, itemName) {
+                return vcmData.find(row => {
+                    const rowItem = (row['항목'] || '').trim();
+                    const searchName = itemName.trim();
+                    // 정확한 매칭
+                    if (rowItem === searchName) return true;
+                    // '액' 접미사 변형 매칭 (상품매출 ↔ 상품매출액)
+                    if (rowItem === searchName + '액') return true;
+                    if (rowItem + '액' === searchName) return true;
+                    return false;
+                });
+            }
+
             // 손익계산서 테이블 생성
             let isTableHtml = '<table class="vcm-table"><thead>' + headerHtml + '</thead><tbody>';
             isItems.forEach(item => {
-                // 모든 행을 표시 (빈 행도 유지)
+                // 빈 행 필터링: 모든 연도에 값이 없으면 건너뜀
+                const vcmData = previewData?.vcm || [];
+                const vcmRow = findVcmRow(vcmData, item.name);
+                const hasAnyValue = years.some(y => {
+                    if (vcmRow && vcmRow[y] !== null && vcmRow[y] !== undefined && vcmRow[y] !== 0) return true;
+                    if (item.calc) {
+                        const calcVal = calcValue(item.calc, y);
+                        if (calcVal !== null && calcVal !== undefined && calcVal !== 0) return true;
+                    }
+                    // keywords 기반 항목도 체크 (상품매출, 제품매출 등)
+                    if (item.keywords) {
+                        const keyVal = findValue(isData, item.keywords, y, item.excludes || []);
+                        if (keyVal !== null && keyVal !== undefined && keyVal !== 0) return true;
+                    }
+                    return false;
+                });
+
+                // 카테고리 행(매출, 매출원가 등 대분류)은 항상 표시, 나머지는 값이 있을 때만 표시
+                if (!item.isCategory && !item.isTotal && !hasAnyValue) {
+                    return; // 빈 행 건너뜀
+                }
+
                 let rowClass = item.isCategory ? 'category-row' : (item.isTotal ? 'total-row' : '');
                 if (item.isHighlight) rowClass += ' highlight-row';
                 let tdClass = item.isSubItem ? 'sub-item' : '';
@@ -2371,7 +2582,7 @@
 
                     // VCM 데이터에서 먼저 찾기 시도
                     const vcmData = previewData?.vcm || [];
-                    const vcmRow = vcmData.find(row => row['항목'] === item.name || row['항목'] === `  ${item.name}`);
+                    const vcmRow = findVcmRow(vcmData, item.name);
 
                     if (vcmRow && vcmRow[y] !== null && vcmRow[y] !== undefined) {
                         // VCM 데이터 사용 (단위 변환)

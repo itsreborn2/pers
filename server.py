@@ -572,6 +572,13 @@ async def extract_financial_data(
                 if vcm_df is not None and not vcm_df.empty:
                     task['preview_data']['vcm'] = safe_dataframe_to_json(vcm_df)
                     print(f"[EXTRACT] preview_data['vcm'] 생성: {len(task['preview_data']['vcm'])}개 행")
+
+            # 복사용테이블 데이터도 preview_data에 추가
+            if '복사용테이블' in xl.sheet_names:
+                display_df = pd.read_excel(filepath, sheet_name='복사용테이블', engine='openpyxl')
+                if display_df is not None and not display_df.empty:
+                    task['preview_data']['vcm_display'] = safe_dataframe_to_json(display_df)
+                    print(f"[EXTRACT] preview_data['vcm_display'] 생성: {len(task['preview_data']['vcm_display'])}개 행")
         except Exception as e:
             print(f"[EXTRACT] Excel preview_data 재생성 실패: {e}")
 
@@ -648,6 +655,52 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                 print(f"[FS] 사업보고서에서 추출 성공")
                 xbrl_data = fs_data.copy()
 
+                # fs 객체에서 주석 테이블 추출 시도 (비용의 성격별 분류 등)
+                try:
+                    notes_tables = {'is_notes': [], 'bs_notes': [], 'cf_notes': []}
+                    # fs.tables 또는 fs.info 등에서 추가 테이블 검색
+                    tables_to_check = []
+                    if hasattr(fs, 'tables'):
+                        tables_to_check = fs.tables if fs.tables else []
+                    elif hasattr(fs, '_tables'):
+                        tables_to_check = fs._tables if fs._tables else []
+
+                    print(f"[FS] fs 객체 테이블 수: {len(tables_to_check)}")
+
+                    for table in tables_to_check:
+                        try:
+                            if hasattr(table, 'to_DataFrame'):
+                                temp_df = table.to_DataFrame()
+                            elif hasattr(table, 'dataframe'):
+                                temp_df = table.dataframe
+                            else:
+                                continue
+
+                            if temp_df is None or temp_df.empty:
+                                continue
+
+                            col_str = str(temp_df.columns[0]) if len(temp_df.columns) > 0 else ""
+                            is_consolidated = '연결' in col_str or 'Consolidated' in col_str
+
+                            # 비용/수익 관련 주석 테이블 찾기
+                            expense_keywords = ['비용', '수익', '매출', '판매비', '관리비', '원가', '급여', '감가상각', '성격별']
+                            if any(kw in col_str for kw in expense_keywords):
+                                if not any(kw in col_str for kw in ['재무상태표', '손익계산서', '현금흐름표', '포괄손익']):
+                                    notes_tables['is_notes'].append({
+                                        'name': col_str[:80],
+                                        'df': temp_df,
+                                        'consolidated': is_consolidated
+                                    })
+                                    print(f"[FS] 주석 테이블 발견: {col_str[:60]}... shape={temp_df.shape}")
+                        except Exception as e:
+                            pass
+
+                    if any(notes_tables[key] for key in notes_tables):
+                        fs_data['notes'] = notes_tables
+                        print(f"[FS] 주석 테이블 추출 완료: IS={len(notes_tables['is_notes'])}개")
+                except Exception as e:
+                    print(f"[FS] fs 객체 주석 추출 실패: {e}")
+
                 # 사업보고서 객체 찾기 (HTML 주석 추출용)
                 try:
                     from dart_fss.filings import search as search_filings
@@ -664,6 +717,31 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                             print(f"[FS] 사업보고서 객체 찾음: {annual_report.report_nm}")
                 except Exception as e:
                     print(f"[FS] 사업보고서 객체 검색 실패: {e}")
+
+                # 사업보고서를 못 찾은 경우 감사보고서에서 주석 추출 시도 (비상장사용)
+                if annual_report is None:
+                    try:
+                        print(f"[FS] 사업보고서 없음, 감사보고서에서 주석 추출 시도...")
+                        audit_filings = search_filings(
+                            corp_code=corp_code,
+                            bgn_de=start_date,
+                            end_de=end_date,
+                            pblntf_ty=None
+                        )
+                        if audit_filings:
+                            for af in audit_filings:
+                                if '감사보고서' in str(af.report_nm) and '연결' in str(af.report_nm):
+                                    annual_report = af
+                                    print(f"[FS] 연결감사보고서 발견: {af.report_nm}")
+                                    break
+                            if annual_report is None:
+                                for af in audit_filings:
+                                    if '감사보고서' in str(af.report_nm):
+                                        annual_report = af
+                                        print(f"[FS] 감사보고서 발견: {af.report_nm}")
+                                        break
+                    except Exception as e:
+                        print(f"[FS] 감사보고서 검색 실패: {e}")
 
                 # 당해년도 사업보고서가 있는지 확인 (컬럼에서 FY{current_year} 존재 여부)
                 for key in ['bs', 'is']:
@@ -1329,8 +1407,9 @@ def extract_fs_from_pages(report, report_year=None):
                     html = page.html if hasattr(page, 'html') else None
                     if html:
                         # 비용의 성격별 분류 테이블 찾기
+                        from io import StringIO
                         soup = BeautifulSoup(html, 'html.parser')
-                        tables = pd.read_html(str(soup))
+                        tables = pd.read_html(StringIO(str(soup)))
 
                         for idx, table in enumerate(tables):
                             # 급여, 복리후생비, 감가상각비 등이 포함된 테이블 찾기
@@ -1353,28 +1432,42 @@ def extract_fs_from_pages(report, report_year=None):
                                     # 컬럼명 정제: "구 분" -> "계정과목", "당기" -> "FY{year}", "전기" -> "FY{year-1}"
                                     if len(cleaned_table) > 0:
                                         new_columns = []
-                                        for i, col in enumerate(cleaned_table.columns):
-                                            col_str = str(cleaned_table.iloc[0, i]).strip() if len(cleaned_table) > 0 else str(col)
+                                        # 먼저 컬럼명에서 패턴 확인
+                                        cols_have_patterns = any('구' in str(c) or '당' in str(c) or '전' in str(c) for c in cleaned_table.columns)
 
-                                            if '구' in col_str and '분' in col_str:
+                                        for i, col in enumerate(cleaned_table.columns):
+                                            # 컬럼명에 패턴이 있으면 컬럼명 사용, 없으면 첫 행 값 사용
+                                            if cols_have_patterns:
+                                                col_str = str(col).strip()
+                                            else:
+                                                col_str = str(cleaned_table.iloc[0, i]).strip() if len(cleaned_table) > 0 else str(col)
+                                            # 공백 제거 후 비교
+                                            col_normalized = col_str.replace(' ', '')
+
+                                            if '구분' in col_normalized:
                                                 new_columns.append('계정과목')
-                                            elif '당기' in col_str or '금기' in col_str:
+                                            elif '당기' in col_normalized or '금기' in col_normalized:
                                                 # 당기 = 보고서 연도
                                                 year = report_year if report_year else 2023
                                                 new_columns.append(f'FY{year}')
-                                            elif '전기' in col_str:
+                                            elif '전기' in col_normalized and '전전기' not in col_normalized:
                                                 # 전기 = 보고서 연도 - 1
                                                 year = (report_year - 1) if report_year else 2022
                                                 new_columns.append(f'FY{year}')
-                                            elif '전전기' in col_str:
+                                            elif '전전기' in col_normalized:
                                                 # 전전기 = 보고서 연도 - 2
                                                 year = (report_year - 2) if report_year else 2021
                                                 new_columns.append(f'FY{year}')
                                             else:
-                                                new_columns.append(col_str)
+                                                # 계정과목 컬럼이 첫 번째일 가능성 높음
+                                                if i == 0:
+                                                    new_columns.append('계정과목')
+                                                else:
+                                                    new_columns.append(col_str)
 
-                                        # 첫 번째 행(컬럼명)을 제거하고 컬럼 적용
-                                        cleaned_table = cleaned_table.iloc[1:].reset_index(drop=True)
+                                        # 컬럼명에 패턴이 없으면 첫 행 제거 (첫 행이 헤더였음)
+                                        if not cols_have_patterns:
+                                            cleaned_table = cleaned_table.iloc[1:].reset_index(drop=True)
                                         cleaned_table.columns = new_columns[:len(cleaned_table.columns)]
 
                                         notes_tables['is_notes'].append({
@@ -1687,25 +1780,78 @@ def create_vcm_format(fs_data, excel_filepath=None):
             xl = pd.ExcelFile(excel_filepath, engine='openpyxl')
             for sheet in xl.sheet_names:
                 # 손익 관련 주석 시트 찾기
-                if any(kw in sheet for kw in ['손익주석', '포괄손익주석', 'IS주석']):
+                if any(kw in sheet for kw in ['손익주석', '포괄손익주석', 'IS주석', '비용']):
                     note_df = pd.read_excel(excel_filepath, sheet_name=sheet, engine='openpyxl')
                     if not note_df.empty and '계정과목' in note_df.columns:
                         notes_dfs.append(note_df)
                         print(f"[VCM] 주석 시트 로드: {sheet}, {len(note_df)}개 행")
         except Exception as e:
             print(f"[VCM] 주석 시트 로드 실패: {e}")
-    
+
+    # fs_data에서 XBRL 주석 데이터 추가 (비용의 성격별 분류 등)
+    if fs_data and 'notes' in fs_data and fs_data['notes'] is not None:
+        is_notes = fs_data['notes'].get('is_notes', [])
+        for note in is_notes:
+            if isinstance(note, dict) and 'df' in note:
+                note_df = note['df']
+                if note_df is not None and not note_df.empty:
+                    # 계정과목 컬럼이 없으면 첫 번째 컬럼을 계정과목으로 설정
+                    if '계정과목' not in note_df.columns:
+                        first_col = note_df.columns[0]
+                        note_df = note_df.rename(columns={first_col: '계정과목'})
+                    notes_dfs.append(note_df)
+                    print(f"[VCM] XBRL 주석 추가: {note.get('name', 'unknown')}, {len(note_df)}개 행")
+
+    # 주석 테이블 우선순위 정렬: 종합 비용 테이블 먼저 검색하도록
+    # 급여, 감가상각비, 지급수수료 등 여러 키워드가 모두 있는 테이블을 우선
+    def score_expense_table(df):
+        """비용 테이블 우선순위 점수 계산 (높을수록 종합 테이블)"""
+        if '계정과목' not in df.columns:
+            return 0
+        try:
+            acc_str = df['계정과목'].astype(str).str.cat(sep=' ')
+            score = 0
+            # 종합 비용 테이블 특징 키워드
+            priority_keywords = ['직원급여', '퇴직급여', '감가상각비', '지급수수료', '광고선전비', '수도광열비']
+            for kw in priority_keywords:
+                if kw in acc_str:
+                    score += 10
+            # 테이블 크기도 고려 (종합 테이블은 보통 10행 이상)
+            if len(df) >= 10:
+                score += 5
+            return score
+        except:
+            return 0
+
+    # 정렬 전 디버그 로깅
+    print(f"[VCM] === 정렬 전 디버그 시작: {len(notes_dfs)}개 테이블 ===")
+    for i, df in enumerate(notes_dfs):
+        score = score_expense_table(df)
+        if '계정과목' in df.columns:
+            accounts = df['계정과목'].astype(str).tolist()[:5]
+            print(f"[VCM] 주석 테이블 [{i}]: {len(df)}행, score={score}, accounts={accounts}...")
+        else:
+            print(f"[VCM] 주석 테이블 [{i}]: {len(df)}행, score={score}, 계정과목 컬럼 없음")
+
+    notes_dfs.sort(key=score_expense_table, reverse=True)
+    if notes_dfs:
+        print(f"[VCM] 주석 테이블 정렬 완료: {len(notes_dfs)}개, 최우선 테이블 행수: {len(notes_dfs[0])}")
+        # 최우선 테이블 상세 정보
+        if '계정과목' in notes_dfs[0].columns:
+            accounts = notes_dfs[0]['계정과목'].astype(str).tolist()
+            print(f"[VCM] 최우선 테이블 계정과목: {accounts}")
+
     # 데이터 형식 감지: XBRL vs 감사보고서
     is_xbrl = False
     fy_col_map = {}  # {원본컬럼: 표시용문자열}
     account_col = '계정과목'  # 기본값: 감사보고서
-    
+
     # 1) FY 컬럼 확인 (감사보고서 형식 또는 추가된 분기 컬럼)
     for c in is_df.columns:
         col_name = c[0] if isinstance(c, tuple) else c
         if isinstance(col_name, str) and col_name.startswith('FY'):
             fy_col_map[c] = col_name
-    
+
     # 2) XBRL 형식 날짜 컬럼도 확인 (FY 컬럼과 병합)
     # XBRL 형식: ('20240101-20241231', ('연결재무제표',)) 같은 날짜 튜플 컬럼 찾기
     for c in is_df.columns:
@@ -1717,6 +1863,21 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     year = date_part[:4]
                     fy_col_map[c] = f'FY{year}'
                     is_xbrl = True
+
+    # 3) XBRL 데이터 감지 (정규화된 경우 또는 튜플 컬럼인 경우)
+    # 정규화된 경우: '분류3', '개념ID', '계정과목(영문)' 컬럼
+    # 튜플 컬럼인 경우: 'label_ko', 'concept_id', 'class2' 등 포함
+    xbrl_indicator_cols = ['분류3', '개념ID', '계정과목(영문)']
+    bs_cols_str = [str(c) for c in bs_df.columns]
+
+    # 정규화된 XBRL 체크
+    if any(col in bs_cols_str for col in xbrl_indicator_cols):
+        is_xbrl = True
+        print(f"[VCM] 정규화된 XBRL 데이터 감지 (분류 컬럼 존재)")
+    # 튜플 컬럼 XBRL 체크 (label_ko, concept_id 등이 컬럼명에 포함)
+    elif any('label_ko' in col_str or 'concept_id' in col_str or 'class2' in col_str for col_str in bs_cols_str):
+        is_xbrl = True
+        print(f"[VCM] 튜플 컬럼 XBRL 데이터 감지")
     
     # XBRL에서 계정과목 컬럼 찾기 (label_ko가 포함된 튜플 컬럼)
     bs_account_col = '계정과목'  # BS용 기본값
@@ -1904,6 +2065,82 @@ def create_vcm_format(fs_data, excel_filepath=None):
 
         return sections
 
+    def parse_bs_sections_xbrl(df, year_col, acc_col):
+        """XBRL 형식 재무상태표를 '분류3' 컬럼 기반으로 파싱
+
+        XBRL 데이터는 '분류3' 컬럼에 섹션 정보가 있음:
+        - '유동자산', '비유동자산', '유동부채', '비유동부채', '자본'
+        """
+        sections = {
+            '유동자산': [],
+            '비유동자산': [],
+            '유동부채': [],
+            '비유동부채': [],
+            '자본': [],
+            '총계': {}
+        }
+
+        # 분류3 컬럼이 없으면 빈 결과 반환
+        if '분류3' not in df.columns:
+            print(f"[VCM XBRL] 분류3 컬럼 없음, 빈 섹션 반환")
+            return sections
+
+        # 섹션 매핑
+        section_mapping = {
+            '유동자산': '유동자산',
+            '비유동자산': '비유동자산',
+            '유동부채': '유동부채',
+            '비유동부채': '비유동부채',
+            '자본': '자본',
+        }
+
+        # 총계 마커
+        total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계']
+
+        for idx, row in df.iterrows():
+            raw_acc = str(row.get(acc_col, '')).strip()
+            if not raw_acc or raw_acc == 'nan':
+                continue
+
+            section_name = str(row.get('분류3', '')).strip()
+            acc_clean = normalize(raw_acc)
+
+            # 값 추출
+            val = row.get(year_col)
+            val_num = None
+            if pd.notna(val):
+                try:
+                    val_num = float(str(val).replace(',', ''))
+                except:
+                    pass
+
+            # 총계 항목 처리
+            is_total = False
+            for marker in total_markers:
+                if marker in acc_clean or acc_clean == normalize(marker):
+                    sections['총계'][acc_clean] = val_num
+                    is_total = True
+                    break
+
+            if is_total:
+                continue
+
+            # 섹션 헤더 자체는 스킵 (예: 계정='유동자산', 분류3='유동자산')
+            if raw_acc == section_name:
+                continue
+
+            # 섹션에 항목 추가
+            if section_name in section_mapping and val_num is not None and val_num != 0:
+                target_section = section_mapping[section_name]
+                # 중간 헤더 제외
+                if not re.match(r'^(자산|부채|자본|투자자산|당좌자산)$', acc_clean):
+                    sections[target_section].append({
+                        'name': strip_note_ref(raw_acc),
+                        'value': val_num
+                    })
+
+        return sections
+
     # 섹션 데이터에서 값 찾기 (parse_bs_sections 결과 사용)
     def find_in_section(section_items, keywords, excludes=[]):
         """섹션 내 항목에서 키워드로 값 찾기"""
@@ -1951,43 +2188,74 @@ def create_vcm_format(fs_data, excel_filepath=None):
         return unmatched
 
     # 값 찾기 함수 (is_df + notes_dfs에서 검색) - 원 단위 그대로 반환
-    def find_val(df, keywords, year, excludes=[]):
-        # 1) 먼저 주 DataFrame(is_df)에서 검색
-        for _, row in df.iterrows():
-            # 계정과목 컬럼에서 값 추출 (XBRL vs 감사보고서)
-            acc = normalize(str(row.get(account_col, '')))
-            excluded = any(normalize(ex) in acc for ex in excludes)
-            if excluded: continue
-            for kw in keywords:
-                if normalize(kw) in acc:
-                    val = row.get(year)
-                    if pd.notna(val):
-                        try:
-                            # 원 단위 그대로 반환 (프론트에서 동적 변환)
-                            return float(str(val).replace(',', ''))
-                        except:
-                            pass
+    # 판관비 세부항목은 주석 테이블 먼저 검색 (is_df에 리스 관련 중복값이 있을 수 있음)
+    expense_keywords_for_notes_priority = ['급여', '퇴직급여', '감가상각비', '지급수수료', '광고선전비',
+                                           '수도광열비', '임차료', '복리후생비', '무형자산상각비', '대손상각비']
 
-        # 2) 주 DataFrame에서 못 찾으면 주석 시트에서 검색
-        for note_df in notes_dfs:
-            for _, row in note_df.iterrows():
-                acc = normalize(str(row.get('계정과목', '')))
+    def find_val(df, keywords, year, excludes=[], notes_first=False):
+        """
+        값을 찾는 함수
+        notes_first=True면 주석 테이블을 먼저 검색
+        """
+        # 판관비 세부항목 키워드가 포함되어 있으면 주석 먼저 검색
+        search_notes_first = notes_first or any(
+            any(normalize(exp_kw) in normalize(kw) for exp_kw in expense_keywords_for_notes_priority)
+            for kw in keywords
+        )
+
+        def search_is_df():
+            """주 DataFrame(is_df)에서 검색"""
+            for _, row in df.iterrows():
+                acc = normalize(str(row.get(account_col, '')))
                 excluded = any(normalize(ex) in acc for ex in excludes)
                 if excluded: continue
                 for kw in keywords:
                     if normalize(kw) in acc:
-                        # 주석 시트의 year 컬럼 찾기 (FY2024, FY2023 등)
-                        year_str = fy_col_map.get(year)
-                        if year_str and year_str in note_df.columns:
-                            val = row.get(year_str)
-                            if pd.notna(val):
-                                try:
-                                    # 원 단위 그대로 반환 (프론트에서 동적 변환)
-                                    return float(str(val).replace(',', ''))
-                                except:
-                                    pass
-        return None
-    
+                        val = row.get(year)
+                        if pd.notna(val):
+                            try:
+                                return float(str(val).replace(',', ''))
+                            except:
+                                pass
+            return None
+
+        def search_notes():
+            """주석 시트에서 검색 (주석 테이블은 천원 단위이므로 1000배 변환)"""
+            for note_idx, note_df in enumerate(notes_dfs):
+                for _, row in note_df.iterrows():
+                    acc = normalize(str(row.get('계정과목', '')))
+                    excluded = any(normalize(ex) in acc for ex in excludes)
+                    if excluded: continue
+                    for kw in keywords:
+                        if normalize(kw) in acc:
+                            year_str = fy_col_map.get(year)
+                            if year_str is None:
+                                if isinstance(year, str) and year.startswith('FY'):
+                                    year_str = year
+                            if year_str and year_str in note_df.columns:
+                                val = row.get(year_str)
+                                if pd.notna(val):
+                                    try:
+                                        result = float(str(val).replace(',', ''))
+                                        # 주석 테이블은 천원 단위이므로 원 단위로 변환
+                                        result = result * 1000
+                                        return result
+                                    except:
+                                        pass
+            return None
+
+        # 검색 순서 결정
+        if search_notes_first:
+            result = search_notes()
+            if result is not None:
+                return result
+            return search_is_df()
+        else:
+            result = search_is_df()
+            if result is not None:
+                return result
+            return search_notes()
+
     # VCM 항목 정의
     vcm_items = []
     
@@ -2072,29 +2340,71 @@ def create_vcm_format(fs_data, excel_filepath=None):
         # 추출 실패 시 기본 항목 사용
         is_items.append(('매출원가', [('영업비용', []), ('매출원가', [])], 'find'))
 
-    # 나머지 손익계산서 항목
+    # 나머지 손익계산서 항목 (동료 의견 반영: 판관비는 동적으로 금액순 선택)
     is_items.extend([
         ('매출총이익', [], 'calc_gross'),
         ('판매비와관리비', [], 'calc_sga'),
-        ('  인건비', [('급여', ['퇴직', '연차'])], 'find'),
-        ('  임차료비용', [('지급임차료', [])], 'find'),
-        ('  수수료비용', [('지급수수료', [])], 'find'),
-        ('  보험료', [('보험료', [])], 'find'),
-        ('  여비교통비', [('여비교통비', [])], 'find'),
-        ('  연구비', [('경상연구개발비', []), ('경상시험연구비', [])], 'sum'),
-        ('  감가상각비', [('감가상각비', ['무형'])], 'find'),
-        ('  무형자산상각비', [('무형자산상각비', [])], 'find'),
-        ('  기타판매비와관리비', [], 'calc_other_sga'),
+        # 판관비 하위항목은 아래에서 동적으로 추가됨
         ('영업이익', [], 'calc_op'),
-        ('  영업외수익', [('이자수익', []), ('배당금수익', []), ('외환차익', []), ('임대료수익', []), ('잡이익', [])], 'sum'),
-        ('  금융수익', [('이자수익', [])], 'find'),
-        ('  영업외비용', [('이자비용', []), ('외환차손', []), ('투자자산손상차손', []), ('잡손실', [])], 'sum'),
+        ('영업외수익', [], 'find_direct'),  # 직접 찾기
+        ('  금융수익', [('이자수익', []), ('기타금융수익', [])], 'sum'),
+        ('영업외비용', [], 'find_direct'),  # 직접 찾기
         ('  금융비용', [('이자비용', [])], 'find'),
         ('법인세비용차감전이익', [], 'calc_ebt'),
-        ('  법인세비용', [('법인세비용', ['차감전']), ('법인세등', ['차감전'])], 'find'),
+        ('법인세비용', [('법인세비용', ['차감전']), ('법인세등', ['차감전'])], 'find'),
         ('당기순이익', [], 'calc_net'),
-        ('EBITDA', [], 'calc_ebitda'),
     ])
+
+    # ========== 판관비 상위 6개 항목 미리 결정 (모든 연도 합계 기준) ==========
+    def get_sga_items_for_year(is_df, year):
+        """특정 연도의 모든 판관비 항목 값을 반환"""
+        급여 = find_val(is_df, ['급여'], year, ['퇴직', '연차']) or 0
+        퇴직급여 = find_val(is_df, ['퇴직급여'], year) or 0
+        복리후생비 = find_val(is_df, ['복리후생비'], year) or 0
+        기타장기종업원급여 = find_val(is_df, ['기타장기종업원급여'], year) or 0
+        주식보상비용 = find_val(is_df, ['주식보상비용', '주식기준보상비용'], year) or 0
+        인건비 = 급여 + 퇴직급여 + 복리후생비 + 기타장기종업원급여 + 주식보상비용
+        감가상각비 = find_val(is_df, ['감가상각비'], year, ['무형']) or 0
+
+        return {
+            '인건비': 인건비,
+            '감가상각비': 감가상각비,
+            '수수료비용': find_val(is_df, ['지급수수료', '수수료비용', '판매수수료'], year) or 0,
+            '광고선전비': find_val(is_df, ['광고선전비'], year) or 0,
+            '수도광열비': find_val(is_df, ['수도광열비'], year) or 0,
+            '임차료비용': find_val(is_df, ['지급임차료', '임차료비용', '임차료'], year) or 0,
+            '무형자산상각비': find_val(is_df, ['무형자산상각비'], year) or 0,
+            '대손상각비': find_val(is_df, ['대손상각비'], year) or 0,
+            '연구비': (find_val(is_df, ['경상연구개발비'], year) or 0) + (find_val(is_df, ['경상시험연구비'], year) or 0),
+            '보험료': find_val(is_df, ['보험료'], year) or 0,
+            '여비교통비': find_val(is_df, ['여비교통비'], year) or 0,
+            '접대비': find_val(is_df, ['접대비'], year) or 0,
+            '세금과공과': find_val(is_df, ['세금과공과'], year) or 0,
+            '차량유지비': find_val(is_df, ['차량유지비'], year) or 0,
+            '운반비': find_val(is_df, ['운반비'], year) or 0,
+            '교육훈련비': find_val(is_df, ['교육훈련비'], year) or 0,
+            '통신비': find_val(is_df, ['통신비'], year) or 0,
+            '도서인쇄비': find_val(is_df, ['도서인쇄비'], year) or 0,
+            '사무용품비': find_val(is_df, ['사무용품비'], year) or 0,
+            '소모품비': find_val(is_df, ['소모품비'], year) or 0,
+            '보관료': find_val(is_df, ['보관료'], year) or 0,
+            '건물관리비': find_val(is_df, ['건물관리비'], year) or 0,
+            '협회비': find_val(is_df, ['협회비'], year) or 0,
+            '폐기물처리비': find_val(is_df, ['폐기물처리비'], year) or 0,
+        }
+
+    # 모든 연도의 합계 계산
+    sga_totals = {}
+    for year in fy_cols:
+        sga_year = get_sga_items_for_year(is_df, year)
+        for item_name, val in sga_year.items():
+            sga_totals[item_name] = sga_totals.get(item_name, 0) + (val or 0)
+
+    # 합계 기준 상위 5개 항목명 선택 (순서 유지를 위해 리스트 사용)
+    # 인건비, 감가상각비는 별도 계산용이므로 제외하고 선택
+    sga_totals_nonzero = {k: v for k, v in sga_totals.items() if v and v > 0 and k not in ['인건비', '감가상각비']}
+    sga_sorted_total = sorted(sga_totals_nonzero.items(), key=lambda x: abs(x[1]), reverse=True)
+    sga_top5_names = [item[0] for item in sga_sorted_total[:5]]  # 상위 5개 항목명 (순서 유지)
 
     # 각 연도별 값 계산
     rows = []
@@ -2117,76 +2427,72 @@ def create_vcm_format(fs_data, excel_filepath=None):
         cogs_values = {}
         for item_name, item_keyword in cogs_sub_items:
             cogs_values[item_name] = find_val(is_df, [item_keyword], year) or 0
-        # 주요 판관비 항목
-        급여 = find_val(is_df, ['급여'], year, ['퇴직', '연차']) or 0
-        퇴직급여 = find_val(is_df, ['퇴직급여'], year) or 0
-        복리후생비 = find_val(is_df, ['복리후생비'], year) or 0
-        인건비 = 급여 + 퇴직급여 + 복리후생비  # 인건비 = 급여 + 퇴직급여 + 복리후생비
+        # ========== 판관비 하위항목 (미리 결정된 상위 6개 항목 사용) ==========
+        sga_items_all = get_sga_items_for_year(is_df, year)
+        인건비 = sga_items_all['인건비']
+        감가상각비 = sga_items_all['감가상각비']
 
-        임차료 = find_val(is_df, ['지급임차료', '임차료'], year) or 0
-        수수료 = find_val(is_df, ['지급수수료', '판매수수료'], year) or 0
-        보험료 = find_val(is_df, ['보험료'], year) or 0
-        여비교통비 = find_val(is_df, ['여비교통비'], year) or 0
-        연구비1 = find_val(is_df, ['경상연구개발비'], year) or 0
-        연구비2 = find_val(is_df, ['경상시험연구비'], year) or 0
-        감가상각비 = find_val(is_df, ['감가상각비'], year, ['무형']) or 0
-        무형상각비 = find_val(is_df, ['무형자산상각비'], year) or 0
+        # 미리 결정된 상위 5개 항목만 선택 (합계 기준 순서 유지)
+        sga_top5 = [(name, sga_items_all.get(name, 0)) for name in sga_top5_names]
+        sga_top5_set = set(sga_top5_names)
+        sga_rest = [(k, v) for k, v in sga_items_all.items() if k not in sga_top5_set and k not in ['인건비', '감가상각비'] and v and v > 0]
 
-        # 기타 판관비 항목
-        접대비 = find_val(is_df, ['접대비'], year) or 0
-        통신비 = find_val(is_df, ['통신비'], year) or 0
-        세금과공과 = find_val(is_df, ['세금과공과'], year) or 0
-        차량유지비 = find_val(is_df, ['차량유지비'], year) or 0
-        운반비 = find_val(is_df, ['운반비'], year) or 0
-        교육훈련비 = find_val(is_df, ['교육훈련비'], year) or 0
-        도서인쇄비 = find_val(is_df, ['도서인쇄비'], year) or 0
-        사무용품비 = find_val(is_df, ['사무용품비'], year) or 0
-        소모품비 = find_val(is_df, ['소모품비'], year) or 0
-        보관료 = find_val(is_df, ['보관료'], year) or 0
-        광고선전비 = find_val(is_df, ['광고선전비'], year) or 0
-        건물관리비 = find_val(is_df, ['건물관리비'], year) or 0
-        대손상각비 = find_val(is_df, ['대손상각비'], year) or 0
-        협회비 = find_val(is_df, ['협회비'], year) or 0
-        사택관리비 = find_val(is_df, ['사택관리비'], year) or 0
-        폐기물처리비 = find_val(is_df, ['폐기물처리비'], year) or 0
-        
-        # 영업외 수익/비용
+        # 기타판매비와관리비 계산
+        기타판관비 = sum(v for _, v in sga_rest)
+
+        # 표시용 리스트: 인건비 + 상위 5개 (총 6개)
+        sga_top6 = [('인건비', 인건비)] + sga_top5
+
+        # 영업외 수익/비용 (직접 찾기)
+        영업외수익_direct = find_val(is_df, ['영업외수익', '기타수익'], year) or 0
+        영업외비용_direct = find_val(is_df, ['영업외비용', '기타비용'], year) or 0
+
+        # 금융수익/비용
         이자수익 = find_val(is_df, ['이자수익'], year) or 0
-        배당금 = find_val(is_df, ['배당금수익'], year) or 0
-        외환차익 = find_val(is_df, ['외환차익'], year) or 0
-        임대료 = find_val(is_df, ['임대료수익'], year) or 0
-        잡이익 = find_val(is_df, ['잡이익'], year) or 0
-        유형자산처분이익 = find_val(is_df, ['유형자산처분이익'], year) or 0
+        기타금융수익 = find_val(is_df, ['기타금융수익'], year) or 0
+        금융수익 = 이자수익 + 기타금융수익
         이자비용 = find_val(is_df, ['이자비용'], year) or 0
-        외환차손 = find_val(is_df, ['외환차손'], year) or 0
-        외환환산손실 = find_val(is_df, ['외환환산손실'], year) or 0
-        투자손상 = find_val(is_df, ['투자자산손상차손'], year) or 0
-        투자평가손실 = find_val(is_df, ['투자자산평가손실'], year) or 0
-        잡손실 = find_val(is_df, ['잡손실'], year) or 0
-        매출채권처분손실 = find_val(is_df, ['매출채권처분손실'], year) or 0
-        투자자산처분손실 = find_val(is_df, ['투자자산처분손실'], year) or 0
-        기부금 = find_val(is_df, ['기부금'], year) or 0
+        금융비용 = 이자비용
         법인세 = find_val(is_df, ['법인세비용', '법인세등'], year, ['차감전']) or 0
 
         # 계산 값
         # 서비스업: 영업수익이 있으면 우선 사용
         매출 = 영업수익 if 영업수익 > 0 else sum(revenue_values.values())
         원가 = 영업비용 if 영업비용 > 0 else sum(cogs_values.values())
-        매출총이익 = 매출 - 원가
-        연구비 = 연구비1 + 연구비2
-        주요판관비 = 인건비 + 임차료 + 수수료 + 보험료 + 여비교통비 + 연구비 + 감가상각비 + 무형상각비
-        기타판관비 = (접대비 + 통신비 + 세금과공과 +
-            차량유지비 + 운반비 + 교육훈련비 + 도서인쇄비 + 사무용품비 + 소모품비 +
-            보관료 + 광고선전비 + 건물관리비 + 대손상각비 + 협회비 + 사택관리비 + 폐기물처리비)
-        영업외수익 = 이자수익 + 배당금 + 외환차익 + 임대료 + 잡이익 + 유형자산처분이익
-        영업외비용 = 이자비용 + 외환차손 + 외환환산손실 + 투자손상 + 투자평가손실 + 잡손실 + 매출채권처분손실 + 투자자산처분손실 + 기부금
-        
-        # 합계 계산
-        판관비 = 주요판관비 + 기타판관비
-        영업이익 = 매출총이익 - 판관비
-        세전이익 = 영업이익 + 영업외수익 - 영업외비용
-        당기순이익 = 세전이익 - (법인세 or 0)
-        ebitda = 영업이익 + 감가상각비 + 무형상각비
+
+        # 매출총이익: 손익계산서에서 직접 찾기 시도, 없으면 계산
+        매출총이익_direct = find_val(is_df, ['매출총이익', '총이익'], year) or 0
+        매출총이익 = 매출총이익_direct if 매출총이익_direct else (매출 - 원가)
+
+        # 판매비와관리비: 손익계산서에서 직접 찾기 시도
+        판관비_direct = find_val(is_df, ['판매비와관리비', '판매비및관리비', '판관비'], year) or 0
+
+        # 서비스업 여부 판단: 판관비 계정이 없고 영업비용이 있으면 서비스업
+        # 서비스업은 영업비용에 모든 비용이 포함되어 있으므로 판관비를 별도 계산하지 않음
+        is_service_business = (판관비_direct == 0) and (영업비용 > 0)
+
+        if is_service_business:
+            # 서비스업: 판관비는 0 (영업비용에 이미 포함)
+            판관비 = 0
+        else:
+            # 제조업 등: 판관비가 없으면 주석에서 계산 (인건비 + 상위5개 + 기타)
+            판관비 = 판관비_direct if 판관비_direct else (인건비 + sum(v for _, v in sga_top5) + 기타판관비)
+
+        # 영업이익: 손익계산서에서 직접 찾기 시도 (항상 원본값 우선)
+        영업이익_direct = find_val(is_df, ['영업이익', '영업손익', '영업손실'], year) or 0
+        영업이익 = 영업이익_direct if 영업이익_direct else (매출총이익 - 판관비)
+
+        # 영업외수익/비용: 직접 찾은 값 또는 계산
+        영업외수익 = 영업외수익_direct if 영업외수익_direct else 금융수익
+        영업외비용 = 영업외비용_direct if 영업외비용_direct else 금융비용
+
+        # 법인세비용차감전이익: 손익계산서에서 직접 찾기 시도
+        세전이익_direct = find_val(is_df, ['법인세비용차감전순이익', '법인세비용차감전이익', '법인세차감전순이익', '세전이익'], year) or 0
+        세전이익 = 세전이익_direct if 세전이익_direct else (영업이익 + 영업외수익 - 영업외비용)
+
+        # 당기순이익: 손익계산서에서 직접 찾기 시도
+        당기순이익_direct = find_val(is_df, ['당기순이익', '당기순손익', '총당기순이익'], year) or 0
+        당기순이익 = 당기순이익_direct if 당기순이익_direct else (세전이익 - (법인세 or 0))
         
         values = {
             '매출': 매출,
@@ -2203,83 +2509,121 @@ def create_vcm_format(fs_data, excel_filepath=None):
         for item_name in [item[0] for item in cogs_sub_items]:
             values[f'  {item_name}'] = cogs_values.get(item_name) if cogs_values.get(item_name) else None
 
-        # 매출총이익 및 판관비
-        values.update({
-            '매출총이익': 매출총이익,
-            '판매비와관리비': 판관비,
-        })
+        # 서비스업: 비용 세부항목을 매출원가(영업비용) 하위로 표시
+        if is_service_business:
+            # 금액순 상위 6개 동적 추가 (인건비, 감가상각비 포함)
+            for item_name, item_val in sga_top6:
+                values[f'  {item_name}'] = item_val if item_val else None
+            # 기타영업비용
+            values['  기타영업비용'] = 기타판관비 if 기타판관비 else None
 
-        # 판관비 하위 항목 추가 (기존 하드코딩 유지)
+        # EBITDA 계산 (영업이익 + 감가상각비 + 무형자산상각비) - 미리 계산
+        무형자산상각비 = sga_items_all.get('무형자산상각비', 0) or 0
+        EBITDA = 영업이익 + 감가상각비 + 무형자산상각비
+
+        # % of Sales 계산 (소수점 형태로 저장, 예: 0.127 = 12.7%)
+        매출총이익_pct = (매출총이익 / 매출) if 매출 and 매출 != 0 else None
+        영업이익_pct = (영업이익 / 매출) if 매출 and 매출 != 0 else None
+        당기순이익_pct = (당기순이익 / 매출) if 매출 and 매출 != 0 else None
+        EBITDA_pct = (EBITDA / 매출) if 매출 and 매출 != 0 else None
+
+        # 매출총이익 및 % of Sales
+        values['매출총이익'] = 매출총이익
+        values['% of Sales'] = 매출총이익_pct  # 매출총이익률
+
+        # 판매비와관리비 (서비스업은 생략)
+        if is_service_business:
+            # 서비스업: 판관비 항목 자체를 생략 (영업비용에 이미 포함)
+            pass
+        else:
+            # 제조업 등: 판관비 및 하위 항목 표시
+            values['판매비와관리비'] = 판관비
+
+            # 판관비 하위 항목: 금액순 상위 6개만 표시 (인건비, 감가상각비 포함)
+            for item_name, item_val in sga_top6:
+                values[f'  {item_name}'] = item_val if item_val else None
+
+            # 기타판매비와관리비
+            values['  기타판매비와관리비'] = 기타판관비 if 기타판관비 else None
+
+        # 나머지 손익계산서 항목
         values.update({
-            '  인건비': 인건비,  # 급여 + 퇴직급여 + 복리후생비
-            '  임차료비용': 임차료,
-            '  수수료비용': 수수료,
-            '  보험료': 보험료,
-            '  여비교통비': 여비교통비,
-            '  연구비': 연구비,
-            '  감가상각비': 감가상각비,
-            '  무형자산상각비': 무형상각비,
-            '  기타판매비와관리비': 기타판관비,
             '영업이익': 영업이익,
+            '% of Sales (영업이익)': 영업이익_pct,  # 영업이익률
             '영업외수익': 영업외수익,
+            '  금융수익': 금융수익 if 금융수익 else None,
             '영업외비용': 영업외비용,
+            '  금융비용': 금융비용 if 금융비용 else None,
             '법인세비용차감전이익': 세전이익,
             '법인세비용': 법인세 if 법인세 else None,
             '당기순이익': 당기순이익,
-            'EBITDA': ebitda,
+            '% of Sales (순이익)': 당기순이익_pct,  # 당기순이익률
+            'EBITDA': EBITDA,
+            '% of Sales (EBITDA)': EBITDA_pct,  # EBITDA 마진
         })
 
-        # 손익계산서 세부항목 (부모 포함)
-        is_items = [
-            # 매출 (동적으로 추가됨)
-            # 매출원가 (동적으로 추가됨)
-            # 판관비 (위에서 추가됨)
-            # 영업외수익 세부항목
-            ('영업외수익', '', 영업외수익),
-            ('이자수익', '영업외수익', 이자수익),
-            ('배당금수익', '영업외수익', 배당금),
-            ('외환차익', '영업외수익', 외환차익),
-            ('임대료수익', '영업외수익', 임대료),
-            ('잡이익', '영업외수익', 잡이익),
-            ('유형자산처분이익', '영업외수익', 유형자산처분이익),
-            # 영업외비용 세부항목
-            ('영업외비용', '', 영업외비용),
-            ('이자비용', '영업외비용', 이자비용),
-            ('외환차손', '영업외비용', 외환차손),
-            ('외환환산손실', '영업외비용', 외환환산손실),
-            ('투자자산손상차손', '영업외비용', 투자손상),
-            ('투자자산평가손실', '영업외비용', 투자평가손실),
-            ('잡손실', '영업외비용', 잡손실),
-            ('매출채권처분손실', '영업외비용', 매출채권처분손실),
-            ('투자자산처분손실', '영업외비용', 투자자산처분손실),
-            ('기부금', '영업외비용', 기부금),
-            # EBITDA 세부항목
-            ('EBITDA', '', ebitda),
-            ('영업이익 [EBITDA]', 'EBITDA', 영업이익),
-            ('감가상각비 [EBITDA]', 'EBITDA', 감가상각비),
-            ('무형자산상각비 [EBITDA]', 'EBITDA', 무형상각비),
-        ]
+        # 손익계산서 세부항목 - 이미 values에서 추가됨, 여기서는 빈 배열
+        is_items_detail = []
 
-        # 첫 번째 연도에서 기존 항목 저장 (부모 없는 항목들)
+        # 첫 번째 연도에서 기존 항목 저장 (부모 설정)
         if year == fy_cols[0]:
+            current_parent = ''  # 현재 섹션의 부모 항목
             for item_name in values:
-                rows.append({'항목': item_name, '부모': ''})
+                # 들여쓰기 없는 항목은 부모 항목 (섹션 헤더)
+                if not item_name.startswith('  '):
+                    current_parent = item_name
+                    rows.append({'항목': item_name, '부모': ''})
+                else:
+                    # 들여쓰기 있는 항목은 현재 섹션의 하위 항목
+                    rows.append({'항목': item_name, '부모': current_parent})
 
             # 세부항목 추가
-            for item_name, parent, val in is_items:
+            for item_name, parent, val in is_items_detail:
                 # 이미 추가된 항목은 건너뜀
                 if item_name not in [r['항목'] for r in rows]:
                     rows.append({'항목': item_name, '부모': parent})
+        else:
+            # 이후 연도에서 새로운 항목이 있으면 적절한 위치에 삽입
+            existing_items = [r['항목'] for r in rows]
+            for item_name in values:
+                if item_name not in existing_items:
+                    # 새로운 항목 발견 - 적절한 위치에 삽입
+                    # 세부항목(들여쓰기)은 부모 항목 바로 뒤에 삽입
+                    if item_name.startswith('  '):
+                        # 부모 항목 찾기 (매출원가 또는 판관비)
+                        target_parent = ''
+                        insert_idx = len(rows)
+                        for i in range(len(rows) - 1, -1, -1):
+                            if rows[i]['항목'].startswith('  '):
+                                continue
+                            elif rows[i]['항목'] == '매출원가' or rows[i]['항목'] == '판매비와관리비':
+                                # 매출원가 또는 판관비 세부항목
+                                target_parent = rows[i]['항목']
+                                insert_idx = i + 1
+                                while insert_idx < len(rows) and rows[insert_idx]['항목'].startswith('  '):
+                                    insert_idx += 1
+                                break
+                        # 들여쓰기 있는 항목은 부모 설정
+                        rows.insert(insert_idx, {'항목': item_name, '부모': target_parent})
+                    else:
+                        rows.append({'항목': item_name, '부모': ''})
 
         # 각 연도별 값 저장
         for r in rows:
             item_name = r['항목']
             if item_name in values:
                 val = values[item_name]
-                r[year_str] = round(val) if val is not None and val != 0 else None
+                # % of Sales는 소수점 값이므로 round() 적용하지 않음
+                if val is not None and val != 0:
+                    if '% of Sales' in item_name:
+                        r[year_str] = val  # 소수점 그대로 저장
+                    else:
+                        r[year_str] = round(val)
+                else:
+                    r[year_str] = None
             else:
                 # 세부항목에서 찾기
-                for is_item_name, parent, is_val in is_items:
+                for is_item_name, parent, is_val in is_items_detail:
                     if item_name == is_item_name:
                         r[year_str] = round(is_val) if is_val is not None and is_val != 0 else None
                         break
@@ -2322,8 +2666,13 @@ def create_vcm_format(fs_data, excel_filepath=None):
 
     for bs_year in bs_fy_cols:
         year_str = bs_col_display[bs_year]
-        all_sections[year_str] = parse_bs_sections(bs_df, bs_year, bs_account_col)
-        print(f"[VCM] {year_str} 섹션 파싱 완료: 유동자산 {len(all_sections[year_str]['유동자산'])}개, 비유동자산 {len(all_sections[year_str]['비유동자산'])}개 항목")
+        # XBRL 형식이면 분류3 컬럼 기반 파싱, 아니면 행 기반 파싱
+        if is_xbrl and '분류3' in bs_df.columns:
+            all_sections[year_str] = parse_bs_sections_xbrl(bs_df, bs_year, bs_account_col)
+            print(f"[VCM XBRL] {year_str} 섹션 파싱 완료: 유동자산 {len(all_sections[year_str]['유동자산'])}개, 비유동자산 {len(all_sections[year_str]['비유동자산'])}개 항목")
+        else:
+            all_sections[year_str] = parse_bs_sections(bs_df, bs_year, bs_account_col)
+            print(f"[VCM] {year_str} 섹션 파싱 완료: 유동자산 {len(all_sections[year_str]['유동자산'])}개, 비유동자산 {len(all_sections[year_str]['비유동자산'])}개 항목")
 
     # 항목 정의: (항목명, 부모, 값계산함수)
     # 부모가 있으면 세부항목, 없으면 합계 항목
@@ -2891,7 +3240,104 @@ def create_vcm_format(fs_data, excel_filepath=None):
     # 재무상태표 + 손익계산서 순서로 결합
     all_rows = filtered_bs_rows + rows
 
-    return pd.DataFrame(all_rows)
+    # ========== 타입 컬럼 추가 ==========
+    # 타입 결정 함수
+    def get_item_type(item_name):
+        name = item_name.strip()
+
+        # highlight 타입 (강조 항목)
+        highlight_items = ['영업이익', '당기순이익', 'EBITDA']
+        if name in highlight_items:
+            return 'highlight'
+
+        # total 타입 (합계 항목)
+        total_items = ['매출총이익', '자산총계', '부채총계', '자본총계', '부채와자본총계',
+                       '법인세비용차감전이익', 'NWC', 'Net Debt']
+        if name in total_items:
+            return 'total'
+
+        # percent 타입
+        if name == '% of Sales' or name.startswith('%'):
+            return 'percent'
+
+        # category 타입 (대분류)
+        category_items = ['유동자산', '비유동자산', '유동부채', '비유동부채', '자본',
+                          '매출', '매출원가', '판매비와관리비', '영업외수익', '영업외비용',
+                          '유동자산 [NWC]', '유동부채 [NWC]',
+                          '유동차입부채 [NetDebt]', '비유동차입부채 [NetDebt]',
+                          '현금및현금성자산 [NetDebt]', '단기투자자산 [NetDebt]']
+        if name in category_items:
+            return 'category'
+
+        # subitem 타입 (들여쓰기 있는 항목)
+        if item_name.startswith('  '):
+            return 'subitem'
+
+        # 기본값
+        return 'item'
+
+    # 각 행에 타입 추가
+    for row in all_rows:
+        row['타입'] = get_item_type(row.get('항목', ''))
+
+    # ========== 복사용테이블 생성 (단위: 천만원, 포맷팅 완료) ==========
+    # 규칙:
+    # - 부모 없는 항목 → 표시
+    # - IS 섹션(매출, 매출원가, 판관비, 영업외수익/비용)의 하위항목 → 표시
+    # - 그 외 (BS 세부항목, 기타XXX 하위, NWC/NetDebt 하위) → 제외 (툴팁용)
+    display_rows = []
+    unit_divisor = 10000000  # 원 → 천만원 (1천만 = 10,000,000)
+
+    # IS 섹션: 하위항목 표시 허용
+    is_sections_with_subitems = ['매출', '매출원가', '판매비와관리비', '영업외수익', '영업외비용']
+
+    for row in all_rows:
+        item_name = row.get('항목', '')
+        item_type = row.get('타입', 'item')
+        item_parent = row.get('부모', '')
+
+        # 부모 없는 항목 → 표시
+        if not item_parent or not str(item_parent).strip():
+            pass  # 표시
+        # IS 섹션의 하위항목 → 표시
+        elif str(item_parent).strip() in is_sections_with_subitems:
+            pass  # 표시
+        # 그 외 (BS 세부항목, 기타XXX 하위, NWC/NetDebt 하위) → 제외
+        else:
+            continue
+
+        # 빈 행 필터링: 모든 연도에 값이 없으면 스킵
+        has_any_value = any(row.get(col) is not None and row.get(col) != 0 for col in year_cols)
+        if not has_any_value:
+            continue
+
+        display_row = {'항목': item_name}
+
+        for col in year_cols:
+            val = row.get(col)
+            if val is not None and val != 0:
+                if item_type == 'percent':
+                    # 퍼센트는 그대로 (0.127 → "12.7%")
+                    display_row[col] = f"{val * 100:.1f}%" if isinstance(val, (int, float)) and val < 1 else val
+                else:
+                    # 숫자는 천만원 단위로 변환하고 포맷팅
+                    converted = val / unit_divisor
+                    # 소수점 없이 정수로 표시, 천 단위 콤마
+                    display_row[col] = f"{converted:,.0f}"
+            else:
+                display_row[col] = ''
+
+        display_rows.append(display_row)
+
+    # 컬럼 순서 정리: 항목, 타입, 부모, FY연도들...
+    vcm_df = pd.DataFrame(all_rows)
+    cols_order = ['항목', '타입', '부모'] + [c for c in vcm_df.columns if c not in ['항목', '타입', '부모']]
+    vcm_df = vcm_df[[c for c in cols_order if c in vcm_df.columns]]
+
+    # 복사용테이블 DataFrame
+    display_df = pd.DataFrame(display_rows)
+
+    return vcm_df, display_df
 
 
 def normalize_xbrl_columns(df):
@@ -3089,12 +3535,27 @@ def save_to_excel(fs_data, filepath: str):
         # VCM 전용 포맷 시트 추가
         try:
             print(f"[VCM] create_vcm_format 호출 시작...")
-            vcm_df = create_vcm_format(fs_data, filepath)
+            vcm_result = create_vcm_format(fs_data, filepath)
+
+            # 튜플 반환 (vcm_df, display_df) 처리
+            if isinstance(vcm_result, tuple):
+                vcm_df, display_df = vcm_result
+            else:
+                vcm_df = vcm_result
+                display_df = None
+
             print(f"[VCM] create_vcm_format 완료: {len(vcm_df) if vcm_df is not None else 0}개 항목")
+
             if vcm_df is not None and not vcm_df.empty:
                 print(f"[VCM] VCM 데이터 저장 중... ({len(vcm_df)}행)")
                 vcm_df.to_excel(writer, sheet_name='VCM전용포맷', index=False)
-                print(f"[VCM] VCM 시트 저장 완료")
+                print(f"[VCM] VCM전용포맷 시트 저장 완료")
+
+            if display_df is not None and not display_df.empty:
+                print(f"[VCM] 복사용테이블 저장 중... ({len(display_df)}행)")
+                display_df.to_excel(writer, sheet_name='복사용테이블', index=False)
+                print(f"[VCM] 복사용테이블 시트 저장 완료")
+
         except Exception as e:
             import traceback
             print(f"[VCM] VCM 포맷 생성 실패: {e}")
