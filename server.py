@@ -2761,6 +2761,9 @@ def create_vcm_format(fs_data, excel_filepath=None):
         단기차입금 = find_in_section(유동부채_items, ['단기차입금']) or find_bs_val(['단기차입금'], year) or 0
         유동성장기차입금 = find_in_section(유동부채_items, ['유동성장기부채', '유동성장기차입금']) or find_bs_val(['유동성장기부채', '유동성장기차입금'], year) or 0
         유동성사채 = find_in_section(유동부채_items, ['유동성사채']) or find_bs_val(['유동성사채'], year) or 0
+        # 유동성사채가 섹션에 없지만 find_bs_val로 찾았으면 유동부채_items에 추가 (동적 분류용)
+        if 유동성사채 and not find_in_section(유동부채_items, ['유동성사채']):
+            유동부채_items.append({'name': '유동성사채', 'value': 유동성사채})
         전환사채_유동 = find_in_section(유동부채_items, ['전환사채']) or find_bs_val(['전환사채'], year) or 0
         상환전환우선주부채 = find_in_section(유동부채_items, ['상환전환우선주부채', 'RCPS부채']) or 0
         전환우선주부채 = find_in_section(유동부채_items, ['전환우선주부채', 'CPS부채'], ['상환']) or 0  # 상환전환우선주부채 제외
@@ -2807,6 +2810,9 @@ def create_vcm_format(fs_data, excel_filepath=None):
         비유동매입채무및기타채무 = 장기매입채무 + 장기미지급금 + 장기미지급비용 + 장기선수금 + 장기선수수익 + 장기예수금 + 임대보증금 + 예수보증금_비유동 + 계약부채_비유동
 
         사채 = find_in_section(비유동부채_items, ['사채'], ['유동성']) or find_bs_val(['사채'], year, ['유동성']) or 0
+        # 사채가 섹션에 없지만 find_bs_val로 찾았으면 비유동부채_items에 추가 (동적 분류용)
+        if 사채 and not find_in_section(비유동부채_items, ['사채'], ['유동성']):
+            비유동부채_items.append({'name': '사채', 'value': 사채})
         장기차입금 = find_in_section(비유동부채_items, ['장기차입금', '비유동차입부채'], ['유동성']) or find_bs_val(['장기차입금'], year, ['유동성']) or 0
         퇴직급여채무 = find_in_section(비유동부채_items, ['퇴직급여충당부채', '퇴직급여채무', '확정급여채무', '순확정급여부채']) or find_bs_val(['퇴직급여충당부채', '퇴직급여채무', '확정급여채무'], year) or 0
         기타금융부채_비유동 = find_in_section(비유동부채_items, ['기타금융부채', '금융리스부채', '리스부채']) or 0
@@ -3016,10 +3022,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 i for i in cat_info['items']
                 if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat, i['name'])
             ]
-            # 유효한 세부항목이 2개 이상이거나, 1개라도 의미있으면 표시
-            if len(valid_items) >= 2 or (len(valid_items) == 1 and len(cat_info['items']) > 1):
+            # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
+            if len(valid_items) >= 1:
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
-                for item in sorted_items[:3]:  # 세부항목은 최대 3개
+                for item in sorted_items[:5]:  # 최대 5개까지
                     bs_items.append((item['name'], cat, item['value']))
 
         # 기타유동자산 (남은 항목 합계)
@@ -3027,7 +3033,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
             bs_items.append(('기타유동자산', '', 기타유동자산_total))
             # 기타유동자산에 포함된 세부항목들 (중복 항목 제외)
             valid_기타유동 = [i for i in 기타유동자산_items if not is_redundant_child('기타유동자산', i['name'])]
-            if len(valid_기타유동) >= 2:  # 의미있는 세부항목이 2개 이상일 때만 표시
+            if len(valid_기타유동) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
                 sorted_기타유동 = sorted(valid_기타유동, key=lambda x: abs(x['value']), reverse=True)
                 for item in sorted_기타유동[:5]:
                     bs_items.append((item['name'], '기타유동자산', item['value']))
@@ -3058,16 +3064,17 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 i for i in cat_info['items']
                 if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat_display, i['name'])
             ]
-            if len(valid_items) >= 2 or (len(valid_items) == 1 and len(cat_info['items']) > 1):
+            # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
+            if len(valid_items) >= 1:
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
-                for item in sorted_items[:3]:
+                for item in sorted_items[:5]:  # 최대 5개까지
                     bs_items.append((item['name'], cat_display, item['value']))
 
         if 기타비유동자산_total and abs(기타비유동자산_total) > 0:
             bs_items.append(('기타비유동자산', '', 기타비유동자산_total))
             # 기타비유동자산에 포함된 세부항목들 (중복 항목 제외)
             valid_기타비유동 = [i for i in 기타비유동자산_items if not is_redundant_child('기타비유동자산', i['name'])]
-            if len(valid_기타비유동) >= 2:
+            if len(valid_기타비유동) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
                 sorted_기타비유동 = sorted(valid_기타비유동, key=lambda x: abs(x['value']), reverse=True)
                 for item in sorted_기타비유동[:5]:
                     bs_items.append((item['name'], '기타비유동자산', item['value']))
@@ -3089,16 +3096,17 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 i for i in cat_info['items']
                 if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat, i['name'])
             ]
-            if len(valid_items) >= 2 or (len(valid_items) == 1 and len(cat_info['items']) > 1):
+            # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
+            if len(valid_items) >= 1:
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
-                for item in sorted_items[:3]:
+                for item in sorted_items[:5]:  # 최대 5개까지
                     bs_items.append((item['name'], cat, item['value']))
 
         if 기타유동부채_total and abs(기타유동부채_total) > 0:
             bs_items.append(('기타유동부채', '', 기타유동부채_total))
             # 기타유동부채에 포함된 세부항목들 (중복 항목 제외)
             valid_기타유동부채 = [i for i in 기타유동부채_items if not is_redundant_child('기타유동부채', i['name'])]
-            if len(valid_기타유동부채) >= 2:
+            if len(valid_기타유동부채) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
                 sorted_기타유동부채 = sorted(valid_기타유동부채, key=lambda x: abs(x['value']), reverse=True)
                 for item in sorted_기타유동부채[:5]:
                     bs_items.append((item['name'], '기타유동부채', item['value']))
@@ -3131,16 +3139,17 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 i for i in cat_info['items']
                 if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat_display, i['name'])
             ]
-            if len(valid_items) >= 2 or (len(valid_items) == 1 and len(cat_info['items']) > 1):
+            # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
+            if len(valid_items) >= 1:
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
-                for item in sorted_items[:3]:
+                for item in sorted_items[:5]:  # 최대 5개까지
                     bs_items.append((item['name'], cat_display, item['value']))
 
         if 기타비유동부채_total and abs(기타비유동부채_total) > 0:
             bs_items.append(('기타비유동부채', '', 기타비유동부채_total))
             # 기타비유동부채에 포함된 세부항목들 (중복 항목 제외)
             valid_기타비유동부채 = [i for i in 기타비유동부채_items if not is_redundant_child('기타비유동부채', i['name'])]
-            if len(valid_기타비유동부채) >= 2:
+            if len(valid_기타비유동부채) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
                 sorted_기타비유동부채 = sorted(valid_기타비유동부채, key=lambda x: abs(x['value']), reverse=True)
                 for item in sorted_기타비유동부채[:5]:
                     bs_items.append((item['name'], '기타비유동부채', item['value']))
@@ -3322,8 +3331,13 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 else:
                     # 숫자는 천만원 단위로 변환하고 포맷팅
                     converted = val / unit_divisor
-                    # 소수점 없이 정수로 표시, 천 단위 콤마
-                    display_row[col] = f"{converted:,.0f}"
+                    # 소수점 1자리까지 표시, 천 단위 콤마 (0.0이면 빈값 처리)
+                    if abs(converted) < 0.05:
+                        display_row[col] = ''  # 너무 작으면 빈값
+                    elif converted == int(converted):
+                        display_row[col] = f"{int(converted):,}"  # 정수면 소수점 없이
+                    else:
+                        display_row[col] = f"{converted:,.1f}"  # 소수점 1자리
             else:
                 display_row[col] = ''
 

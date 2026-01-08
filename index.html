@@ -1808,12 +1808,14 @@
                 function getChildItems(parentName, year) {
                     const children = vcmMeta.filter(r => r['부모'] === parentName);
                     return children.map(c => {
+                        // vcmDisplay에서 먼저 찾고, 없으면 vcmMeta에서 찾기
                         const displayRow = vcmDisplay.find(d => d['항목'] === c['항목']);
+                        const val = displayRow ? displayRow[year] : c[year];
                         return {
-                            name: c['항목'],
-                            value: displayRow ? displayRow[year] : ''
+                            name: c['항목'].replace(' [NWC]', '').replace(' [NetDebt]', ''),
+                            value: val
                         };
-                    }).filter(c => c.value && c.value !== '');
+                    }).filter(c => c.value !== null && c.value !== undefined && c.value !== '');
                 }
 
                 // 타입별 CSS 클래스
@@ -1856,24 +1858,33 @@
                     const rowClass = getRowClass(itemType);
                     const tdClass = getTdClass(itemType);
 
-                    // 툴팁 생성 (자식 항목이 있으면)
-                    let tooltip = '';
                     const parentName = itemName.trim();
-                    const children = getChildItems(parentName, years[0]);
-                    if (children.length > 0) {
-                        tooltip = children.map(c => `${c.name}: ${c.value}`).join('\n');
-                    }
 
-                    bsTableHtml += `<tr class="${rowClass}"><td class="${tdClass}" title="${tooltip}">${itemName}</td>`;
+                    bsTableHtml += `<tr class="${rowClass}"><td class="${tdClass}">${itemName}</td>`;
                     years.forEach(y => {
                         let val = row[y];
-                        // 숫자인 경우 천 단위 콤마 추가
-                        if (typeof val === 'number' && !isNaN(val)) {
-                            val = val.toLocaleString('ko-KR');
-                        } else if (val === null || val === undefined) {
-                            val = '';
+                        let tooltip = '';
+                        let hasChildren = false;
+
+                        // 각 연도별 자식 항목 툴팁 생성
+                        const children = getChildItems(parentName, y);
+                        if (children.length > 0) {
+                            hasChildren = true;
+                            const childLines = children.map(c => {
+                                const fmtVal = typeof c.value === 'number' ? c.value.toLocaleString('ko-KR') : c.value;
+                                return `${c.name}: ${fmtVal}`;
+                            });
+                            tooltip = `[${y} 세부내역]\n${childLines.join('\n')}\n─────────\n합계: ${typeof val === 'number' ? val.toLocaleString('ko-KR') : val}`;
                         }
-                        bsTableHtml += `<td>${val}</td>`;
+
+                        // 숫자인 경우 천 단위 콤마 추가
+                        let displayVal = val;
+                        if (typeof val === 'number' && !isNaN(val)) {
+                            displayVal = val.toLocaleString('ko-KR');
+                        } else if (val === null || val === undefined) {
+                            displayVal = '';
+                        }
+                        bsTableHtml += `<td class="${hasChildren ? 'calc-cell' : ''}" title="${tooltip}">${displayVal}</td>`;
                     });
                     bsTableHtml += '</tr>';
                 }
@@ -1899,24 +1910,50 @@
                     const rowClass = getRowClass(itemType);
                     const tdClass = getTdClass(itemType);
 
-                    // 툴팁 생성 (자식 항목이 있으면)
-                    let tooltip = '';
                     const parentName = itemName.trim();
-                    const children = getChildItems(parentName, years[0]);
-                    if (children.length > 0) {
-                        tooltip = children.map(c => `${c.name}: ${c.value}`).join('\n');
-                    }
 
-                    isTableHtml += `<tr class="${rowClass}"><td class="${tdClass}" title="${tooltip}">${itemName}</td>`;
+                    isTableHtml += `<tr class="${rowClass}"><td class="${tdClass}">${itemName}</td>`;
                     years.forEach(y => {
                         let val = row[y];
-                        // 숫자인 경우 천 단위 콤마 추가
-                        if (typeof val === 'number' && !isNaN(val)) {
-                            val = val.toLocaleString('ko-KR');
-                        } else if (val === null || val === undefined) {
-                            val = '';
+                        let tooltip = '';
+                        let hasChildren = false;
+
+                        // EBITDA 특별 처리: 영업이익 + 감가상각비 + 무형자산상각비
+                        if (parentName === 'EBITDA') {
+                            const 영업이익Row = vcmDisplay.find(r => r['항목'] === '영업이익');
+                            const 감가상각비Row = vcmMeta.find(r => r['항목'] && r['항목'].includes('감가상각비') && !r['항목'].includes('무형'));
+                            const 무형자산상각비Row = vcmMeta.find(r => r['항목'] && r['항목'].includes('무형자산상각비'));
+
+                            const 영업이익 = 영업이익Row ? 영업이익Row[y] : 0;
+                            const 감가상각비 = 감가상각비Row ? 감가상각비Row[y] : 0;
+                            const 무형자산상각비 = 무형자산상각비Row ? 무형자산상각비Row[y] : 0;
+
+                            if (영업이익 || 감가상각비 || 무형자산상각비) {
+                                hasChildren = true;
+                                const fmt = (v) => typeof v === 'number' ? v.toLocaleString('ko-KR') : (v || 0);
+                                tooltip = `[${y} 계산식]\n영업이익: ${fmt(영업이익)}\n+ 감가상각비: ${fmt(감가상각비)}\n+ 무형자산상각비: ${fmt(무형자산상각비)}\n─────────\n= EBITDA: ${typeof val === 'number' ? val.toLocaleString('ko-KR') : val}`;
+                            }
+                        } else {
+                            // 일반 항목: 자식 항목 툴팁 생성
+                            const children = getChildItems(parentName, y);
+                            if (children.length > 0) {
+                                hasChildren = true;
+                                const childLines = children.map(c => {
+                                    const fmtVal = typeof c.value === 'number' ? c.value.toLocaleString('ko-KR') : c.value;
+                                    return `${c.name}: ${fmtVal}`;
+                                });
+                                tooltip = `[${y} 세부내역]\n${childLines.join('\n')}\n─────────\n합계: ${typeof val === 'number' ? val.toLocaleString('ko-KR') : val}`;
+                            }
                         }
-                        isTableHtml += `<td>${val}</td>`;
+
+                        // 숫자인 경우 천 단위 콤마 추가
+                        let displayVal = val;
+                        if (typeof val === 'number' && !isNaN(val)) {
+                            displayVal = val.toLocaleString('ko-KR');
+                        } else if (val === null || val === undefined) {
+                            displayVal = '';
+                        }
+                        isTableHtml += `<td class="${hasChildren ? 'calc-cell' : ''}" title="${tooltip}">${displayVal}</td>`;
                     });
                     isTableHtml += '</tr>';
                 }
