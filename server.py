@@ -803,8 +803,25 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                                                     # 기존 계정과목 목록
                                                     existing_accounts = set(base_df_normalized['계정과목'].values) if '계정과목' in base_df_normalized.columns else set()
                                                     # 새로운 계정과목만 추가
-                                                    new_rows = note_df[~note_df['계정과목'].isin(existing_accounts)]
+                                                    new_rows = note_df[~note_df['계정과목'].isin(existing_accounts)].copy()
                                                     if len(new_rows) > 0:
+                                                        # ★ 주석 데이터는 천원 단위이므로 원 단위로 변환 (*1000)
+                                                        def convert_to_won(val):
+                                                            """천원 단위를 원 단위로 변환"""
+                                                            if pd.isna(val):
+                                                                return val
+                                                            try:
+                                                                val_str = str(val).replace(',', '').replace('(', '').replace(')', '').strip()
+                                                                if val_str == '' or val_str == '-':
+                                                                    return None
+                                                                return float(val_str) * 1000
+                                                            except:
+                                                                return val
+
+                                                        for col in new_rows.columns:
+                                                            if col.startswith('FY'):
+                                                                new_rows[col] = new_rows[col].apply(convert_to_won)
+                                                        print(f"[FS] IS 주석 단위 변환 완료 (천원→원)")
                                                         # 정규화된 DataFrame에 병합
                                                         base_df_normalized = pd.concat([base_df_normalized, new_rows], ignore_index=True)
                                                         print(f"[FS] IS 주석 {len(new_rows)}개 행 추가")
@@ -858,20 +875,26 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
         print(f"[FS] 사업보고서 추출 실패: {e}")
     
     # 2차: 당해년도 분기/반기 보고서 추가 검색 (상장사: XBRL에 병합 / 비상장사: 감사보고서+분기)
-    # XBRL 데이터가 있으면 당해년도 분기/반기만 검색, 없으면 감사보고서도 검색
-    if xbrl_data:
+    # 비상장사 여부 확인 (stock_code가 없으면 비상장사)
+    is_listed = hasattr(corp, 'stock_code') and corp.stock_code
+
+    if is_listed:
         print(f"[FS] 상장사: 당해년도 분기/반기 보고서만 추가 검색...")
     else:
-        print(f"[FS] 비상장사: 공시보고서에서 추출 시도...")
+        print(f"[FS] 비상장사: 감사보고서에서 추출 시도 (주석 데이터 포함)...")
     update_progress(25, '공시보고서 검색 중...')
     
     # 연도별 데이터 저장용 딕셔너리 (키: 연도 또는 "2025 3Q" 형식)
     yearly_data = {'bs': {}, 'is': {}, 'cis': {}, 'cf': {}}
+
+    # 연도별 주석 데이터 저장용 (각 감사보고서의 주석을 병합하기 위해)
+    all_notes = {'is_notes': [], 'bs_notes': [], 'cf_notes': []}
     
     try:
-        # 1. 감사보고서 검색 (비상장사용, XBRL 데이터가 없을 때만)
+        # 1. 감사보고서 검색 (비상장사는 항상, 상장사는 XBRL이 없을 때만)
+        # 비상장사는 주석 데이터가 감사보고서에만 있으므로 반드시 검색해야 함
         audit_filings = []
-        if not xbrl_data:
+        if not is_listed or not xbrl_data:
             filings = search_filings(
                 corp_code=corp_code,
                 bgn_de=start_date,
@@ -975,10 +998,12 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                                         fs_data[key] = extracted[key]
                                     else:
                                         fs_data[key] = pd.concat([fs_data[key], extracted[key]], ignore_index=True).drop_duplicates()
-                            # 주석 테이블도 fs_data에 추가
+                            # 주석 테이블도 병합 (덮어쓰기가 아닌 병합)
                             if extracted.get('notes'):
-                                fs_data['notes'] = extracted['notes']
-                                print(f"[FS] 주석 데이터 저장: IS={len(extracted['notes'].get('is_notes', []))}개, BS={len(extracted['notes'].get('bs_notes', []))}개")
+                                for note_type in ['is_notes', 'bs_notes', 'cf_notes']:
+                                    if extracted['notes'].get(note_type):
+                                        all_notes[note_type].extend(extracted['notes'][note_type])
+                                print(f"[FS] 주석 데이터 병합: IS={len(extracted['notes'].get('is_notes', []))}개 (총 {len(all_notes['is_notes'])}개)")
                     else:
                         print(f"[FS] XBRL 없음, 페이지에서 추출 시도...")
                         # 페이지에서 재무제표 테이블 추출 시도
@@ -990,7 +1015,12 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                                     if report_period and len(df.columns) >= 2:
                                         # 기간별로 데이터 저장
                                         yearly_data[key][report_period] = df
-                            
+                            # 주석 테이블도 병합 (XBRL 없는 감사보고서에서도)
+                            if extracted.get('notes'):
+                                for note_type in ['is_notes', 'bs_notes', 'cf_notes']:
+                                    if extracted['notes'].get(note_type):
+                                        all_notes[note_type].extend(extracted['notes'][note_type])
+                                print(f"[FS] 페이지 주석 데이터 병합: IS={len(extracted['notes'].get('is_notes', []))}개 (총 {len(all_notes['is_notes'])}개)")
                 except Exception as e:
                     print(f"[FS] 감사보고서 처리 실패: {e}")
                     import traceback
@@ -998,7 +1028,12 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                     continue
     except Exception as e:
         print(f"[FS] 감사보고서 검색 실패: {e}")
-    
+
+    # 모든 감사보고서에서 수집한 주석 데이터를 fs_data에 저장
+    if any(all_notes[key] for key in all_notes):
+        fs_data['notes'] = all_notes
+        print(f"[FS] 전체 주석 데이터: IS={len(all_notes['is_notes'])}개, BS={len(all_notes['bs_notes'])}개, CF={len(all_notes['cf_notes'])}개")
+
     # 연도별 데이터를 합쳐서 정규화된 형태로 변환
     update_progress(80, '데이터 정규화 중...')
     
@@ -2212,9 +2247,13 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 for kw in keywords:
                     if normalize(kw) in acc:
                         val = row.get(year)
+                        # Series인 경우 첫 번째 값 사용 (중복 컬럼 대응)
+                        if isinstance(val, pd.Series):
+                            val = val.iloc[0] if len(val) > 0 else None
                         if pd.notna(val):
                             try:
-                                return float(str(val).replace(',', ''))
+                                val_str = str(val).replace(',', '').replace('(', '').replace(')', '')
+                                return float(val_str)
                             except:
                                 pass
             return None
@@ -2234,9 +2273,13 @@ def create_vcm_format(fs_data, excel_filepath=None):
                                     year_str = year
                             if year_str and year_str in note_df.columns:
                                 val = row.get(year_str)
+                                # Series인 경우 첫 번째 값 사용 (중복 컬럼 대응)
+                                if isinstance(val, pd.Series):
+                                    val = val.iloc[0] if len(val) > 0 else None
                                 if pd.notna(val):
                                     try:
-                                        result = float(str(val).replace(',', ''))
+                                        val_str = str(val).replace(',', '').replace('(', '').replace(')', '')
+                                        result = float(val_str)
                                         # 주석 테이블은 천원 단위이므로 원 단위로 변환
                                         result = result * 1000
                                         return result
@@ -2311,6 +2354,81 @@ def create_vcm_format(fs_data, excel_filepath=None):
     print(f"[VCM] 매출 하위 항목 추출: {[item[0] for item in revenue_sub_items]}")
     print(f"[VCM] 매출원가 하위 항목 추출: {[item[0] for item in cogs_sub_items]}")
 
+    # ========== 영업외수익/영업외비용 하위 항목 동적 추출 ==========
+    # 매출/매출원가와 동일한 방식: 영업이익 이후 ~ 법인세비용차감전 사이의 모든 항목을 자동 분류
+    non_op_income_items = []   # 영업외수익 하위 항목 [(항목명, 계정과목명), ...]
+    non_op_expense_items = []  # 영업외비용 하위 항목 [(항목명, 계정과목명), ...]
+
+    # 수익/이익 분류 키워드 (항목명에 포함되면 영업외수익으로 분류)
+    income_indicators = ['수익', '이익', '차익', '환입', '잡이익']
+    # 비용/손실 분류 키워드 (항목명에 포함되면 영업외비용으로 분류)
+    expense_indicators = ['비용', '손실', '차손', '잡손실']
+    # 손익 항목 (지분법손익 등 - 영업외수익/비용과 별도로 표시)
+    mixed_indicators = ['손익']
+    # 손익 항목 별도 수집 리스트
+    mixed_items = []  # [(항목명, 계정과목명), ...]
+
+    # 제외할 항목 (합계 항목들)
+    exclude_keywords = ['영업외수익', '영업외비용', '법인세비용차감전', '세전', '당기순', '계속영업']
+
+    # 영업외 섹션 범위: 영업이익 이후 ~ 법인세비용차감전
+    non_op_end_keywords = ['법인세비용차감전', '법인세차감전', '세전이익', '세전순', '당기순이익', '당기순손실', '계속영업이익', '계속영업손실']
+
+    after_op_income = False
+
+    for idx, row in is_df.iterrows():
+        acc = normalize(str(row.get(account_col, '')))
+        original_acc = str(row.get(account_col, '')).strip()
+        clean_acc = re.sub(r'^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+\.', '', original_acc).strip()
+        clean_acc = re.sub(r'\(주석[0-9,]+\)', '', clean_acc).strip()
+
+        # 영업이익/손실 이후부터 수집 시작
+        if '영업이익' in acc or '영업손실' in acc or '영업손익' in acc:
+            after_op_income = True
+            continue
+
+        # 법인세비용차감전 등에서 종료
+        if any(end_kw in acc for end_kw in non_op_end_keywords):
+            after_op_income = False
+            continue
+
+        if not after_op_income:
+            continue
+
+        # 제외 항목 건너뛰기
+        if any(excl in acc for excl in exclude_keywords):
+            continue
+
+        # 빈 항목 건너뛰기
+        if not clean_acc:
+            continue
+
+        # 항목명에 따라 수익/비용 자동 분류
+        is_income = any(ind in acc for ind in income_indicators)
+        is_expense = any(ind in acc for ind in expense_indicators)
+        is_mixed = any(ind in acc for ind in mixed_indicators)
+
+        # 수익으로 분류
+        if is_income and not is_expense and not is_mixed:
+            if (clean_acc, acc) not in non_op_income_items:
+                non_op_income_items.append((clean_acc, acc))
+        # 비용으로 분류
+        elif is_expense and not is_income and not is_mixed:
+            if (clean_acc, acc) not in non_op_expense_items:
+                non_op_expense_items.append((clean_acc, acc))
+        # 손익 항목 (지분법손익 등) - 영업외수익/비용과 별도로 수집
+        elif is_mixed:
+            if (clean_acc, acc) not in mixed_items:
+                mixed_items.append((clean_acc, acc))
+        # 둘 다 포함된 경우 (수익+비용 동시 포함)
+        elif is_income and is_expense:
+            if (clean_acc, acc) not in non_op_income_items:
+                non_op_income_items.append((clean_acc, acc))
+
+    print(f"[VCM] 영업외수익 하위 항목 추출: {[item[0] for item in non_op_income_items]}")
+    print(f"[VCM] 영업외비용 하위 항목 추출: {[item[0] for item in non_op_expense_items]}")
+    print(f"[VCM] 손익 항목 추출 (별도 표시): {[item[0] for item in mixed_items]}")
+
     # 손익계산서 항목 (동적으로 생성)
     is_items = []
 
@@ -2346,10 +2464,32 @@ def create_vcm_format(fs_data, excel_filepath=None):
         ('판매비와관리비', [], 'calc_sga'),
         # 판관비 하위항목은 아래에서 동적으로 추가됨
         ('영업이익', [], 'calc_op'),
-        ('영업외수익', [], 'find_direct'),  # 직접 찾기
-        ('  금융수익', [('이자수익', []), ('기타금융수익', [])], 'sum'),
-        ('영업외비용', [], 'find_direct'),  # 직접 찾기
-        ('  금융비용', [('이자비용', [])], 'find'),
+    ])
+
+    # 영업외수익 항목 (동적으로 추출된 하위 항목 사용)
+    is_items.append(('영업외수익', [], 'find_direct'))  # 직접 찾기
+    if non_op_income_items:
+        for item_name, item_keyword in non_op_income_items:
+            is_items.append((f'  {item_name}', [(item_keyword, [])], 'find'))
+    else:
+        # 기본 항목 (추출 실패 시)
+        is_items.append(('  금융수익', [('이자수익', []), ('기타금융수익', [])], 'sum'))
+
+    # 영업외비용 항목 (동적으로 추출된 하위 항목 사용)
+    is_items.append(('영업외비용', [], 'find_direct'))  # 직접 찾기
+    if non_op_expense_items:
+        for item_name, item_keyword in non_op_expense_items:
+            is_items.append((f'  {item_name}', [(item_keyword, [])], 'find'))
+    else:
+        # 기본 항목 (추출 실패 시)
+        is_items.append(('  금융비용', [('이자비용', [])], 'find'))
+
+    # 손익 항목 (지분법손익 등) - 영업외수익/비용과 별도로 표시
+    if mixed_items:
+        for item_name, item_keyword in mixed_items:
+            is_items.append((item_name, [(item_keyword, [])], 'find'))
+
+    is_items.extend([
         ('법인세비용차감전이익', [], 'calc_ebt'),
         ('법인세비용', [('법인세비용', ['차감전']), ('법인세등', ['차감전'])], 'find'),
         ('당기순이익', [], 'calc_net'),
@@ -2406,6 +2546,68 @@ def create_vcm_format(fs_data, excel_filepath=None):
     sga_sorted_total = sorted(sga_totals_nonzero.items(), key=lambda x: abs(x[1]), reverse=True)
     sga_top5_names = [item[0] for item in sga_sorted_total[:5]]  # 상위 5개 항목명 (순서 유지)
 
+    # ========== 영업외수익 상위 6개 항목 미리 결정 (모든 연도 합계 기준) ==========
+    def get_non_op_income_items_for_year(is_df, year):
+        """특정 연도의 모든 영업외수익 항목 값을 반환"""
+        return {
+            '이자수익': find_val(is_df, ['이자수익'], year) or 0,
+            '배당금수익': find_val(is_df, ['배당금수익'], year) or 0,
+            '외환차익': find_val(is_df, ['외환차익'], year) or 0,
+            '외화환산이익': find_val(is_df, ['외화환산이익'], year) or 0,
+            '유형자산처분이익': find_val(is_df, ['유형자산처분이익'], year) or 0,
+            '무형자산처분이익': find_val(is_df, ['무형자산처분이익'], year) or 0,
+            '자산평가이익': find_val(is_df, ['자산평가이익', '당기손익공정가치측정금융자산평가이익'], year) or 0,
+            '자산처분이익': find_val(is_df, ['당기손익인식금융자산처분이익', '금융자산처분이익'], year) or 0,
+            '파생상품평가이익': find_val(is_df, ['파생상품평가이익'], year) or 0,
+            '지분법이익': find_val(is_df, ['지분법이익', '관계기업투자이익'], year) or 0,
+            '기타금융수익': find_val(is_df, ['기타금융수익'], year) or 0,
+            '기타영업외수익': find_val(is_df, ['기타영업외수익', '기타수익', '잡이익'], year) or 0,
+        }
+
+    def get_non_op_expense_items_for_year(is_df, year):
+        """특정 연도의 모든 영업외비용 항목 값을 반환"""
+        return {
+            '이자비용': find_val(is_df, ['이자비용'], year) or 0,
+            '외환차손': find_val(is_df, ['외환차손'], year) or 0,
+            '외화환산손실': find_val(is_df, ['외화환산손실'], year) or 0,
+            '유형자산처분손실': find_val(is_df, ['유형자산처분손실', '유무형리스자산처분손실'], year) or 0,
+            '무형자산처분손실': find_val(is_df, ['무형자산처분손실'], year) or 0,
+            '자산평가손실': find_val(is_df, ['자산평가손실', '당기손익공정가치측정금융자산평가손실'], year) or 0,
+            '자산손상차손': find_val(is_df, ['자산손상차손', '유형자산손상차손', '무형자산손상차손'], year) or 0,
+            '파생상품평가손실': find_val(is_df, ['파생상품평가손실'], year) or 0,
+            '지분법손실': find_val(is_df, ['지분법손실'], year) or 0,
+            '기타금융비용': find_val(is_df, ['기타금융비용'], year) or 0,
+            '기타영업외비용': find_val(is_df, ['기타영업외비용', '기타비용', '잡손실'], year) or 0,
+        }
+
+    # 영업외수익 모든 연도 합계 계산
+    non_op_income_totals = {}
+    for year in fy_cols:
+        non_op_income_year = get_non_op_income_items_for_year(is_df, year)
+        for item_name, val in non_op_income_year.items():
+            non_op_income_totals[item_name] = non_op_income_totals.get(item_name, 0) + (val or 0)
+
+    # 영업외수익 상위 5개 항목 선택 (기타영업외수익 제외)
+    non_op_income_totals_nonzero = {k: v for k, v in non_op_income_totals.items() if v and v > 0 and k != '기타영업외수익'}
+    non_op_income_sorted = sorted(non_op_income_totals_nonzero.items(), key=lambda x: abs(x[1]), reverse=True)
+    non_op_income_top5_names = [item[0] for item in non_op_income_sorted[:5]]
+    non_op_income_rest_names = [item[0] for item in non_op_income_sorted[5:]]  # 기타에 포함될 항목들
+    print(f"[VCM] 영업외수익 상위 5개 항목: {non_op_income_top5_names}")
+
+    # 영업외비용 모든 연도 합계 계산
+    non_op_expense_totals = {}
+    for year in fy_cols:
+        non_op_expense_year = get_non_op_expense_items_for_year(is_df, year)
+        for item_name, val in non_op_expense_year.items():
+            non_op_expense_totals[item_name] = non_op_expense_totals.get(item_name, 0) + (val or 0)
+
+    # 영업외비용 상위 5개 항목 선택 (기타영업외비용 제외)
+    non_op_expense_totals_nonzero = {k: v for k, v in non_op_expense_totals.items() if v and v > 0 and k != '기타영업외비용'}
+    non_op_expense_sorted = sorted(non_op_expense_totals_nonzero.items(), key=lambda x: abs(x[1]), reverse=True)
+    non_op_expense_top5_names = [item[0] for item in non_op_expense_sorted[:5]]
+    non_op_expense_rest_names = [item[0] for item in non_op_expense_sorted[5:]]  # 기타에 포함될 항목들
+    print(f"[VCM] 영업외비용 상위 5개 항목: {non_op_expense_top5_names}")
+
     # 각 연도별 값 계산
     rows = []
     for year in fy_cols:
@@ -2444,14 +2646,18 @@ def create_vcm_format(fs_data, excel_filepath=None):
         sga_top6 = [('인건비', 인건비)] + sga_top5
 
         # 영업외 수익/비용 (직접 찾기)
-        영업외수익_direct = find_val(is_df, ['영업외수익', '기타수익'], year) or 0
-        영업외비용_direct = find_val(is_df, ['영업외비용', '기타비용'], year) or 0
+        영업외수익_direct = find_val(is_df, ['영업외수익'], year) or 0
+        영업외비용_direct = find_val(is_df, ['영업외비용'], year) or 0
 
-        # 금융수익/비용
-        이자수익 = find_val(is_df, ['이자수익'], year) or 0
-        기타금융수익 = find_val(is_df, ['기타금융수익'], year) or 0
+        # 영업외수익/비용 항목 값 계산 (새 함수 사용)
+        non_op_income_year_vals = get_non_op_income_items_for_year(is_df, year)
+        non_op_expense_year_vals = get_non_op_expense_items_for_year(is_df, year)
+
+        # 금융수익/비용 (fallback용)
+        이자수익 = non_op_income_year_vals.get('이자수익', 0)
+        기타금융수익 = non_op_income_year_vals.get('기타금융수익', 0)
         금융수익 = 이자수익 + 기타금융수익
-        이자비용 = find_val(is_df, ['이자비용'], year) or 0
+        이자비용 = non_op_expense_year_vals.get('이자비용', 0)
         금융비용 = 이자비용
         법인세 = find_val(is_df, ['법인세비용', '법인세등'], year, ['차감전']) or 0
 
@@ -2482,9 +2688,11 @@ def create_vcm_format(fs_data, excel_filepath=None):
         영업이익_direct = find_val(is_df, ['영업이익', '영업손익', '영업손실'], year) or 0
         영업이익 = 영업이익_direct if 영업이익_direct else (매출총이익 - 판관비)
 
-        # 영업외수익/비용: 직접 찾은 값 또는 계산
-        영업외수익 = 영업외수익_direct if 영업외수익_direct else 금융수익
-        영업외비용 = 영업외비용_direct if 영업외비용_direct else 금융비용
+        # 영업외수익/비용: 직접 찾은 값 > 항목 합계 > fallback
+        항목_영업외수익 = sum(non_op_income_year_vals.values())
+        항목_영업외비용 = sum(non_op_expense_year_vals.values())
+        영업외수익 = 영업외수익_direct if 영업외수익_direct else (항목_영업외수익 if 항목_영업외수익 else 금융수익)
+        영업외비용 = 영업외비용_direct if 영업외비용_direct else (항목_영업외비용 if 항목_영업외비용 else 금융비용)
 
         # 법인세비용차감전이익: 손익계산서에서 직접 찾기 시도
         세전이익_direct = find_val(is_df, ['법인세비용차감전순이익', '법인세비용차감전이익', '법인세차감전순이익', '세전이익'], year) or 0
@@ -2551,9 +2759,65 @@ def create_vcm_format(fs_data, excel_filepath=None):
             '영업이익': 영업이익,
             '% of Sales (영업이익)': 영업이익_pct,  # 영업이익률
             '영업외수익': 영업외수익,
-            '  금융수익': 금융수익 if 금융수익 else None,
-            '영업외비용': 영업외비용,
-            '  금융비용': 금융비용 if 금융비용 else None,
+        })
+
+        # 영업외수익 하위 항목 (상위 5개 + 기타)
+        non_op_income_year = get_non_op_income_items_for_year(is_df, year)
+        non_op_income_top5_sum = 0
+        non_op_income_total_sum = sum(non_op_income_year.values())
+
+        for item_name in non_op_income_top5_names:
+            val = non_op_income_year.get(item_name, 0)
+            values[f'  {item_name}'] = val if val else None
+            non_op_income_top5_sum += val
+
+        # 기타영업외수익 = 전체 합계 - 상위 5개 합계
+        기타영업외수익 = non_op_income_total_sum - non_op_income_top5_sum
+
+        # 기타영업외수익 세부항목 수집 (툴팁용)
+        기타영업외수익_세부 = []
+        for item_name in non_op_income_rest_names:
+            val = non_op_income_year.get(item_name, 0)
+            if val:
+                기타영업외수익_세부.append((item_name, val))
+
+        # 기타영업외수익 (값이 있거나 세부항목이 있으면 추가)
+        if 기타영업외수익 > 0 or 기타영업외수익_세부:
+            values['  기타영업외수익'] = 기타영업외수익 if 기타영업외수익 > 0 else None
+            # 세부항목 추가 (기타영업외수익 바로 다음에)
+            for item_name, val in 기타영업외수익_세부:
+                values[f'    {item_name}'] = val
+
+        values['영업외비용'] = 영업외비용
+
+        # 영업외비용 하위 항목 (상위 5개 + 기타)
+        non_op_expense_year = get_non_op_expense_items_for_year(is_df, year)
+        non_op_expense_top5_sum = 0
+        non_op_expense_total_sum = sum(non_op_expense_year.values())
+
+        for item_name in non_op_expense_top5_names:
+            val = non_op_expense_year.get(item_name, 0)
+            values[f'  {item_name}'] = val if val else None
+            non_op_expense_top5_sum += val
+
+        # 기타영업외비용 = 전체 합계 - 상위 5개 합계
+        기타영업외비용 = non_op_expense_total_sum - non_op_expense_top5_sum
+
+        # 기타영업외비용 세부항목 수집 (툴팁용)
+        기타영업외비용_세부 = []
+        for item_name in non_op_expense_rest_names:
+            val = non_op_expense_year.get(item_name, 0)
+            if val:
+                기타영업외비용_세부.append((item_name, val))
+
+        # 기타영업외비용 (값이 있거나 세부항목이 있으면 추가)
+        if 기타영업외비용 > 0 or 기타영업외비용_세부:
+            values['  기타영업외비용'] = 기타영업외비용 if 기타영업외비용 > 0 else None
+            # 세부항목 추가 (기타영업외비용 바로 다음에)
+            for item_name, val in 기타영업외비용_세부:
+                values[f'    {item_name}'] = val
+
+        values.update({
             '법인세비용차감전이익': 세전이익,
             '법인세비용': 법인세 if 법인세 else None,
             '당기순이익': 당기순이익,
@@ -2568,13 +2832,20 @@ def create_vcm_format(fs_data, excel_filepath=None):
         # 첫 번째 연도에서 기존 항목 저장 (부모 설정)
         if year == fy_cols[0]:
             current_parent = ''  # 현재 섹션의 부모 항목
+            last_single_indent = ''  # 마지막 싱글 들여쓰기 항목
             for item_name in values:
                 # 들여쓰기 없는 항목은 부모 항목 (섹션 헤더)
                 if not item_name.startswith('  '):
                     current_parent = item_name
+                    last_single_indent = ''
                     rows.append({'항목': item_name, '부모': ''})
+                elif item_name.startswith('    '):
+                    # 더블 들여쓰기 (4칸) = 기타영업외수익/비용의 세부항목
+                    # 부모는 직전 싱글 들여쓰기 항목 (기타영업외수익 또는 기타영업외비용)
+                    rows.append({'항목': item_name, '부모': last_single_indent})
                 else:
-                    # 들여쓰기 있는 항목은 현재 섹션의 하위 항목
+                    # 싱글 들여쓰기 (2칸) = 섹션의 하위 항목
+                    last_single_indent = item_name
                     rows.append({'항목': item_name, '부모': current_parent})
 
             # 세부항목 추가
@@ -2588,22 +2859,33 @@ def create_vcm_format(fs_data, excel_filepath=None):
             for item_name in values:
                 if item_name not in existing_items:
                     # 새로운 항목 발견 - 적절한 위치에 삽입
-                    # 세부항목(들여쓰기)은 부모 항목 바로 뒤에 삽입
-                    if item_name.startswith('  '):
-                        # 부모 항목 찾기 (매출원가 또는 판관비)
+                    if item_name.startswith('    '):
+                        # 더블 들여쓰기 (4칸) = 기타영업외수익/비용의 세부항목
+                        # 기타영업외수익 또는 기타영업외비용 바로 뒤에 삽입
                         target_parent = ''
                         insert_idx = len(rows)
+                        for i in range(len(rows)):
+                            if '기타영업외' in rows[i]['항목'] and rows[i]['항목'].startswith('  ') and not rows[i]['항목'].startswith('    '):
+                                target_parent = rows[i]['항목']
+                                insert_idx = i + 1
+                                # 기존 더블 들여쓰기 뒤에 삽입
+                                while insert_idx < len(rows) and rows[insert_idx]['항목'].startswith('    '):
+                                    insert_idx += 1
+                        rows.insert(insert_idx, {'항목': item_name, '부모': target_parent})
+                    elif item_name.startswith('  '):
+                        # 싱글 들여쓰기 (2칸) = 섹션의 하위 항목
+                        target_parent = ''
+                        insert_idx = len(rows)
+                        parent_candidates = ['매출원가', '판매비와관리비', '영업외수익', '영업외비용']
                         for i in range(len(rows) - 1, -1, -1):
                             if rows[i]['항목'].startswith('  '):
                                 continue
-                            elif rows[i]['항목'] == '매출원가' or rows[i]['항목'] == '판매비와관리비':
-                                # 매출원가 또는 판관비 세부항목
+                            elif rows[i]['항목'] in parent_candidates:
                                 target_parent = rows[i]['항목']
                                 insert_idx = i + 1
                                 while insert_idx < len(rows) and rows[insert_idx]['항목'].startswith('  '):
                                     insert_idx += 1
                                 break
-                        # 들여쓰기 있는 항목은 부모 설정
                         rows.insert(insert_idx, {'항목': item_name, '부모': target_parent})
                     else:
                         rows.append({'항목': item_name, '부모': ''})
