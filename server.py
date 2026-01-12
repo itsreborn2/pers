@@ -1858,25 +1858,46 @@ def create_vcm_format(fs_data, excel_filepath=None):
             bs_df = pd.read_excel(excel_filepath, sheet_name='재무상태표', engine='openpyxl')
             print(f"[VCM] 엑셀에서 재무상태표 로드: {len(bs_df)}행, 컬럼: {list(bs_df.columns)}")
 
-            # CIS(포괄손익계산서) 우선, 없으면 IS(손익계산서)
+            # IS(손익계산서) 우선 로드 - 매출, 매출원가, 영업이익 등 기본 손익계산서 항목 포함
+            # 포괄손익계산서(CIS)는 당기순이익부터 시작하여 기본 IS 항목이 없을 수 있음
             try:
-                is_df = pd.read_excel(excel_filepath, sheet_name='포괄손익계산서', engine='openpyxl')
-                print(f"[VCM] 엑셀에서 포괄손익계산서 로드: {len(is_df)}행")
-            except:
                 is_df = pd.read_excel(excel_filepath, sheet_name='손익계산서', engine='openpyxl')
                 print(f"[VCM] 엑셀에서 손익계산서 로드: {len(is_df)}행")
+
+                # 손익계산서에 매출 관련 항목이 있는지 확인
+                has_revenue = False
+                if '계정과목' in is_df.columns:
+                    accounts_str = is_df['계정과목'].astype(str).str.cat(sep=' ')
+                    has_revenue = '매출' in accounts_str or '영업수익' in accounts_str
+
+                if not has_revenue:
+                    # 매출 항목이 없으면 포괄손익계산서 시도
+                    try:
+                        cis_df = pd.read_excel(excel_filepath, sheet_name='포괄손익계산서', engine='openpyxl')
+                        cis_accounts_str = cis_df['계정과목'].astype(str).str.cat(sep=' ') if '계정과목' in cis_df.columns else ''
+                        if '매출' in cis_accounts_str or '영업수익' in cis_accounts_str:
+                            is_df = cis_df
+                            print(f"[VCM] 포괄손익계산서에서 매출 항목 발견, 전환: {len(is_df)}행")
+                    except:
+                        pass
+            except:
+                # 손익계산서 시트가 없으면 포괄손익계산서 로드
+                is_df = pd.read_excel(excel_filepath, sheet_name='포괄손익계산서', engine='openpyxl')
+                print(f"[VCM] 엑셀에서 포괄손익계산서 로드 (손익계산서 없음): {len(is_df)}행")
         except Exception as e:
             print(f"[VCM] 엑셀 파일 읽기 실패, 원본 데이터 사용: {e}")
             bs_df = fs_data.get('bs')
-            is_df = fs_data.get('cis')
+            # IS(손익계산서) 우선, 없으면 CIS(포괄손익계산서)
+            is_df = fs_data.get('is')
             if is_df is None or (isinstance(is_df, pd.DataFrame) and is_df.empty):
-                is_df = fs_data.get('is')
+                is_df = fs_data.get('cis')
     else:
         # 엑셀 파일 없으면 원본 사용
         bs_df = fs_data.get('bs')
-        is_df = fs_data.get('cis')
+        # IS(손익계산서) 우선, 없으면 CIS(포괄손익계산서)
+        is_df = fs_data.get('is')
         if is_df is None or (isinstance(is_df, pd.DataFrame) and is_df.empty):
-            is_df = fs_data.get('is')
+            is_df = fs_data.get('cis')
 
     if bs_df is None or is_df is None:
         print(f"[VCM] 필수 데이터 누락: bs={bs_df is not None}, is={is_df is not None}")
