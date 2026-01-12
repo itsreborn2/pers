@@ -98,7 +98,17 @@
             background: #1d4ed8;
             box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
         }
-        
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+            box-shadow: 0 2px 8px rgba(107, 114, 128, 0.25);
+        }
+
         .btn-danger {
             background: #dc2626;
             color: white;
@@ -118,7 +128,150 @@
             background: #047857;
             box-shadow: 0 2px 8px rgba(5, 150, 105, 0.25);
         }
-        
+
+        .btn-ai {
+            background: linear-gradient(135deg, #8b5cf6, #6366f1);
+            color: white;
+        }
+
+        .btn-ai:hover {
+            background: linear-gradient(135deg, #7c3aed, #4f46e5);
+            box-shadow: 0 2px 8px rgba(139, 92, 246, 0.35);
+        }
+
+        .btn-ai:disabled {
+            background: #a5b4fc;
+            cursor: not-allowed;
+        }
+
+        .btn-large {
+            padding: 14px 28px;
+            font-size: 1rem;
+        }
+
+        /* AI 분석 시작 컨테이너 */
+        .analysis-start-container {
+            text-align: center;
+            padding: 30px 20px;
+            background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+            border-radius: 12px;
+            margin: 10px 0;
+        }
+
+        .analysis-start-description {
+            color: #6b7280;
+            margin-bottom: 16px;
+            font-size: 0.95rem;
+        }
+
+        /* AI 분석 섹션 */
+        .analysis-section {
+            margin-top: 20px;
+            background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+            border: 1px solid #c4b5fd;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .analysis-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .analysis-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: #5b21b6;
+        }
+
+        .analysis-status {
+            font-size: 0.85rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: #ddd6fe;
+            color: #6d28d9;
+        }
+
+        .analysis-status.running {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .analysis-status.completed {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .analysis-status.failed {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .analysis-message {
+            text-align: center;
+            color: #6b7280;
+            font-size: 0.9rem;
+            margin: 8px 0;
+        }
+
+        .analysis-message.loading::after {
+            content: '';
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+
+        .analysis-result {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .analysis-result h1 {
+            font-size: 1.3rem;
+            color: #1e1b4b;
+            border-bottom: 2px solid #8b5cf6;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+        }
+
+        .analysis-result h2 {
+            font-size: 1.1rem;
+            color: #3730a3;
+            margin-top: 20px;
+            margin-bottom: 12px;
+        }
+
+        .analysis-result h3 {
+            font-size: 1rem;
+            color: #4c1d95;
+            margin-top: 16px;
+            margin-bottom: 8px;
+        }
+
+        .analysis-result ul, .analysis-result ol {
+            padding-left: 20px;
+        }
+
+        .analysis-result li {
+            margin-bottom: 6px;
+        }
+
+        .analysis-result strong {
+            color: #5b21b6;
+        }
+
         .btn:disabled {
             opacity: 0.6;
             cursor: not-allowed;
@@ -257,7 +410,82 @@
         .progress-section.show {
             display: block;
         }
-        
+
+        /* 기업개황정보 스타일 */
+        .company-info-section {
+            margin-top: 20px;
+            background: #fafafa;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .company-info-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #374151;
+            margin: 0 0 12px 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .company-info-loading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #6b7280;
+            font-size: 0.9rem;
+            padding: 12px 0;
+        }
+
+        .company-info-loading .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e5e7eb;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .company-info-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .company-info-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .company-info-table td:first-child {
+            width: 120px;
+            color: #6b7280;
+            font-weight: 500;
+            background: #f9fafb;
+        }
+
+        .company-info-table td:last-child {
+            color: #111827;
+        }
+
+        .company-info-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .company-info-table a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+
+        .company-info-table a:hover {
+            text-decoration: underline;
+        }
+
         .selected-company {
             background: #f0f9ff;
             border: 1px solid #bae6fd;
@@ -287,6 +515,24 @@
             background: #2563eb;
             border-radius: 6px;
             transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        /* 분석 진행바 (더 큰 사이즈) */
+        .analysis-progress .progress-bar-container {
+            height: 24px;
+            margin-bottom: 16px;
+        }
+
+        .analysis-progress .progress-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: white;
+            min-width: fit-content;
+            padding: 0 8px;
         }
         
         .progress-message {
@@ -365,19 +611,25 @@
             margin-top: 12px;
             align-items: center;
             justify-content: center;
+            flex-wrap: wrap;
         }
-        
+
         .year-selection label {
             color: #6b7280;
             font-size: 0.85rem;
+            white-space: nowrap;
         }
-        
+
         .year-selection select {
             padding: 8px 12px;
             border: 1px solid #d1d5db;
             border-radius: 6px;
             font-size: 0.85rem;
             background: #fafafa;
+        }
+
+        .year-selection .btn {
+            white-space: nowrap;
         }
         
         /* 미리보기 섹션 */
@@ -622,10 +874,24 @@
                 <select id="startYear"></select>
                 <label>~ 종료 연도:</label>
                 <select id="endYear"></select>
-                <button class="btn btn-primary" id="extractBtn" onclick="startExtraction()">추출 시작</button>
+                <button class="btn btn-secondary" id="extractOnlyBtn" onclick="startExtraction(false)" title="재무상태표와 손익계산서만 추출됩니다. 이후에 추가로 AI 분석이 가능합니다.">재무제표 추출</button>
+                <button class="btn btn-primary" id="extractBtn" onclick="startExtraction(true)" title="AI분석과 재무제표 분석이 모두 한번에 진행됩니다.">통합추출</button>
             </div>
         </div>
-        
+
+        <!-- 기업개황정보 섹션 (독립) -->
+        <div class="company-info-wrapper" id="companyInfoWrapper" style="display: none;">
+            <div class="company-info-section" id="companyInfoSection">
+                <h3 class="company-info-title">기업개황정보</h3>
+                <div class="company-info-loading" id="companyInfoLoading">
+                    <span class="spinner"></span> 기업정보 로딩 중...
+                </div>
+                <table class="company-info-table" id="companyInfoTable" style="display: none;">
+                    <tbody id="companyInfoBody"></tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- 추출 진행 섹션 -->
         <div class="progress-section" id="extractingSection">
             <div class="progress-bar-container">
@@ -639,13 +905,31 @@
         
         <!-- 완료 섹션 -->
         <div class="complete-section" id="completeSection">
-            <div class="complete-icon">✔</div>
-            <p class="complete-message">재무제표 추출 완료</p>
             <div class="action-buttons">
                 <button class="btn btn-success" id="downloadBtn" onclick="downloadFile()">엑셀 다운로드</button>
                 <button class="btn btn-primary" onclick="resetAll()">새로 검색</button>
             </div>
-            
+
+            <!-- AI 분석 섹션 -->
+            <div class="analysis-section" id="analysisSection" style="display: none;">
+                <div class="analysis-header">
+                    <h3>AI 인사이트 분석</h3>
+                    <span class="analysis-status" id="analysisStatus"></span>
+                </div>
+                <!-- AI 분석 시작 버튼 (재무제표만 추출 시 표시) -->
+                <div class="analysis-start-container" id="analysisStartContainer" style="display: none;">
+                    <p class="analysis-start-description">재무제표 데이터를 기반으로 AI가 이상 패턴을 분석하고 인사이트를 제공합니다.</p>
+                    <button class="btn btn-ai btn-large" id="analyzeBtn" onclick="startAnalysis()">AI 인사이트 분석 시작</button>
+                </div>
+                <div class="analysis-progress" id="analysisProgress" style="display: none;">
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="analysisProgressBar">0%</div>
+                    </div>
+                    <p class="analysis-message" id="analysisMessage">분석 준비 중...</p>
+                </div>
+                <div class="analysis-result" id="analysisResult" style="display: none;"></div>
+            </div>
+
             <!-- 미리보기 탭 -->
             <div class="preview-section" id="previewSection">
                 <div class="preview-tabs">
@@ -669,6 +953,8 @@
         let currentTaskId = null;  // 현재 작업 ID
         let statusCheckInterval = null;  // 상태 확인 인터벌
         let previewData = null;  // 미리보기 데이터
+        let isIntegratedMode = false;  // 통합추출 모드 (AI 분석 자동 실행)
+        let isAnalysisCompleted = false;  // AI 분석 완료 여부
         
         // ============================================================
         // 초기화
@@ -847,27 +1133,96 @@
         // ============================================================
         function selectCompany(corpCode, corpName, stockCode, market) {
             selectedCorp = { corpCode, corpName, stockCode, market };
-            
+
             // UI 업데이트
             document.getElementById('searchResults').classList.remove('show');
             document.getElementById('selectedCompanyName').textContent = `${corpName} (${market})`;
             document.getElementById('progressSection').classList.add('show');
+
+            // 기업개황정보 로드
+            loadCompanyInfo(corpCode);
+        }
+
+        // ============================================================
+        // 기업개황정보 로드
+        // ============================================================
+        let companyInfoData = null;  // 기업개황정보 저장용
+
+        async function loadCompanyInfo(corpCode) {
+            const wrapperEl = document.getElementById('companyInfoWrapper');
+            const loadingEl = document.getElementById('companyInfoLoading');
+            const tableEl = document.getElementById('companyInfoTable');
+            const bodyEl = document.getElementById('companyInfoBody');
+
+            // wrapper 표시 및 로딩 표시
+            wrapperEl.style.display = 'block';
+            loadingEl.style.display = 'flex';
+            loadingEl.innerHTML = '<span class="spinner"></span> 기업정보 로딩 중...';
+            tableEl.style.display = 'none';
+            bodyEl.innerHTML = '';
+            companyInfoData = null;
+
+            try {
+                const response = await fetch(`/api/company-info/${corpCode}`);
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.detail || '기업정보 조회 실패');
+                }
+
+                const info = result.data;
+                companyInfoData = info;  // 저장
+
+                // 테이블 렌더링
+                const rows = [
+                    ['회사명', info.corp_name],
+                    ['영문명', info.corp_name_eng],
+                    ['대표자', info.ceo_nm],
+                    ['시장구분', info.market_name],
+                    ['종목코드', info.stock_code || '-'],
+                    ['법인번호', info.jurir_no || '-'],
+                    ['사업자번호', info.bizr_no || '-'],
+                    ['업종코드', info.induty_code || '-'],
+                    ['설립일', info.est_dt_formatted || '-'],
+                    ['결산월', info.acc_mt_formatted || '-'],
+                    ['주소', info.adres || '-'],
+                    ['전화번호', info.phn_no || '-'],
+                    ['홈페이지', info.hm_url ? `<a href="${info.hm_url}" target="_blank">${info.hm_url}</a>` : '-'],
+                ];
+
+                bodyEl.innerHTML = rows
+                    .filter(([label, value]) => value && value !== '-')
+                    .map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`)
+                    .join('');
+
+                // 테이블 표시
+                loadingEl.style.display = 'none';
+                tableEl.style.display = 'table';
+
+            } catch (error) {
+                console.error('기업정보 로드 실패:', error);
+                loadingEl.innerHTML = `<span style="color: #ef4444;">기업정보 로드 실패: ${error.message}</span>`;
+            }
         }
         
         // ============================================================
         // 재무제표 추출 시작
         // ============================================================
-        async function startExtraction() {
+        async function startExtraction(integrated = false) {
             if (!selectedCorp) return;
-            
+
+            // 통합추출 모드 설정
+            isIntegratedMode = integrated;
+            isAnalysisCompleted = false;
+
             const startYear = parseInt(document.getElementById('startYear').value);
             const endYear = parseInt(document.getElementById('endYear').value);
-            
+
             if (startYear > endYear) {
                 showError('시작 연도가 종료 연도보다 클 수 없습니다.');
                 return;
             }
-            
+
             // UI 전환
             document.getElementById('progressSection').classList.remove('show');
             document.getElementById('extractingSection').classList.add('show');
@@ -880,7 +1235,8 @@
                         corp_code: selectedCorp.corpCode,
                         corp_name: selectedCorp.corpName,
                         start_year: startYear,
-                        end_year: endYear
+                        end_year: endYear,
+                        company_info: companyInfoData  // 기업개황정보 추가
                     })
                 });
                 
@@ -983,13 +1339,28 @@
         function showComplete() {
             document.getElementById('extractingSection').classList.remove('show');
             document.getElementById('completeSection').classList.add('show');
-            
+
             // 미리보기 표시
             if (previewData) {
                 showPreviewTab('vcm');  // 기본으로 VCM 포맷 표시
             } else {
-                document.getElementById('previewContent').innerHTML = 
+                document.getElementById('previewContent').innerHTML =
                     '<p class="preview-placeholder">미리보기 데이터가 없습니다.</p>';
+            }
+
+            // AI 분석 섹션 표시
+            document.getElementById('analysisSection').style.display = 'block';
+
+            if (isIntegratedMode) {
+                // 통합추출 모드: 자동으로 AI 분석 시작
+                document.getElementById('analysisStartContainer').style.display = 'none';
+                setTimeout(() => {
+                    startAnalysis();
+                }, 500);
+            } else {
+                // 재무제표만 추출: AI 분석 시작 버튼 표시
+                document.getElementById('analysisStartContainer').style.display = 'block';
+                document.getElementById('analysisStatus').textContent = '';
             }
         }
         
@@ -2741,7 +3112,172 @@
                 <p class="preview-info">* Source: 전자공시시스템 (DART)</p>
             `;
         }
-        
+
+        // ============================================================
+        // AI 인사이트 분석
+        // ============================================================
+        let analysisCheckInterval = null;
+
+        async function startAnalysis() {
+            if (!currentTaskId) return;
+
+            // 시작 버튼 숨기고 진행 표시
+            document.getElementById('analysisStartContainer').style.display = 'none';
+            document.getElementById('analysisSection').style.display = 'block';
+            document.getElementById('analysisProgress').style.display = 'block';
+            document.getElementById('analysisResult').style.display = 'none';
+
+            // 진행바 초기화
+            const progressBar = document.getElementById('analysisProgressBar');
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+
+            // 메시지에 로딩 애니메이션 추가
+            const messageEl = document.getElementById('analysisMessage');
+            messageEl.textContent = '분석 준비 중';
+            messageEl.classList.add('loading');
+
+            const statusEl = document.getElementById('analysisStatus');
+            statusEl.textContent = '진행 중';
+            statusEl.className = 'analysis-status running';
+
+            try {
+                const response = await fetch(`/api/analyze/${currentTaskId}`, {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    throw new Error('분석 시작 실패');
+                }
+
+                // 상태 체크 시작
+                startAnalysisStatusCheck();
+
+            } catch (error) {
+                console.error('분석 시작 실패:', error);
+                statusEl.textContent = '실패';
+                statusEl.className = 'analysis-status failed';
+                const messageEl = document.getElementById('analysisMessage');
+                messageEl.textContent = error.message;
+                messageEl.classList.remove('loading');
+                // 실패 시 다시 시작 버튼 표시
+                document.getElementById('analysisStartContainer').style.display = 'block';
+                document.getElementById('analysisProgress').style.display = 'none';
+            }
+        }
+
+        function startAnalysisStatusCheck() {
+            if (analysisCheckInterval) {
+                clearInterval(analysisCheckInterval);
+            }
+
+            analysisCheckInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/analyze-status/${currentTaskId}`);
+
+                    // 404 에러 처리 (작업을 찾을 수 없음)
+                    if (response.status === 404) {
+                        stopAnalysisStatusCheck();
+                        showAnalysisError('작업을 찾을 수 없습니다. 페이지를 새로고침해주세요.');
+                        return;
+                    }
+
+                    const data = await response.json();
+
+                    // 진행률 업데이트
+                    const progressBar = document.getElementById('analysisProgressBar');
+                    progressBar.style.width = `${data.progress}%`;
+                    progressBar.textContent = `${data.progress}%`;
+
+                    const messageEl = document.getElementById('analysisMessage');
+                    messageEl.textContent = data.message || '분석 중';
+                    messageEl.classList.add('loading');
+
+                    if (data.status === 'completed') {
+                        stopAnalysisStatusCheck();
+                        showAnalysisResult(data.result);
+                    } else if (data.status === 'failed') {
+                        stopAnalysisStatusCheck();
+                        showAnalysisError(data.message);
+                    }
+
+                } catch (error) {
+                    console.error('상태 확인 실패:', error);
+                }
+            }, 2000);  // 2초마다 체크
+        }
+
+        function stopAnalysisStatusCheck() {
+            if (analysisCheckInterval) {
+                clearInterval(analysisCheckInterval);
+                analysisCheckInterval = null;
+            }
+        }
+
+        function showAnalysisResult(result) {
+            const statusEl = document.getElementById('analysisStatus');
+            statusEl.textContent = '완료';
+            statusEl.className = 'analysis-status completed';
+
+            // 로딩 애니메이션 제거
+            document.getElementById('analysisMessage').classList.remove('loading');
+            document.getElementById('analysisProgress').style.display = 'none';
+            document.getElementById('analysisStartContainer').style.display = 'none';
+
+            const resultEl = document.getElementById('analysisResult');
+            resultEl.style.display = 'block';
+
+            if (result && result.report) {
+                // 마크다운을 HTML로 변환 (간단한 변환)
+                resultEl.innerHTML = markdownToHtml(result.report);
+            } else {
+                resultEl.innerHTML = '<p>분석 결과가 없습니다.</p>';
+            }
+
+            isAnalysisCompleted = true;
+        }
+
+        function showAnalysisError(message) {
+            const statusEl = document.getElementById('analysisStatus');
+            statusEl.textContent = '실패';
+            statusEl.className = 'analysis-status failed';
+
+            // 로딩 애니메이션 제거
+            document.getElementById('analysisMessage').classList.remove('loading');
+            document.getElementById('analysisProgress').style.display = 'none';
+
+            const resultEl = document.getElementById('analysisResult');
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = `<p style="color: #dc2626;">분석 실패: ${message}</p>`;
+
+            // 실패 시 다시 시작 버튼 표시
+            document.getElementById('analysisStartContainer').style.display = 'block';
+        }
+
+        function markdownToHtml(markdown) {
+            // 간단한 마크다운 → HTML 변환
+            let html = markdown
+                // 헤더
+                .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+                // 굵은 글씨
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                // 기울임
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                // 리스트
+                .replace(/^- (.*$)/gm, '<li>$1</li>')
+                .replace(/^(\d+)\. (.*$)/gm, '<li>$2</li>')
+                // 줄바꿈
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/\n/g, '<br>');
+
+            // 리스트 래핑
+            html = html.replace(/(<li>.*<\/li>)+/g, '<ul>$&</ul>');
+
+            return `<p>${html}</p>`;
+        }
+
         function downloadFile() {
             if (!currentTaskId) return;
             // 페이지 이동 없이 다운로드 (화면 유지)
@@ -2758,24 +3294,48 @@
         // ============================================================
         function resetAll() {
             stopStatusCheck();
-            
+            stopAnalysisStatusCheck();
+
             // 작업 삭제
             if (currentTaskId) {
                 fetch(`/api/task/${currentTaskId}`, { method: 'DELETE' }).catch(() => {});
                 currentTaskId = null;
             }
-            
+
             selectedCorp = null;
             previewData = null;
-            
+            companyInfoData = null;
+
             // UI 초기화
             document.getElementById('companyInput').value = '';
             document.getElementById('searchResults').classList.remove('show');
             document.getElementById('progressSection').classList.remove('show');
             document.getElementById('extractingSection').classList.remove('show');
             document.getElementById('completeSection').classList.remove('show');
+            document.getElementById('companyInfoWrapper').style.display = 'none';
             hideError();
-            
+
+            // 기업개황정보 초기화
+            document.getElementById('companyInfoLoading').style.display = 'flex';
+            document.getElementById('companyInfoLoading').innerHTML = '<span class="spinner"></span> 기업정보 로딩 중...';
+            document.getElementById('companyInfoTable').style.display = 'none';
+            document.getElementById('companyInfoBody').innerHTML = '';
+
+            // AI 분석 섹션 초기화
+            document.getElementById('analysisSection').style.display = 'none';
+            document.getElementById('analysisStartContainer').style.display = 'none';
+            document.getElementById('analysisProgress').style.display = 'none';
+            document.getElementById('analysisResult').style.display = 'none';
+            document.getElementById('analysisStatus').textContent = '';
+            document.getElementById('analysisStatus').className = 'analysis-status';
+            document.getElementById('analysisMessage').classList.remove('loading');
+            document.getElementById('analysisMessage').textContent = '분석 준비 중';
+            const analysisProgressBar = document.getElementById('analysisProgressBar');
+            analysisProgressBar.style.width = '0%';
+            analysisProgressBar.textContent = '0%';
+            isIntegratedMode = false;
+            isAnalysisCompleted = false;
+
             // 진행바 초기화
             const progressBar = document.getElementById('progressBar');
             progressBar.style.width = '0%';

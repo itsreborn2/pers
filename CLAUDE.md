@@ -1,5 +1,38 @@
 # PERS 프로젝트 개발 규칙
 
+## 문서화 규칙 (★필수★)
+
+### 핵심 원칙
+**메이저 수정, 새 스크립트 추가, API 변경 시 반드시 이 CLAUDE.md 파일에 기록하라.**
+
+### 기록 대상
+- 새로운 Python 스크립트 추가
+- 새로운 API 엔드포인트 추가
+- UI 구조 변경 (새 섹션, 탭 추가 등)
+- 데이터 흐름 변경
+- 엑셀 시트 구조 변경
+- 주요 버그 수정 및 해결 방법
+
+### 기록 형식
+```markdown
+## [기능명]
+
+### 개요
+[1-2줄 설명]
+
+### 데이터 흐름
+1. 프론트엔드: ...
+2. 백엔드: ...
+
+### 관련 파일
+- `파일명`: 역할
+
+### API (해당 시)
+- `METHOD /api/endpoint`: 설명
+```
+
+---
+
 ## 백엔드/프론트엔드 동기화 규칙
 
 ### 핵심 원칙
@@ -80,11 +113,139 @@
 
 ```
 /home/servermanager/pers/
-├── server.py          # 백엔드 API + VCM 생성
-├── index.html         # 프론트엔드 UI
-├── output/            # 생성된 Excel 파일
-└── CLAUDE.md          # 이 파일
+├── server.py                    # 백엔드 API + VCM 생성
+├── index.html                   # 프론트엔드 UI
+├── .env                         # API 키 (DART, Gemini)
+├── dart_financial_extractor.py  # 재무제표 추출 모듈 (복잡)
+├── dart_company_info.py         # 기업개황정보 전용 모듈 (경량)
+├── financial_insight_analyzer.py # AI 인사이트 분석 모듈
+├── output/                      # 생성된 Excel 파일
+└── CLAUDE.md                    # 이 파일
 ```
+
+---
+
+## 기업개황정보 기능
+
+### 개요
+DART API에서 기업개황정보만 따로 가져오는 경량 기능. 재무제표 추출 전에 회사 기본 정보를 빠르게 확인할 수 있음.
+
+### 데이터 흐름
+
+1. **프론트엔드 (index.html)**
+   - 회사 검색 → 회사 클릭 시 `selectCompany()` 호출
+   - `loadCompanyInfo(corpCode)` 함수로 API 호출
+   - `#companyInfoWrapper` (독립 섹션)에 테이블 렌더링
+   - `companyInfoData` 전역 변수에 저장 → 추출 시 서버로 전송
+
+2. **백엔드 (server.py)**
+   - `GET /api/company-info/{corp_code}` 엔드포인트로 조회
+   - `POST /api/extract` 요청 시 `company_info` 필드로 전달받음
+   - `save_to_excel()` 함수에서 "기업개황" 시트로 저장
+
+### UI 구조
+- `#companyInfoWrapper`: 독립 섹션 (progressSection 밖)
+- 회사 선택 시 표시, 추출 진행/완료 중에도 **계속 유지**
+- "새로 검색" 시에만 숨김
+
+### 엑셀 시트 순서
+1. **기업개황** ← 기업개황정보 (신규)
+2. 재무상태표
+3. 손익계산서
+4. 포괄손익계산서
+5. 현금흐름표
+6. 주석들 (손익주석, 재무주석, 현금주석)
+7. VCM전용포맷
+8. 복사용테이블
+
+### API 응답 필드
+
+| 필드 | 설명 |
+|------|------|
+| corp_code | DART 고유번호 |
+| corp_name | 회사명 |
+| corp_name_eng | 영문 회사명 |
+| stock_code | 종목코드 (상장사만) |
+| ceo_nm | 대표자명 |
+| market_name | 시장구분 (코스피/코스닥/코넥스/기타) |
+| jurir_no | 법인번호 |
+| bizr_no | 사업자번호 |
+| adres | 주소 |
+| hm_url | 홈페이지 |
+| phn_no | 전화번호 |
+| induty_code | 업종코드 |
+| est_dt | 설립일 (YYYYMMDD) |
+| est_dt_formatted | 설립일 (YYYY-MM-DD) |
+| acc_mt | 결산월 |
+| acc_mt_formatted | 결산월 (예: 12월) |
+
+### 전용 스크립트 (dart_company_info.py)
+
+기존 `dart_financial_extractor.py`가 재무제표 추출에 특화되어 무거우므로, 기업개황정보만 빠르게 조회하는 경량 스크립트.
+
+```python
+from dart_company_info import DartCompanyInfo
+
+client = DartCompanyInfo()
+
+# 회사 검색
+results = client.search("삼성전자")
+
+# 기업개황정보 조회
+info = client.get_info(results[0]['corp_code'])
+print(info.corp_name, info.ceo_nm)
+
+# 종목코드로 조회 (상장사)
+info = client.get_info_by_stock_code("005930")
+```
+
+---
+
+## AI 인사이트 분석 기능
+
+### 개요
+LLM을 활용하여 재무제표의 이상 패턴을 감지하고, 웹 검색을 통해 원인을 파악하여 M&A 실사용 인사이트를 생성합니다.
+
+### 아키텍처
+```
+[재무 데이터 + 기업개황]
+         ↓
+[LLM 0: 업종 파악] (Gemini Flash + Search)
+         ↓
+[LLM 1: 이상 감지] (Gemini Pro)
+         ↓
+[LLM 2: 검색 태스크 생성] (Gemini Pro)
+         ↓
+[병렬 검색 에이전트들] (Gemini Flash + Search)
+├── 기업 특정 검색
+├── 산업 동향 검색
+├── 거시경제 검색
+└── 경쟁사 비교 검색
+         ↓
+[LLM 3: 종합 보고서 생성] (Gemini Pro)
+```
+
+### 관련 파일
+- `financial_insight_analyzer.py`: AI 분석 메인 스크립트
+- `.env`: Gemini API 키 (`GEMINI_API_KEY`)
+
+### API 엔드포인트
+- `POST /api/analyze/{task_id}`: 분석 시작
+- `GET /api/analyze-status/{task_id}`: 분석 상태 조회
+
+### UI
+- 추출 완료 후 "AI 인사이트 분석" 버튼 표시
+- `#analysisSection`: 분석 결과 표시 영역
+- 마크다운 형식의 보고서를 HTML로 렌더링
+
+### 감지 대상 (M&A 실사 관점)
+- 전년 대비 급격한 변동 (±20% 이상)
+- 흑자 ↔ 적자 전환
+- 영업이익 vs 당기순이익 괴리 (일회성 비용/수익)
+- 매출 성장 vs 이익률 불일치
+- 차입금/부채 급변
+- 운전자본(NWC) 이상 변동
+- 영업외비용 급증 (과징금, 소송 등)
 
 ---
 

@@ -56,6 +56,7 @@ class ExtractRequest(BaseModel):
     corp_name: str  # 회사명 (파일명용)
     start_year: int = 2020
     end_year: Optional[int] = None
+    company_info: Optional[Dict[str, Any]] = None  # 기업개황정보
 
 
 # ============================================================
@@ -200,12 +201,82 @@ def _get_market_name(corp) -> str:
     return "비상장"
 
 
+@app.get("/api/company-info/{corp_code}")
+async def get_company_info(corp_code: str):
+    """
+    기업개황정보 조회 API
+
+    DART API를 통해 기업의 상세 개황정보를 조회합니다.
+    - 회사명, 영문명, 대표자
+    - 법인번호, 사업자번호
+    - 주소, 홈페이지, 전화번호
+    - 업종, 설립일, 결산월 등
+    """
+    import traceback
+
+    try:
+        print(f"[COMPANY_INFO] 조회 요청: corp_code={corp_code}")
+
+        corp_list = get_corp_list()
+        corp = corp_list.find_by_corp_code(corp_code)
+
+        if not corp:
+            raise HTTPException(status_code=404, detail="기업을 찾을 수 없습니다.")
+
+        # 상세 정보 로드 (DART API 호출)
+        corp.load()
+
+        # 응답 데이터 구성
+        info = {
+            "corp_code": corp.corp_code or "",
+            "corp_name": corp.corp_name or "",
+            "corp_name_eng": getattr(corp, 'corp_name_eng', "") or "",
+            "stock_code": corp.stock_code or "",
+            "stock_name": getattr(corp, 'stock_name', "") or "",
+            "ceo_nm": getattr(corp, 'ceo_nm', "") or "",
+            "corp_cls": corp.corp_cls or "",
+            "market_name": _get_market_name(corp),
+            "jurir_no": getattr(corp, 'jurir_no', "") or "",
+            "bizr_no": getattr(corp, 'bizr_no', "") or "",
+            "adres": getattr(corp, 'adres', "") or "",
+            "hm_url": getattr(corp, 'hm_url', "") or "",
+            "ir_url": getattr(corp, 'ir_url', "") or "",
+            "phn_no": getattr(corp, 'phn_no', "") or "",
+            "fax_no": getattr(corp, 'fax_no', "") or "",
+            "induty_code": getattr(corp, 'induty_code', "") or "",
+            "est_dt": getattr(corp, 'est_dt', "") or "",
+            "acc_mt": getattr(corp, 'acc_mt', "") or "",
+        }
+
+        # 날짜 포맷팅
+        if info["est_dt"] and len(info["est_dt"]) == 8:
+            info["est_dt_formatted"] = f"{info['est_dt'][:4]}-{info['est_dt'][4:6]}-{info['est_dt'][6:]}"
+        else:
+            info["est_dt_formatted"] = info["est_dt"]
+
+        # 결산월 포맷팅
+        if info["acc_mt"]:
+            info["acc_mt_formatted"] = f"{info['acc_mt']}월"
+        else:
+            info["acc_mt_formatted"] = ""
+
+        print(f"[COMPANY_INFO] 조회 완료: {info['corp_name']}")
+        return {"success": True, "data": info}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[COMPANY_INFO ERROR] {e}")
+        print(f"[COMPANY_INFO ERROR] Traceback:\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"기업개황정보 조회 실패: {str(e)}")
+
+
 @app.post("/api/extract")
 async def start_extraction(request: ExtractRequest, background_tasks: BackgroundTasks):
     """재무제표 추출 시작 API"""
     # 작업 ID 생성
     task_id = str(uuid.uuid4())
-    
+
     # 작업 상태 초기화
     TASKS[task_id] = {
         "status": "pending",
@@ -213,9 +284,10 @@ async def start_extraction(request: ExtractRequest, background_tasks: Background
         "message": "작업 대기 중...",
         "file_path": None,
         "cancelled": False,
-        "corp_name": request.corp_name
+        "corp_name": request.corp_name,
+        "company_info": request.company_info  # 기업개황정보 저장
     }
-    
+
     # 백그라운드에서 추출 작업 실행
     background_tasks.add_task(
         extract_financial_data,
@@ -223,9 +295,10 @@ async def start_extraction(request: ExtractRequest, background_tasks: Background
         request.corp_code,
         request.corp_name,
         request.start_year,
-        request.end_year
+        request.end_year,
+        request.company_info  # 기업개황정보 전달
     )
-    
+
     return {"success": True, "task_id": task_id}
 
 
@@ -234,7 +307,8 @@ async def extract_financial_data(
     corp_code: str,
     corp_name: str,
     start_year: int,
-    end_year: Optional[int]
+    end_year: Optional[int],
+    company_info: Optional[Dict[str, Any]] = None
 ):
     """재무제표 추출 백그라운드 작업"""
     import traceback
@@ -312,10 +386,10 @@ async def extract_financial_data(
         filename = f"{corp_name}_재무제표_{timestamp}.xlsx"
         filepath = os.path.join("output", filename)
         
-        # 엑셀 저장
+        # 엑셀 저장 (기업개황정보 포함)
         await loop.run_in_executor(
             None,
-            lambda: save_to_excel(fs_data, filepath)
+            lambda: save_to_excel(fs_data, filepath, company_info)
         )
         
         # 취소 확인
@@ -3763,7 +3837,7 @@ def cleanup_old_excel_files(output_dir='output', days=7):
         print(f"[Cleanup] 파일 정리 실패: {e}")
 
 
-def save_to_excel(fs_data, filepath: str):
+def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]] = None):
     """재무제표를 엑셀 파일로 저장 (주석 테이블 포함)"""
     # 엑셀 저장 전 오래된 파일 삭제
     cleanup_old_excel_files()
@@ -3774,8 +3848,35 @@ def save_to_excel(fs_data, filepath: str):
         'cis': '포괄손익계산서',
         'cf': '현금흐름표'
     }
-    
+
     with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+        # 기업개황정보 시트 (가장 먼저)
+        if company_info:
+            try:
+                info_rows = [
+                    ['항목', '내용'],
+                    ['회사명', company_info.get('corp_name', '')],
+                    ['영문명', company_info.get('corp_name_eng', '')],
+                    ['대표자', company_info.get('ceo_nm', '')],
+                    ['시장구분', company_info.get('market_name', '')],
+                    ['종목코드', company_info.get('stock_code', '')],
+                    ['DART고유번호', company_info.get('corp_code', '')],
+                    ['법인번호', company_info.get('jurir_no', '')],
+                    ['사업자번호', company_info.get('bizr_no', '')],
+                    ['업종코드', company_info.get('induty_code', '')],
+                    ['설립일', company_info.get('est_dt_formatted', '')],
+                    ['결산월', company_info.get('acc_mt_formatted', '')],
+                    ['주소', company_info.get('adres', '')],
+                    ['전화번호', company_info.get('phn_no', '')],
+                    ['팩스번호', company_info.get('fax_no', '')],
+                    ['홈페이지', company_info.get('hm_url', '')],
+                    ['IR페이지', company_info.get('ir_url', '')],
+                ]
+                info_df = pd.DataFrame(info_rows[1:], columns=info_rows[0])
+                info_df.to_excel(writer, sheet_name='기업개황', index=False)
+                print(f"[Excel] 기업개황 시트 저장 완료")
+            except Exception as e:
+                print(f"[Excel] 기업개황 시트 저장 실패: {e}")
         for key, name in sheet_names.items():
             try:
                 df = fs_data[key]
@@ -3901,6 +4002,112 @@ async def cancel_task(task_id: str):
     cleanup_task(task_id)
     
     return {"success": True, "message": "작업이 취소되었습니다."}
+
+
+# ============================================================
+# AI 인사이트 분석 API
+# ============================================================
+@app.post("/api/analyze/{task_id}")
+async def analyze_financial_data(task_id: str):
+    """
+    재무제표 AI 분석 시작 API
+
+    추출 완료된 재무 데이터를 AI로 분석하여 인사이트를 생성합니다.
+    """
+    import threading
+    import asyncio
+
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
+
+    if task['status'] != 'completed':
+        raise HTTPException(status_code=400, detail="재무제표 추출이 완료되지 않았습니다.")
+
+    # 분석 상태 초기화
+    task['analysis_status'] = 'running'
+    task['analysis_progress'] = 0
+    task['analysis_message'] = '분석 준비 중'
+    task['analysis_result'] = None
+
+    # 별도 스레드에서 async 함수 실행 (요청 종료 후에도 계속 실행)
+    def run_in_thread():
+        asyncio.run(run_financial_analysis(task_id))
+
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+
+    print(f"[ANALYSIS] 분석 스레드 시작됨: task_id={task_id}")
+
+    return {"success": True, "message": "AI 분석이 시작되었습니다."}
+
+
+async def run_financial_analysis(task_id: str):
+    """AI 분석 백그라운드 작업"""
+    import traceback
+
+    print(f"[ANALYSIS] 분석 백그라운드 작업 시작: task_id={task_id}")
+
+    task = TASKS.get(task_id)
+    if not task:
+        print(f"[ANALYSIS ERROR] Task not found: {task_id}")
+        return
+
+    # 진행 상태 업데이트 콜백
+    def update_progress(progress: int, message: str):
+        task['analysis_progress'] = progress
+        task['analysis_message'] = message
+        print(f"[ANALYSIS] Progress: {progress}% - {message}")
+
+    try:
+        print("[ANALYSIS] FinancialInsightAnalyzer 임포트 중...")
+        from financial_insight_analyzer import FinancialInsightAnalyzer
+
+        update_progress(5, '[1/5] 분석기 초기화 중')
+
+        analyzer = FinancialInsightAnalyzer()
+
+        # 재무 데이터와 기업 정보 가져오기
+        preview_data = task.get('preview_data', {})
+        company_info = task.get('company_info', {})
+
+        # company_info가 없으면 기본값 설정
+        if not company_info:
+            company_info = {
+                'corp_name': task.get('corp_name', '알 수 없음'),
+                'induty_code': ''
+            }
+
+        # 분석 실행 (콜백 전달)
+        result = await analyzer.analyze(preview_data, company_info, update_progress)
+
+        task['analysis_status'] = 'completed'
+        task['analysis_progress'] = 100
+        task['analysis_message'] = '분석 완료'
+        task['analysis_result'] = result
+
+    except Exception as e:
+        print(f"[ANALYSIS ERROR] {e}")
+        print(traceback.format_exc())
+        task['analysis_status'] = 'failed'
+        task['analysis_message'] = f'분석 실패: {str(e)}'
+        task['analysis_result'] = None
+
+
+@app.get("/api/analyze-status/{task_id}")
+async def get_analysis_status(task_id: str):
+    """AI 분석 상태 조회 API"""
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
+
+    return {
+        "success": True,
+        "status": task.get('analysis_status', 'not_started'),
+        "progress": task.get('analysis_progress', 0),
+        "message": task.get('analysis_message', ''),
+        "result": task.get('analysis_result')
+    }
 
 
 @app.get("/api/download/{task_id}")
