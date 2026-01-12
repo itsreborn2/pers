@@ -1,0 +1,28 @@
+# DART 재무제표 추출 프로젝트 규칙
+
+## 서버 설정 (중요!)
+
+**절대 잊지 말 것:**
+- Uvicorn 서버는 항상 **포트 8000**에서 실행
+- Nginx는 **localhost:8000**로 프록시
+- 설정 파일: `/etc/nginx/sites-available/pers.moatai.app`
+- 502 에러 = 포트 불일치 확인!
+
+**상세 문서**: `SERVER_SETUP.md` 참조
+
+## 서버 시작 명령어
+```bash
+uvicorn server:app --host 0.0.0.0 --port 8000
+```
+
+## 주요 파일
+- `server.py`: FastAPI 백엔드 서버
+- `index.html`: 프론트엔드 (VCM 전용 포맷 포함)
+- `SERVER_SETUP.md`: 서버 설정 및 문제 해결 문서
+- `output/`: 생성된 재무제표 엑셀 파일
+
+## VCM 포맷 관련
+- 서버 함수: `create_vcm_format()` (server.py:1641)
+- 재무상태표 + 손익계산서 통합 생성
+- 원 단위로 저장, 프론트에서 동적 표시
+- 엑셀 시트명: "VCM전용포맷"
