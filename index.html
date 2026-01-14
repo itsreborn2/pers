@@ -2210,8 +2210,8 @@
                     return (type === 'subitem' || type === 'percent') ? 'sub-item' : '';
                 }
 
-                // 테이블 헤더 (단위: 천만원 - 백엔드에서 변환됨)
-                let headerHtml = `<tr><th>(단위: 천만원)</th>`;
+                // 테이블 헤더 (단위: 백만원 - 백엔드에서 변환됨)
+                let headerHtml = `<tr><th>(단위: 백만원)</th>`;
                 years.forEach(y => { headerHtml += `<th>${y}</th>`; });
                 headerHtml += '</tr>';
 

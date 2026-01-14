@@ -3059,13 +3059,34 @@ def create_vcm_format(fs_data, excel_filepath=None):
         sections = all_sections.get(year_str, {'유동자산': [], '비유동자산': [], '유동부채': [], '비유동부채': [], '자본': [], '총계': {}})
 
         # ========== 자산 항목 (섹션 기반) ==========
-        # 유동자산 섹션에서 항목 찾기
-        유동자산_items = sections['유동자산']
-        비유동자산_items = sections['비유동자산']
-        유동부채_items = sections['유동부채']
-        비유동부채_items = sections['비유동부채']
+        # 유동자산 섹션에서 항목 찾기 (복사본 생성 - fallback 항목 추가용)
+        유동자산_items = list(sections['유동자산'])
+        비유동자산_items = list(sections['비유동자산'])
+        유동부채_items = list(sections['유동부채'])
+        비유동부채_items = list(sections['비유동부채'])
         자본_items = sections['자본']
         총계 = sections['총계']
+
+        # 섹션 경계 밖의 항목을 find_bs_val로 찾아 섹션에 추가하는 헬퍼 함수
+        def add_fallback_to_section(section_items, item_name, keywords, excludes=[]):
+            """섹션에 없는 항목을 find_bs_val로 찾아서 추가"""
+            if not find_in_section(section_items, keywords, excludes):
+                val = find_bs_val(keywords, year, excludes)
+                if val and val != 0:
+                    section_items.append({'name': item_name, 'value': val})
+                    print(f"[VCM FALLBACK] {year_str} {item_name}: {val:,.0f} 추가")
+                    return val
+            return None
+
+        # 유동자산 fallback 항목 추가 (섹션 경계 밖 데이터 보완)
+        add_fallback_to_section(유동자산_items, '단기금융상품', ['단기금융상품'])
+        add_fallback_to_section(유동자산_items, '매출채권', ['매출채권'], ['장기', '손실', '처분'])
+        add_fallback_to_section(유동자산_items, '단기대여금', ['단기대여금'])
+
+        # 유동부채 fallback 항목 추가
+        add_fallback_to_section(유동부채_items, '단기차입금', ['단기차입금'])
+        add_fallback_to_section(유동부채_items, '매입채무', ['매입채무'], ['장기'])
+        add_fallback_to_section(유동부채_items, '미지급금', ['미지급금'], ['장기'])
 
         # 유동자산 총계 (섹션 합계 또는 총계에서)
         유동자산 = 총계.get('유동자산') or sum(item['value'] for item in 유동자산_items) or find_bs_val(['유동자산'], year, ['비유동']) or 0
@@ -3666,13 +3687,13 @@ def create_vcm_format(fs_data, excel_filepath=None):
     for row in all_rows:
         row['타입'] = get_item_type(row.get('항목', ''))
 
-    # ========== 복사용테이블 생성 (단위: 천만원, 포맷팅 완료) ==========
+    # ========== 복사용테이블 생성 (단위: 백만원, 포맷팅 완료) ==========
     # 규칙:
     # - 부모 없는 항목 → 표시
     # - IS 섹션(매출, 매출원가, 판관비, 영업외수익/비용)의 하위항목 → 표시
     # - 그 외 (BS 세부항목, 기타XXX 하위, NWC/NetDebt 하위) → 제외 (툴팁용)
     display_rows = []
-    unit_divisor = 10000000  # 원 → 천만원 (1천만 = 10,000,000)
+    unit_divisor = 1000000  # 원 → 백만원 (1백만 = 1,000,000)
 
     # IS 섹션: 하위항목 표시 허용
     is_sections_with_subitems = ['매출', '매출원가', '판매비와관리비', '영업외수익', '영업외비용']
@@ -3706,7 +3727,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     # 퍼센트는 그대로 (0.127 → "12.7%")
                     display_row[col] = f"{val * 100:.1f}%" if isinstance(val, (int, float)) and val < 1 else val
                 else:
-                    # 숫자는 천만원 단위로 변환하고 포맷팅
+                    # 숫자는 백만원 단위로 변환하고 포맷팅
                     converted = val / unit_divisor
                     # 소수점 1자리까지 표시, 천 단위 콤마 (0.0이면 빈값 처리)
                     if abs(converted) < 0.05:
