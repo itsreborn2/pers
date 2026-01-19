@@ -43,8 +43,8 @@
 1. **백엔드 (server.py)**
    - `create_vcm_format()` 함수에서 VCM 데이터 생성
    - Excel 파일에 2개 시트 저장:
-     - `VCM전용포맷`: 메타데이터 포함 (항목, 타입, 부모, FY연도...)
-     - `복사용테이블`: 프론트 표시용 (항목, FY연도... 단위: 백만원)
+     - `Frontdata`: 메타데이터 포함 (항목, 타입, 부모, FY연도...)
+     - `Financials`: 프론트 표시용 (항목, FY연도... 단위: 백만원)
    - `preview_data['vcm']`, `preview_data['vcm_display']`로 API 응답에 포함
 
 2. **프론트엔드 (index.html)**
@@ -52,12 +52,61 @@
    - `vcm` 메타데이터에서 타입 정보 참조 (category, subitem, total, highlight)
    - 빈 행은 백엔드에서 필터링되어 프론트에 전달되지 않음
 
+### 엑셀 시트 순서
+1. 기업개황
+2. Financials (표시용)
+3. 재무분석 AI (분석 후 추가)
+4. 재무상태표
+5. 손익계산서
+6. 현금흐름표
+7. 주석들...
+8. Frontdata (메타데이터) ← 맨 끝
+
+---
+
+## 데이터-엑셀 동기화 규칙 (★필수★)
+
+### 핵심 원칙
+**프론트엔드/API에 데이터 필드를 추가하거나 변경할 때, 엑셀 저장 함수도 함께 수정해야 한다.**
+**UI 텍스트(탭명, 버튼명 등)를 변경할 때, 해당하는 엑셀 시트명도 반드시 함께 변경해야 한다.**
+
+### 동기화 대상
+- 기업개황정보 필드 추가/변경 → `save_to_excel()` 함수의 "기업개황" 시트
+- 재무제표 데이터 필드 추가 → 해당 시트 저장 로직
+- VCM 포맷 변경 → `create_vcm_format()` 함수
+- **UI 탭명/메뉴명 변경 → 엑셀 시트명도 동일하게 변경**
+
+### UI-엑셀 시트명 매핑
+| UI 탭/메뉴명 | 엑셀 시트명 | 설명 |
+|-------------|------------|------|
+| Financials | Financials | 표시용 (단위: 백만원) |
+| 재무분석 AI | 재무분석 AI | AI 분석 보고서 |
+| - | Frontdata | 메타데이터 (타입, 부모 등) |
+
+### 체크리스트
+새 데이터 필드 추가 시:
+1. ☐ API 응답에 필드 추가
+2. ☐ 프론트엔드 UI에 표시
+3. ☐ **엑셀 저장 함수에 추가** ← 누락하기 쉬움!
+
+UI 텍스트 변경 시:
+1. ☐ index.html UI 텍스트 변경
+2. ☐ **server.py 엑셀 시트명 변경** ← 누락하기 쉬움!
+
+### 관련 코드 위치
+- 엑셀 저장: `server.py` 내 `save_to_excel()` 함수
+- 기업개황 시트: `info_rows` 리스트 (line 4323 부근)
+
+### 참고
+- 애매한 경우 사용자에게 "엑셀에도 저장해야 할까요?" 질문하기
+- 예시: 업종명(induty_name) 추가 시 프론트엔드에만 표시하고 엑셀 누락 → 버그
+
 ---
 
 ## VCM 표시 규칙 (★중요★)
 
 ### 핵심 원칙
-**프론트엔드는 복사용테이블을 그대로 렌더링한다. 모든 필터링/그룹핑은 백엔드에서 처리.**
+**프론트엔드는 Financials 시트(표시용)를 그대로 렌더링한다. 모든 필터링/그룹핑은 백엔드에서 처리.**
 
 ### 항목 표시 개수 제한
 
@@ -77,29 +126,25 @@
 3. **나머지**는 "기타XXX"로 합산
 4. 합산된 항목들은 **툴팁**에 세부 내역 표시
 
-### 복사용테이블 생성 규칙
+### Financials 시트 생성 규칙
 - 단위: **백만원** (백엔드에서 변환 완료)
 - 숫자 포맷: 천 단위 콤마 (예: 1,234)
 - 빈 행: **제외** (모든 연도에 값이 없는 행)
-- 타입별 스타일링은 프론트엔드에서 vcm 메타데이터 참조
+- 타입별 스타일링은 프론트엔드에서 Frontdata 메타데이터 참조
 
-### 복사용테이블 필터링 규칙
+### Financials 시트 필터링 규칙
 
 **표시되는 항목:**
 1. `부모` 없는 항목 → 표시 (메인 항목)
-2. IS 섹션 하위항목 → 표시:
-   - `부모='매출'`
-   - `부모='매출원가'`
-   - `부모='판매비와관리비'`
-   - `부모='영업외수익'`
-   - `부모='영업외비용'`
+2. BS/IS 섹션 하위항목 → 표시 (들여쓰기):
+   - BS: `부모='유동자산'`, `'비유동자산'`, `'유동부채'`, `'비유동부채'`, `'자본'`
+   - IS: `부모='매출'`, `'매출원가'`, `'판매비와관리비'`, `'영업외수익'`, `'영업외비용'`
 
 **제외되는 항목 (툴팁용):**
-- BS 세부항목 (예: 현금및현금성자산 하위의 현금, 당좌예금 등)
 - 기타XXX 하위항목 (예: 기타유동자산 하위 항목들)
-- NWC, Net Debt 하위항목
+- NWC, Net Debt 하위항목 ([NWC], [NetDebt] 접미사 포함)
 
-**코드 위치:** `server.py` 내 `create_vcm_format()` 함수의 복사용테이블 생성 부분
+**코드 위치:** `server.py` 내 `create_vcm_format()` 함수의 Financials 시트 생성 부분
 
 ### 주의사항
 
@@ -114,11 +159,13 @@
 ```
 /home/servermanager/pers/
 ├── server.py                    # 백엔드 API + VCM 생성
+├── database.py                  # SQLite DB 모듈 (사용자/사용량 관리)
+├── financial_data.db            # SQLite 데이터베이스 파일
 ├── index.html                   # 프론트엔드 UI
 ├── .env                         # API 키 (DART, Gemini)
 ├── dart_financial_extractor.py  # 재무제표 추출 모듈 (복잡)
 ├── dart_company_info.py         # 기업개황정보 전용 모듈 (경량)
-├── financial_insight_analyzer.py # AI 인사이트 분석 모듈
+├── financial_insight_analyzer.py # 재무분석 AI 분석 모듈
 ├── output/                      # 생성된 Excel 파일
 └── CLAUDE.md                    # 이 파일
 ```
@@ -155,7 +202,7 @@ DART API에서 기업개황정보만 따로 가져오는 경량 기능. 재무�
 4. 포괄손익계산서
 5. 현금흐름표
 6. 주석들 (손익주석, 재무주석, 현금주석)
-7. VCM전용포맷
+7. Financials
 8. 복사용테이블
 
 ### API 응답 필드
@@ -201,7 +248,7 @@ info = client.get_info_by_stock_code("005930")
 
 ---
 
-## AI 인사이트 분석 기능
+## 재무분석 AI 분석 기능
 
 ### 개요
 LLM을 활용하여 재무제표의 이상 패턴을 감지하고, 웹 검색을 통해 원인을 파악하여 M&A 실사용 인사이트를 생성합니다.
@@ -234,7 +281,7 @@ LLM을 활용하여 재무제표의 이상 패턴을 감지하고, 웹 검색을
 - `GET /api/analyze-status/{task_id}`: 분석 상태 조회
 
 ### UI
-- 추출 완료 후 "AI 인사이트 분석" 버튼 표시
+- 추출 완료 후 "재무분석 AI 분석" 버튼 표시
 - `#analysisSection`: 분석 결과 표시 영역
 - 마크다운 형식의 보고서를 HTML로 렌더링
 
@@ -246,6 +293,86 @@ LLM을 활용하여 재무제표의 이상 패턴을 감지하고, 웹 검색을
 - 차입금/부채 급변
 - 운전자본(NWC) 이상 변동
 - 영업외비용 급증 (과징금, 소송 등)
+
+---
+
+## 사용자 인증 및 사용량 관리
+
+### 개요
+SQLite 기반의 사용자 인증 및 사용량 추적 시스템. 회원가입/로그인, 추출/AI 사용량 기록.
+
+### 데이터베이스 스키마 (database.py)
+
+| 테이블 | 용도 |
+|--------|------|
+| users | 사용자 계정 (이메일, 비밀번호 해시, 등급, 사용량 한도) |
+| sessions | 세션 토큰 관리 |
+| login_history | 로그인 기록 (IP, User-Agent) |
+| search_history | 기업 검색 기록 |
+| extraction_history | 재무제표 추출 기록 |
+| llm_usage | AI 분석 사용량 (모델, 토큰, 비용) |
+
+### 사용자 등급 (tier)
+
+| 등급 | 검색 한도 | 추출 한도 | AI 한도 | 비고 |
+|------|----------|----------|--------|------|
+| free | 10회/월 | 5회/월 | 3회/월 | 기본값 |
+| basic | 100회/월 | 50회/월 | 20회/월 | 유료 |
+| pro | 무제한 | 무제한 | 100회/월 | 유료 |
+
+**결제**: 계좌이체 후 관리자가 수동으로 등급 변경
+
+### 세션 정책
+- **로그인 유지**: 브라우저 세션 쿠키 (브라우저 닫으면 자동 로그아웃)
+- **쿠키 설정**: `httponly=True`, `samesite=lax`, `max_age=None`
+
+### API 엔드포인트
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/auth/register` | 회원가입 |
+| POST | `/api/auth/login` | 로그인 (세션 쿠키 발급) |
+| POST | `/api/auth/logout` | 로그아웃 (세션 삭제) |
+| GET | `/api/auth/me` | 현재 사용자 정보 + 사용량 통계 |
+| GET | `/api/admin/users` | 전체 사용자 조회 (관리자 전용) |
+
+### 인증 헬퍼 함수
+
+```python
+# 선택적 인증 (없으면 None)
+user = Depends(get_current_user)
+
+# 필수 인증 (없으면 401)
+user = Depends(require_auth)
+
+# 관리자 필수 (없으면 403)
+admin = Depends(require_admin)
+```
+
+### 사용량 로깅 함수 (database.py)
+
+```python
+# 기업 검색 기록 + 검색 횟수 증가
+db.log_search(user_id, corp_code, corp_name, market)
+
+# 추출 기록 + 추출 횟수 증가
+db.log_extraction(user_id, corp_code, corp_name, start_year, end_year, file_path)
+
+# AI 분석 기록 + AI 사용 횟수 증가
+db.log_llm_usage(user_id, corp_code, corp_name, model_name, input_tokens, output_tokens, cost)
+```
+
+### 관리자 계정 생성
+
+```bash
+# database.py 직접 실행
+cd /home/servermanager/pers
+python3 database.py  # admin@example.com / admin123 생성
+
+# 또는 코드로 생성
+from database import create_user
+create_user('admin@mysite.com', 'secure_password', role='admin', tier='pro')
+```
 
 ---
 

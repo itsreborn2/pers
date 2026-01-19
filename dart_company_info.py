@@ -81,8 +81,10 @@ class DartCompanyInfo:
         """
         if api_key:
             dart.set_api_key(api_key)
+            self.api_key = api_key
         elif os.environ.get('DART_API_KEY'):
             dart.set_api_key(os.environ.get('DART_API_KEY'))
+            self.api_key = os.environ.get('DART_API_KEY')
         else:
             raise ValueError("DART API 키가 필요합니다.")
 
@@ -212,6 +214,252 @@ class DartCompanyInfo:
         except Exception as e:
             print(f"종목코드 검색 실패: {e}")
         return None
+
+    def get_address_from_report(self, corp_code: str) -> Optional[str]:
+        """
+        최근 사업보고서에서 본점소재지(주소) 추출
+
+        Args:
+            corp_code: DART 고유번호 (8자리)
+
+        Returns:
+            본점소재지 문자열 또는 None
+        """
+        import requests
+        import zipfile
+        import io
+        import re
+        from bs4 import BeautifulSoup
+
+        try:
+            # 1. 최근 사업보고서 검색 (A001: 사업보고서)
+            url_list = "https://opendart.fss.or.kr/api/list.json"
+            params = {
+                "crtfc_key": self.api_key,
+                "corp_code": corp_code,
+                "bgn_de": "20200101",
+                "pblntf_detail_ty": "A001",  # 사업보고서
+                "page_count": "5"
+            }
+            res = requests.get(url_list, params=params, timeout=10)
+            data = res.json()
+
+            if data.get('status') != '000' or not data.get('list'):
+                print(f"사업보고서 없음: {data.get('message', 'No reports')}")
+                return None
+
+            # 가장 최근 사업보고서의 접수번호
+            rcept_no = data['list'][0]['rcept_no']
+            print(f"최근 사업보고서 접수번호: {rcept_no}")
+
+            # 2. 공시서류원본파일 다운로드
+            url_doc = "https://opendart.fss.or.kr/api/document.xml"
+            params = {
+                "crtfc_key": self.api_key,
+                "rcept_no": rcept_no
+            }
+            response = requests.get(url_doc, params=params, timeout=30)
+
+            # 3. Content-Type에 따라 처리
+            content_type = response.headers.get("Content-Type", "").lower()
+            xml_content = None
+
+            if "xml" in content_type:
+                xml_content = response.content
+            elif "zip" in content_type or "msdownload" in content_type:
+                with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+                    # ZIP 내 XML 파일 찾기
+                    for filename in z.namelist():
+                        if filename.endswith('.xml'):
+                            xml_content = z.read(filename)
+                            break
+
+            if not xml_content:
+                print("XML 컨텐츠를 찾을 수 없음")
+                return None
+
+            # 4. XML 파싱하여 본점소재지 추출
+            soup = BeautifulSoup(xml_content, "lxml-xml")
+            text = soup.get_text("\n", strip=True)
+
+            # 본점소재지 패턴 검색
+            patterns = [
+                r'본점[의\s]*소재지[:\s]*([^\n]{10,100})',
+                r'본점[의\s]*주소[:\s]*([^\n]{10,100})',
+                r'주\s*소[:\s]*([가-힣]+[도시]\s+[가-힣]+[시군구][^\n]{5,80})',
+            ]
+
+            for pattern in patterns:
+                match = re.search(pattern, text)
+                if match:
+                    address = match.group(1).strip()
+                    # 불필요한 문자 제거
+                    address = re.sub(r'[\(\)].*$', '', address).strip()
+                    address = re.sub(r'\s+', ' ', address)
+                    if len(address) > 10:
+                        print(f"사업보고서 주소 추출 성공: {address}")
+                        return address
+
+            print("본점소재지 패턴 매칭 실패")
+            return None
+
+        except Exception as e:
+            print(f"사업보고서 주소 추출 실패: {e}")
+            return None
+
+    def get_company_info_from_report(self, corp_code: str) -> dict:
+        """
+        최근 사업보고서에서 대표자명과 본점소재지 추출
+
+        Args:
+            corp_code: DART 고유번호 (8자리)
+
+        Returns:
+            {'ceo': 대표자명 또는 None, 'address': 본점소재지 또는 None}
+        """
+        import requests
+        import zipfile
+        import io
+        import re
+        from bs4 import BeautifulSoup
+
+        result = {'ceo': None, 'address': None}
+
+        try:
+            # 1. 최근 보고서 검색 (사업보고서 > 반기보고서 > 분기보고서 > 감사보고서 순)
+            url_list = "https://opendart.fss.or.kr/api/list.json"
+            report_types = [
+                ("A001", "사업보고서"),
+                ("A002", "반기보고서"),
+                ("A003", "분기보고서"),
+                ("F001", "감사보고서"),  # 정기보고서 없는 회사용
+            ]
+
+            rcept_no = None
+            report_type_name = None
+
+            for report_type, type_name in report_types:
+                params = {
+                    "crtfc_key": self.api_key,
+                    "corp_code": corp_code,
+                    "bgn_de": "20200101",
+                    "pblntf_detail_ty": report_type,
+                    "page_count": "5"
+                }
+                res = requests.get(url_list, params=params, timeout=10)
+                data = res.json()
+
+                if data.get('status') == '000' and data.get('list'):
+                    rcept_no = data['list'][0]['rcept_no']
+                    report_type_name = type_name
+                    print(f"최근 {type_name} 접수번호: {rcept_no}")
+                    break
+                else:
+                    print(f"{type_name} 없음")
+
+            if not rcept_no:
+                print(f"보고서 없음: 사업/반기/분기/감사보고서 모두 없음")
+                return {'ceo': None, 'address': None, 'no_report': True}
+
+            # 2. 공시서류원본파일 다운로드
+            url_doc = "https://opendart.fss.or.kr/api/document.xml"
+            params = {
+                "crtfc_key": self.api_key,
+                "rcept_no": rcept_no
+            }
+            response = requests.get(url_doc, params=params, timeout=30)
+
+            # 3. Content-Type에 따라 처리
+            content_type = response.headers.get("Content-Type", "").lower()
+            xml_content = None
+
+            if "xml" in content_type:
+                xml_content = response.content
+            elif "zip" in content_type or "msdownload" in content_type:
+                with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+                    for filename in z.namelist():
+                        if filename.endswith('.xml'):
+                            xml_content = z.read(filename)
+                            break
+
+            if not xml_content:
+                print("XML 컨텐츠를 찾을 수 없음")
+                return result
+
+            # 4. XML 파싱
+            soup = BeautifulSoup(xml_content, "lxml-xml")
+            text = soup.get_text("\n", strip=True)
+
+            # 대표자 패턴 검색
+            ceo_patterns = [
+                r'대표이사[:\s]*([가-힣]{2,10})',
+                r'대\s*표\s*자[:\s]*([가-힣]{2,10})',
+                r'대표이사\s*성\s*명[:\s]*([가-힣]{2,10})',
+                r'대표이사\([^)]*\)[:\s]*([가-힣]{2,10})',
+            ]
+            for pattern in ceo_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    ceo = match.group(1).strip()
+                    if 2 <= len(ceo) <= 10:
+                        print(f"사업보고서 대표자 추출 성공: {ceo}")
+                        result['ceo'] = ceo
+                        break
+
+            # 본점소재지 패턴 검색 (더 정교한 패턴)
+            # 시/도 목록
+            provinces = r'(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)'
+
+            address_patterns = [
+                # 패턴 1: "본점의 소재지" 또는 "본점 소재지" 뒤에 같은 줄에 주소
+                rf'본점[의\s]*소재지[는:\s]*({provinces}[^\n\.]+)',
+                # 패턴 2: "본점 주소" 뒤에 오는 주소
+                rf'본점[의\s]*주소[는:\s]*({provinces}[^\n\.]+)',
+                # 패턴 3: "주된 사무소 소재지"
+                rf'주된\s*사무소[의\s]*소재지[는:\s]*({provinces}[^\n\.]+)',
+            ]
+
+            # 먼저 같은 줄 패턴 시도
+            for pattern in address_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    address = match.group(1).strip()
+                    address = re.sub(r'입니다.*$', '', address).strip()
+                    address = re.sub(r'이며.*$', '', address).strip()
+                    address = re.sub(r'\s+', ' ', address)
+                    if len(address) >= 10 and re.search(r'[시구군]', address):
+                        print(f"사업보고서 주소 추출 성공: {address}")
+                        result['address'] = address
+                        break
+
+            # 같은 줄에서 못 찾으면 다음 줄에서 찾기 (줄바꿈 형식)
+            if not result['address']:
+                lines = text.split('\n')
+                for i, line in enumerate(lines):
+                    if '본점' in line and '소재지' in line:
+                        # 다음 몇 줄에서 주소 찾기
+                        for j in range(1, 5):
+                            if i + j < len(lines):
+                                next_line = lines[i + j].strip()
+                                # 시/도로 시작하는 줄 찾기
+                                if re.match(provinces, next_line):
+                                    address = next_line
+                                    # 괄호 안 동/리 정보까지만 포함
+                                    match_addr = re.match(rf'({provinces}[가-힣0-9\s\-]+(?:\([가-힣0-9\-]+\))?)', address)
+                                    if match_addr:
+                                        address = match_addr.group(1).strip()
+                                        if len(address) >= 10:
+                                            print(f"사업보고서 주소 추출 성공 (다음 줄): {address}")
+                                            result['address'] = address
+                                            break
+                        if result['address']:
+                            break
+
+            return result
+
+        except Exception as e:
+            print(f"사업보고서 정보 추출 실패: {e}")
+            return result
 
 
 def main():

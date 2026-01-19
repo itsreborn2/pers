@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valulens - 회원관리</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f6f8;
+            min-height: 100vh;
+            padding: 0;
+        }
+
+        /* 상단 헤더 */
+        .top-header {
+            background: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 16px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand-section h1 {
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 2px;
+        }
+
+        .brand-section .subtitle {
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+
+        .header-nav {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+            text-decoration: none;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #d1d5db;
+            color: #374151;
+        }
+
+        .btn-outline:hover {
+            background: #f3f4f6;
+        }
+
+        .user-email {
+            font-size: 0.9rem;
+            color: #374151;
+        }
+
+        /* 메인 컨테이너 */
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 24px;
+        }
+
+        /* 통계 카드 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #2563eb;
+        }
+
+        .stat-card .label {
+            font-size: 0.9rem;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        .stat-card.pro .value { color: #f59e0b; }
+        .stat-card.basic .value { color: #10b981; }
+        .stat-card.free .value { color: #6b7280; }
+
+        /* 테이블 컨테이너 */
+        .table-container {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+        }
+
+        .table-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .table-header h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .user-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .user-table th,
+        .user-table td {
+            padding: 16px 20px;
+            text-align: left;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .user-table th {
+            background: #f9fafb;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .user-table tbody tr:hover {
+            background: #f9fafb;
+        }
+
+        .user-table td {
+            font-size: 0.9rem;
+            color: #374151;
+        }
+
+        /* 뱃지 */
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-admin {
+            background: linear-gradient(135deg, #fee2e2, #fecaca);
+            color: #dc2626;
+        }
+
+        .badge-pro {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            color: #92400e;
+        }
+
+        .badge-basic {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+
+        .badge-free {
+            background: #e5e7eb;
+            color: #6b7280;
+        }
+
+        /* 인라인 편집 */
+        .inline-select {
+            padding: 8px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            background: #fafafa;
+            cursor: pointer;
+        }
+
+        .inline-select:hover {
+            border-color: #d1d5db;
+        }
+
+        .inline-select:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+        }
+
+        .inline-select:disabled {
+            background: #f3f4f6;
+            cursor: not-allowed;
+        }
+
+        .inline-date {
+            padding: 8px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            background: #fafafa;
+            width: 140px;
+        }
+
+        .inline-number {
+            padding: 8px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            background: #fafafa;
+            width: 80px;
+            text-align: center;
+        }
+
+        .inline-number:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+        }
+
+        .inline-date:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+        }
+
+        .usage-value {
+            font-weight: 600;
+            color: #2563eb;
+        }
+
+        /* 삭제 버튼 */
+        .btn-delete {
+            padding: 6px 12px;
+            border: 1px solid #fca5a5;
+            border-radius: 6px;
+            background: #fef2f2;
+            color: #dc2626;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-delete:hover {
+            background: #fee2e2;
+            border-color: #f87171;
+        }
+
+        /* 로딩 */
+        .loading-row td {
+            text-align: center;
+            padding: 60px;
+            color: #6b7280;
+        }
+
+        /* 권한 없음 */
+        .no-access {
+            text-align: center;
+            padding: 100px 20px;
+        }
+
+        .no-access h2 {
+            font-size: 1.5rem;
+            color: #dc2626;
+            margin-bottom: 12px;
+        }
+
+        .no-access p {
+            color: #6b7280;
+            margin-bottom: 24px;
+        }
+
+        /* 반응형 */
+        @media (max-width: 900px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .header-content {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .main-container {
+                padding: 20px;
+            }
+
+            .user-table th,
+            .user-table td {
+                padding: 12px;
+                font-size: 0.8rem;
+            }
+
+            .inline-date {
+                width: 120px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="top-header">
+        <div class="header-content">
+            <div class="brand-section">
+                <h1>Valulens</h1>
+                <p class="subtitle">회원관리</p>
+            </div>
+            <div class="header-nav">
+                <span class="user-email" id="adminEmail"></span>
+                <a href="/" class="btn btn-outline">메인으로</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-container" id="mainContent" style="display: none;">
+        <h1 class="page-title">회원관리</h1>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="value" id="statTotal">-</div>
+                <div class="label">전체 회원</div>
+            </div>
+            <div class="stat-card pro">
+                <div class="value" id="statPro">-</div>
+                <div class="label">Pro 회원</div>
+            </div>
+            <div class="stat-card basic">
+                <div class="value" id="statBasic">-</div>
+                <div class="label">Basic 회원</div>
+            </div>
+            <div class="stat-card free">
+                <div class="value" id="statFree">-</div>
+                <div class="label">Free 회원</div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <div class="table-header">
+                <h2>회원 목록</h2>
+            </div>
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>이메일</th>
+                        <th>등급</th>
+                        <th>토큰</th>
+                        <th>검색</th>
+                        <th>유료 시작일</th>
+                        <th>만료일</th>
+                        <th>가입일</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="userTableBody">
+                    <tr><td colspan="9" class="loading-row">로딩 중...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <div class="no-access" id="noAccess" style="display: none;">
+        <h2>접근 권한이 없습니다</h2>
+        <p>관리자 계정으로 로그인해주세요.</p>
+        <a href="/" class="btn btn-outline">메인으로 돌아가기</a>
+    </div>
+
+    <script>
+        let currentAdmin = null;
+
+        // 페이지 로드 시 권한 확인
+        document.addEventListener('DOMContentLoaded', async function() {
+            await checkAdminAccess();
+        });
+
+        async function checkAdminAccess() {
+            try {
+                const response = await fetch('/api/auth/me');
+                const data = await response.json();
+
+                if (data.logged_in && data.user.role === 'admin') {
+                    currentAdmin = data.user;
+                    document.getElementById('adminEmail').textContent = currentAdmin.email;
+                    document.getElementById('mainContent').style.display = 'block';
+                    loadUsers();
+                } else {
+                    document.getElementById('noAccess').style.display = 'block';
+                }
+            } catch (err) {
+                console.error('Auth check error:', err);
+                document.getElementById('noAccess').style.display = 'block';
+            }
+        }
+
+        async function loadUsers() {
+            const tbody = document.getElementById('userTableBody');
+
+            try {
+                const response = await fetch('/api/admin/users');
+                if (!response.ok) throw new Error('권한 없음');
+
+                const data = await response.json();
+                const users = data.users || [];
+
+                // 통계 업데이트
+                document.getElementById('statTotal').textContent = users.length;
+                document.getElementById('statPro').textContent = users.filter(u => u.tier === 'pro').length;
+                document.getElementById('statBasic').textContent = users.filter(u => u.tier === 'basic').length;
+                document.getElementById('statFree').textContent = users.filter(u => u.tier === 'free').length;
+
+                if (users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="loading-row">등록된 회원이 없습니다</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = users.map(user => {
+                    const isAdmin = user.role === 'admin';
+                    const subStart = user.subscription_start ? user.subscription_start.split('T')[0] : '';
+                    const subEnd = user.expires_at ? user.expires_at.split('T')[0] : '';
+                    const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString('ko-KR') : '-';
+                    const tokens = user.tokens !== null && user.tokens !== undefined ? user.tokens : 5;
+
+                    const badgeClass = isAdmin ? 'badge-admin' :
+                                       user.tier === 'pro' ? 'badge-pro' :
+                                       user.tier === 'basic' ? 'badge-basic' : 'badge-free';
+
+                    return `
+                        <tr>
+                            <td>${user.id}</td>
+                            <td>
+                                ${user.email}
+                                ${isAdmin ? '<span class="badge badge-admin">Admin</span>' : ''}
+                            </td>
+                            <td>
+                                <select class="inline-select" onchange="updateUser(${user.id}, 'tier', this.value)" ${isAdmin ? 'disabled' : ''}>
+                                    <option value="free" ${user.tier === 'free' ? 'selected' : ''}>Free</option>
+                                    <option value="basic" ${user.tier === 'basic' ? 'selected' : ''}>Basic</option>
+                                    <option value="pro" ${user.tier === 'pro' ? 'selected' : ''}>Pro</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input type="number" class="inline-number" value="${tokens}" min="0"
+                                       onchange="updateUser(${user.id}, 'tokens', parseInt(this.value))" />
+                            </td>
+                            <td class="usage-value">${user.search_used || 0}</td>
+                            <td>
+                                <input type="date" class="inline-date" value="${subStart}"
+                                       onchange="updateUser(${user.id}, 'subscription_start', this.value)" />
+                            </td>
+                            <td>
+                                <input type="date" class="inline-date" value="${subEnd}"
+                                       onchange="updateUser(${user.id}, 'expires_at', this.value)" />
+                            </td>
+                            <td>${createdAt}</td>
+                            <td>
+                                ${!isAdmin ? `<button class="btn-delete" onclick="deleteUser(${user.id})">삭제</button>` : ''}
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error('Load users error:', err);
+                tbody.innerHTML = '<tr><td colspan="9" class="loading-row">회원 목록을 불러올 수 없습니다</td></tr>';
+            }
+        }
+
+        async function updateUser(userId, field, value) {
+            try {
+                const body = {};
+                body[field] = value || null;
+
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || '수정 실패');
+                }
+
+                // 등급 변경 시 통계 새로고침
+                if (field === 'tier') {
+                    loadUsers();
+                }
+
+            } catch (err) {
+                alert('오류: ' + err.message);
+                loadUsers();
+            }
+        }
+
+        async function deleteUser(userId) {
+            if (!confirm('정말로 이 회원을 삭제하시겠습니까?\\n관련된 모든 데이터가 삭제됩니다.')) return;
+
+            try {
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || '삭제 실패');
+                }
+
+                loadUsers();
+
+            } catch (err) {
+                alert('오류: ' + err.message);
+            }
+        }
+    </script>
+</body>
+</html>

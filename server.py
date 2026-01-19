@@ -21,10 +21,14 @@ load_dotenv()
 from typing import Optional, Dict, Any
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Response, Depends, Cookie
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+# 데이터베이스 모듈
+import database as db
+import json
 
 import dart_fss as dart
 import pandas as pd
@@ -39,6 +43,17 @@ TASKS: Dict[str, Dict[str, Any]] = {}
 # 기업 리스트 캐시 (한 번만 로드)
 CORP_LIST = None
 CORP_LIST_LOCK = threading.Lock()
+
+# KSIC 업종코드 매핑 (한국표준산업분류)
+KSIC_CODES: Dict[str, str] = {}
+try:
+    ksic_path = os.path.join(os.path.dirname(__file__), 'ksic_codes.json')
+    if os.path.exists(ksic_path):
+        with open(ksic_path, 'r', encoding='utf-8') as f:
+            KSIC_CODES = json.load(f)
+        print(f"[INIT] KSIC 업종코드 {len(KSIC_CODES)}개 로드 완료")
+except Exception as e:
+    print(f"[INIT] KSIC 업종코드 로드 실패: {e}")
 
 
 # ============================================================
@@ -57,6 +72,49 @@ class ExtractRequest(BaseModel):
     start_year: int = 2020
     end_year: Optional[int] = None
     company_info: Optional[Dict[str, Any]] = None  # 기업개황정보
+
+
+class RegisterRequest(BaseModel):
+    """회원가입 요청"""
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    """로그인 요청"""
+    email: str
+    password: str
+
+
+# ============================================================
+# 인증 관련 함수
+# ============================================================
+async def get_current_user(request: Request, session_token: Optional[str] = Cookie(None)) -> Optional[Dict]:
+    """현재 로그인한 사용자 조회 (선택적 - 없으면 None 반환)"""
+    if not session_token:
+        return None
+    session = db.get_session(session_token)
+    if not session:
+        return None
+    return session
+
+
+async def require_auth(request: Request, session_token: Optional[str] = Cookie(None)) -> Dict:
+    """인증 필수 - 로그인 안 되어 있으면 에러"""
+    if not session_token:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+    session = db.get_session(session_token)
+    if not session:
+        raise HTTPException(status_code=401, detail="세션이 만료되었습니다")
+    return session
+
+
+async def require_admin(request: Request, session_token: Optional[str] = Cookie(None)) -> Dict:
+    """관리자 권한 필수"""
+    session = await require_auth(request, session_token)
+    if session.get('role') != 'admin':
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
+    return session
 
 
 # ============================================================
@@ -99,6 +157,11 @@ async def lifespan(app: FastAPI):
     """앱 시작/종료 시 실행"""
     # 시작 시: output 폴더 생성
     os.makedirs("output", exist_ok=True)
+
+    # 데이터베이스 초기화
+    db.init_db()
+    print("[SERVER] 데이터베이스 초기화 완료")
+
     yield
     # 종료 시: 모든 작업 정리
     for task_id in list(TASKS.keys()):
@@ -110,12 +173,285 @@ app = FastAPI(title="DART 재무제표 추출기", lifespan=lifespan)
 
 
 # ============================================================
+# 인증 API 엔드포인트
+# ============================================================
+@app.post("/api/auth/register")
+async def register(request: RegisterRequest):
+    """회원가입 API"""
+    # 이메일 형식 검증
+    if '@' not in request.email or '.' not in request.email:
+        raise HTTPException(status_code=400, detail="올바른 이메일 형식이 아닙니다")
+
+    # 비밀번호 길이 검증
+    if len(request.password) < 6:
+        raise HTTPException(status_code=400, detail="비밀번호는 6자 이상이어야 합니다")
+
+    # 사용자 생성
+    user_id = db.create_user(request.email, request.password)
+    if not user_id:
+        raise HTTPException(status_code=400, detail="이미 등록된 이메일입니다")
+
+    print(f"[AUTH] 회원가입 완료: {request.email}")
+    return {"success": True, "message": "회원가입이 완료되었습니다"}
+
+
+@app.post("/api/auth/login")
+async def login(request: LoginRequest, req: Request, response: Response):
+    """로그인 API"""
+    user = db.authenticate_user(request.email, request.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="이메일 또는 비밀번호가 올바르지 않습니다")
+
+    # 세션 생성
+    ip_address = req.client.host if req.client else None
+    user_agent = req.headers.get('user-agent')
+    token = db.create_session(user['id'], ip_address, user_agent)
+
+    # 쿠키 설정 (브라우저 세션 - 브라우저 닫으면 만료)
+    response.set_cookie(
+        key="session_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=False,  # HTTPS 사용 시 True로 변경
+        max_age=None   # None = 브라우저 세션 쿠키 (브라우저 닫으면 삭제)
+    )
+
+    print(f"[AUTH] 로그인: {request.email}")
+    return {
+        "success": True,
+        "user": {
+            "id": user['id'],
+            "email": user['email'],
+            "role": user['role'],
+            "tier": user['tier']
+        }
+    }
+
+
+@app.post("/api/auth/logout")
+async def logout(response: Response, session_token: Optional[str] = Cookie(None)):
+    """로그아웃 API"""
+    if session_token:
+        db.delete_session(session_token)
+
+    # 쿠키 삭제
+    response.delete_cookie(key="session_token")
+
+    print("[AUTH] 로그아웃")
+    return {"success": True, "message": "로그아웃되었습니다"}
+
+
+class ChangePasswordRequest(BaseModel):
+    """비밀번호 변경 요청"""
+    current_password: str
+    new_password: str
+
+
+@app.post("/api/auth/change-password")
+async def change_password(request: ChangePasswordRequest, user: Dict = Depends(require_auth)):
+    """비밀번호 변경 API"""
+    import bcrypt
+
+    # 현재 비밀번호 확인
+    user_data = db.get_user_by_id(user['user_id'])
+    if not user_data:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+
+    # 현재 비밀번호 검증
+    if not bcrypt.checkpw(request.current_password.encode('utf-8'), user_data['password_hash'].encode('utf-8')):
+        raise HTTPException(status_code=400, detail="현재 비밀번호가 일치하지 않습니다")
+
+    # 새 비밀번호 해시 생성
+    new_password_hash = bcrypt.hashpw(request.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    # 비밀번호 업데이트
+    db.update_user_password(user['user_id'], new_password_hash)
+
+    print(f"[AUTH] 비밀번호 변경: user_id={user['user_id']}")
+    return {"success": True, "message": "비밀번호가 변경되었습니다"}
+
+
+@app.get("/api/auth/me")
+async def get_me(user: Optional[Dict] = Depends(get_current_user)):
+    """현재 로그인한 사용자 정보 조회"""
+    if not user:
+        return {"logged_in": False, "user": None}
+
+    # 사용량 통계 조회
+    stats = db.get_user_stats(user['user_id'])
+
+    return {
+        "logged_in": True,
+        "user": {
+            "id": user['user_id'],
+            "email": user['email'],
+            "role": user['role'],
+            "tier": user['tier'],
+            "tokens": user.get('tokens', 5),
+            "search_limit": user['search_limit'],
+            "search_used": user['search_used'],
+            "extract_limit": user['extract_limit'],
+            "extract_used": user['extract_used'],
+            "ai_limit": user['ai_limit'],
+            "ai_used": user['ai_used'],
+            "subscription_start": user.get('subscription_start'),
+            "subscription_end": user.get('expires_at'),
+            "expires_at": user['expires_at'],
+            "created_at": user.get('created_at')
+        },
+        "stats": stats
+    }
+
+
+@app.get("/api/admin/users")
+async def get_users(admin: Dict = Depends(require_admin)):
+    """모든 사용자 조회 (관리자 전용)"""
+    users = db.get_all_users()
+    return {"users": users}
+
+
+class UpdateUserRequest(BaseModel):
+    """회원 정보 수정 요청"""
+    tier: Optional[str] = None
+    subscription_start: Optional[str] = None  # 유료 시작일
+    expires_at: Optional[str] = None  # 유료 만료일
+    tokens: Optional[int] = None  # 검색 토큰
+    search_limit: Optional[int] = None
+    extract_limit: Optional[int] = None
+    ai_limit: Optional[int] = None
+
+
+@app.put("/api/admin/users/{user_id}")
+async def update_user(user_id: int, request: UpdateUserRequest, admin: Dict = Depends(require_admin)):
+    """회원 정보 수정 (관리자 전용)"""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+
+    with db.get_db() as conn:
+        cursor = conn.cursor()
+
+        updates = []
+        params = []
+
+        if request.tier is not None:
+            updates.append("tier = ?")
+            params.append(request.tier)
+
+            # 티어에 따른 기본 한도 및 토큰 설정
+            from datetime import datetime, timedelta
+            today = datetime.now().strftime('%Y-%m-%d')
+
+            tier_config = {
+                'free': {'search': 10, 'extract': 5, 'ai': 3, 'tokens': 5, 'duration_months': 0},
+                'basic': {'search': 100, 'extract': 50, 'ai': 20, 'tokens': 300, 'duration_months': 1},
+                'pro': {'search': 9999, 'extract': 9999, 'ai': 100, 'tokens': 4000, 'duration_months': 12}
+            }
+            if request.tier in tier_config:
+                config = tier_config[request.tier]
+                updates.extend(["search_limit = ?", "extract_limit = ?", "ai_limit = ?", "tokens = ?"])
+                params.extend([config['search'], config['extract'], config['ai'], config['tokens']])
+
+                # 유료 등급인 경우 시작일/만료일 자동 설정
+                if request.tier in ['basic', 'pro']:
+                    updates.append("subscription_start = ?")
+                    params.append(today)
+                    # 만료일 계산
+                    expiry = datetime.now() + timedelta(days=config['duration_months'] * 30)
+                    updates.append("expires_at = ?")
+                    params.append(expiry.strftime('%Y-%m-%d'))
+                else:
+                    # Free로 변경 시 날짜 초기화
+                    updates.extend(["subscription_start = ?", "expires_at = ?"])
+                    params.extend([None, None])
+
+        if request.subscription_start is not None:
+            updates.append("subscription_start = ?")
+            params.append(request.subscription_start if request.subscription_start else None)
+
+        if request.expires_at is not None:
+            updates.append("expires_at = ?")
+            params.append(request.expires_at if request.expires_at else None)
+
+        if request.search_limit is not None:
+            updates.append("search_limit = ?")
+            params.append(request.search_limit)
+
+        if request.extract_limit is not None:
+            updates.append("extract_limit = ?")
+            params.append(request.extract_limit)
+
+        if request.ai_limit is not None:
+            updates.append("ai_limit = ?")
+            params.append(request.ai_limit)
+
+        if request.tokens is not None:
+            updates.append("tokens = ?")
+            params.append(request.tokens)
+
+        if updates:
+            updates.append("updated_at = CURRENT_TIMESTAMP")
+            params.append(user_id)
+            query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
+            cursor.execute(query, params)
+
+    print(f"[ADMIN] 회원 정보 수정: user_id={user_id}, updates={request}")
+    return {"success": True, "message": "회원 정보가 수정되었습니다"}
+
+
+@app.post("/api/admin/users/{user_id}/reset-usage")
+async def reset_user_usage(user_id: int, admin: Dict = Depends(require_admin)):
+    """회원 사용량 초기화 (관리자 전용)"""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+
+    db.reset_user_usage(user_id)
+    print(f"[ADMIN] 사용량 초기화: user_id={user_id}")
+    return {"success": True, "message": "사용량이 초기화되었습니다"}
+
+
+@app.delete("/api/admin/users/{user_id}")
+async def delete_user(user_id: int, admin: Dict = Depends(require_admin)):
+    """회원 삭제 (관리자 전용)"""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+
+    # 관리자 자신은 삭제 불가
+    if user_id == admin['user_id']:
+        raise HTTPException(status_code=400, detail="자신의 계정은 삭제할 수 없습니다")
+
+    with db.get_db() as conn:
+        cursor = conn.cursor()
+        # 관련 데이터 삭제
+        cursor.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM login_history WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM search_history WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM extraction_history WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM llm_usage WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+    print(f"[ADMIN] 회원 삭제: user_id={user_id}")
+    return {"success": True, "message": "회원이 삭제되었습니다"}
+
+
+# ============================================================
 # API 엔드포인트
 # ============================================================
 @app.get("/", response_class=HTMLResponse)
 async def index():
     """메인 페이지"""
     html_path = os.path.join(os.path.dirname(__file__), "index.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page():
+    """관리자 페이지"""
+    html_path = os.path.join(os.path.dirname(__file__), "admin.html")
     with open(html_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
@@ -248,6 +584,13 @@ async def get_company_info(corp_code: str):
             "acc_mt": getattr(corp, 'acc_mt', "") or "",
         }
 
+        # 업종명 추가 (KSIC 코드 → 업종명 변환)
+        induty_code = info.get("induty_code", "")
+        if induty_code and KSIC_CODES:
+            info["induty_name"] = KSIC_CODES.get(induty_code, "")
+        else:
+            info["induty_name"] = ""
+
         # 날짜 포맷팅
         if info["est_dt"] and len(info["est_dt"]) == 8:
             info["est_dt_formatted"] = f"{info['est_dt'][:4]}-{info['est_dt'][4:6]}-{info['est_dt'][6:]}"
@@ -272,12 +615,25 @@ async def get_company_info(corp_code: str):
 
 
 @app.post("/api/extract")
-async def start_extraction(request: ExtractRequest, background_tasks: BackgroundTasks):
+async def start_extraction(
+    request: ExtractRequest,
+    background_tasks: BackgroundTasks,
+    user: Optional[Dict] = Depends(get_current_user)
+):
     """재무제표 추출 시작 API"""
+    # 토큰 확인 및 차감 (관리자는 무제한)
+    if user and user.get('role') != 'admin':
+        user_tokens = user.get('tokens', 0)
+        if user_tokens is not None and user_tokens <= 0:
+            raise HTTPException(status_code=403, detail="토큰이 부족합니다. 유료 결제를 진행해 주세요.")
+        # 토큰 차감
+        if not db.use_token(user['user_id']):
+            raise HTTPException(status_code=403, detail="토큰 차감에 실패했습니다.")
+
     # 작업 ID 생성
     task_id = str(uuid.uuid4())
 
-    # 작업 상태 초기화
+    # 작업 상태 초기화 (사용자 정보 포함)
     TASKS[task_id] = {
         "status": "pending",
         "progress": 0,
@@ -285,7 +641,11 @@ async def start_extraction(request: ExtractRequest, background_tasks: Background
         "file_path": None,
         "cancelled": False,
         "corp_name": request.corp_name,
-        "company_info": request.company_info  # 기업개황정보 저장
+        "corp_code": request.corp_code,
+        "company_info": request.company_info,  # 기업개황정보 저장
+        "user_id": user['user_id'] if user else None,  # 사용자 ID 저장
+        "start_year": request.start_year,
+        "end_year": request.end_year
     }
 
     # 백그라운드에서 추출 작업 실행
@@ -372,20 +732,69 @@ async def extract_financial_data(
             raise RuntimeError(f"재무제표를 찾을 수 없습니다. {str(e)}")
         
         print(f"[EXTRACT] DART API 호출 완료, fs_data 타입: {type(fs_data)}")
-        
+
         # 취소 확인
         if task['cancelled']:
             cleanup_task(task_id)
             return
-        
+
+        # 사업보고서에서 현재 대표자/주소 추출 시도
+        current_address = None
+        current_ceo = None
+        try:
+            task['progress'] = 65
+            task['message'] = '정기보고서에서 최신 정보 확인 중...'
+            from dart_company_info import DartCompanyInfo
+            company_info_client = DartCompanyInfo()
+            report_info = await loop.run_in_executor(
+                None,
+                lambda: company_info_client.get_company_info_from_report(corp_code)
+            )
+            # 정기보고서가 없는 경우, 기업개황정보를 최신으로 사용
+            if report_info.get('no_report'):
+                print(f"[EXTRACT] 정기보고서 없음 - 기업개황정보를 최신으로 사용")
+                if company_info and company_info.get('ceo_nm'):
+                    current_ceo = company_info['ceo_nm']
+                    print(f"[EXTRACT] 기업개황 대표자 사용: {current_ceo}")
+                    task['current_ceo'] = current_ceo
+                if company_info and company_info.get('adres'):
+                    current_address = company_info['adres']
+                    print(f"[EXTRACT] 기업개황 주소 사용: {current_address}")
+                    task['current_address'] = current_address
+                task['no_report'] = True
+            else:
+                if report_info.get('address'):
+                    current_address = report_info['address']
+                    print(f"[EXTRACT] 사업보고서 현재주소: {current_address}")
+                    task['current_address'] = current_address
+                else:
+                    print(f"[EXTRACT] 사업보고서에서 주소 추출 실패 또는 없음")
+                if report_info.get('ceo'):
+                    current_ceo = report_info['ceo']
+                    print(f"[EXTRACT] 사업보고서 현재 대표자: {current_ceo}")
+                    task['current_ceo'] = current_ceo
+                else:
+                    print(f"[EXTRACT] 사업보고서에서 대표자 추출 실패 또는 없음")
+        except Exception as info_err:
+            print(f"[EXTRACT] 사업보고서 정보 추출 오류: {info_err}")
+
         task['progress'] = 70
         task['message'] = '엑셀 파일 생성 중...'
-        
+
         # 엑셀 파일 저장
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{corp_name}_재무제표_{timestamp}.xlsx"
         filepath = os.path.join("output", filename)
-        
+
+        # 최신 정보로 company_info 업데이트 (엑셀에 반영)
+        if company_info:
+            if current_ceo:
+                company_info['ceo_nm'] = current_ceo
+                print(f"[EXTRACT] 엑셀용 대표자 업데이트: {current_ceo}")
+            if current_address:
+                company_info['adres'] = current_address
+                print(f"[EXTRACT] 엑셀용 주소 업데이트: {current_address}")
+
         # 엑셀 저장 (기업개황정보 포함)
         await loop.run_in_executor(
             None,
@@ -403,6 +812,22 @@ async def extract_financial_data(
         task['message'] = '완료!'
         task['file_path'] = filepath
         task['filename'] = filename
+
+        # 사용량 로깅 (로그인한 사용자인 경우)
+        if task.get('user_id'):
+            try:
+                db.log_extraction(
+                    user_id=task['user_id'],
+                    corp_code=corp_code,
+                    corp_name=corp_name,
+                    start_year=task.get('start_year', start_year),
+                    end_year=task.get('end_year') or end_year,
+                    file_path=filepath
+                )
+                print(f"[EXTRACT] 사용량 기록 완료: user_id={task['user_id']}")
+            except Exception as log_err:
+                print(f"[EXTRACT] 사용량 기록 실패: {log_err}")
+
         # VCM 포맷용 전체 데이터 저장 (XBRL 컬럼 정규화 적용)
         task['preview_data'] = {}
         print(f"[EXTRACT] fs_data 키: {list(fs_data.keys())}")
@@ -641,18 +1066,63 @@ async def extract_financial_data(
                         print(f"[EXTRACT] {key} Excel 읽기 실패: {e}")
 
             # VCM 포맷 데이터도 preview_data에 추가
-            if 'VCM전용포맷' in xl.sheet_names:
-                vcm_df = pd.read_excel(filepath, sheet_name='VCM전용포맷', engine='openpyxl')
+            if 'Frontdata' in xl.sheet_names:
+                vcm_df = pd.read_excel(filepath, sheet_name='Frontdata', engine='openpyxl')
                 if vcm_df is not None and not vcm_df.empty:
                     task['preview_data']['vcm'] = safe_dataframe_to_json(vcm_df)
                     print(f"[EXTRACT] preview_data['vcm'] 생성: {len(task['preview_data']['vcm'])}개 행")
 
-            # 복사용테이블 데이터도 preview_data에 추가
-            if '복사용테이블' in xl.sheet_names:
-                display_df = pd.read_excel(filepath, sheet_name='복사용테이블', engine='openpyxl')
-                if display_df is not None and not display_df.empty:
-                    task['preview_data']['vcm_display'] = safe_dataframe_to_json(display_df)
-                    print(f"[EXTRACT] preview_data['vcm_display'] 생성: {len(task['preview_data']['vcm_display'])}개 행")
+            # Financials(좌우 배치) 시트에서 데이터 읽기 → 원래 형식(세로 배열)으로 변환
+            if 'Financials' in xl.sheet_names:
+                try:
+                    # 좌우 배치 시트 읽기 (row 1은 섹션 헤더, row 2가 컬럼 헤더)
+                    fin_df = pd.read_excel(filepath, sheet_name='Financials', header=1, engine='openpyxl')
+                    print(f"[EXTRACT] Financials 시트 컬럼: {list(fin_df.columns)}")
+
+                    # 재무상태표 (A~F열, 인덱스 0~5)
+                    bs_cols = [col for col in fin_df.columns[:6] if not str(col).startswith('Unnamed')]
+                    if bs_cols:
+                        bs_df = fin_df[bs_cols].copy()
+                        # 첫 번째 컬럼을 '항목'으로 변경
+                        bs_df.columns = ['항목'] + list(bs_df.columns[1:])
+                        bs_df = bs_df.dropna(subset=['항목'])
+                        print(f"[EXTRACT] 재무상태표: {len(bs_df)}행")
+
+                    # 손익계산서 (H~M열, 인덱스 7~12, G열은 빈 컬럼)
+                    is_cols = [col for col in fin_df.columns[7:13] if not str(col).startswith('Unnamed')]
+                    if is_cols:
+                        is_df = fin_df[is_cols].copy()
+                        # 컬럼명을 BS와 동일하게 맞춤 (FY2020.1 → FY2020 등)
+                        new_is_cols = ['항목']
+                        for col in is_df.columns[1:]:
+                            # .1, .2 등 접미사 제거
+                            col_str = str(col)
+                            if '.' in col_str and col_str.split('.')[-1].isdigit():
+                                col_str = col_str.rsplit('.', 1)[0]
+                            new_is_cols.append(col_str)
+                        is_df.columns = new_is_cols
+                        is_df = is_df.dropna(subset=['항목'])
+                        print(f"[EXTRACT] 손익계산서: {len(is_df)}행, 컬럼: {list(is_df.columns)}")
+
+                    # 세로로 합치기 (재무상태표 + 손익계산서)
+                    if bs_cols and is_cols:
+                        display_df = pd.concat([bs_df, is_df], ignore_index=True)
+                    elif bs_cols:
+                        display_df = bs_df
+                    elif is_cols:
+                        display_df = is_df
+                    else:
+                        display_df = fin_df
+
+                    if display_df is not None and not display_df.empty:
+                        task['preview_data']['vcm_display'] = safe_dataframe_to_json(display_df)
+                        print(f"[EXTRACT] preview_data['vcm_display'] 생성: {len(task['preview_data']['vcm_display'])}개 행")
+                except Exception as fin_err:
+                    print(f"[EXTRACT] Financials 파싱 실패, 원본 사용: {fin_err}")
+                    # 파싱 실패 시 원본 그대로 사용
+                    display_df = pd.read_excel(filepath, sheet_name='Financials', engine='openpyxl')
+                    if display_df is not None and not display_df.empty:
+                        task['preview_data']['vcm_display'] = safe_dataframe_to_json(display_df)
         except Exception as e:
             print(f"[EXTRACT] Excel preview_data 재생성 실패: {e}")
 
@@ -2848,6 +3318,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
 
             # 기타판매비와관리비
             values['  기타판매비와관리비'] = 기타판관비 if 기타판관비 else None
+            # 기타판매비와관리비 세부항목 추가 (툴팁용)
+            for item_name, val in sga_rest:
+                if val:
+                    values[f'    {item_name}'] = val
 
         # 나머지 손익계산서 항목
         values.update({
@@ -2955,13 +3429,15 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 if item_name not in existing_items:
                     # 새로운 항목 발견 - 적절한 위치에 삽입
                     if item_name.startswith('    '):
-                        # 더블 들여쓰기 (4칸) = 기타영업외수익/비용의 세부항목
-                        # 기타영업외수익 또는 기타영업외비용 바로 뒤에 삽입
+                        # 더블 들여쓰기 (4칸) = 기타 항목의 세부항목
+                        # 기타판매비와관리비, 기타영업외수익, 기타영업외비용 바로 뒤에 삽입
                         target_parent = ''
                         insert_idx = len(rows)
                         for i in range(len(rows)):
-                            if '기타영업외' in rows[i]['항목'] and rows[i]['항목'].startswith('  ') and not rows[i]['항목'].startswith('    '):
-                                target_parent = rows[i]['항목']
+                            row_item = rows[i]['항목']
+                            is_기타_parent = ('기타영업외' in row_item or '기타판매비와관리비' in row_item) and row_item.startswith('  ') and not row_item.startswith('    ')
+                            if is_기타_parent:
+                                target_parent = row_item
                                 insert_idx = i + 1
                                 # 기존 더블 들여쓰기 뒤에 삽입
                                 while insert_idx < len(rows) and rows[insert_idx]['항목'].startswith('    '):
@@ -3414,7 +3890,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
 
         for cat_info in selected_유동자산:
             cat = cat_info['name']
-            bs_items.append((cat, '', cat_info['total']))
+            bs_items.append((cat, '유동자산', cat_info['total']))
             # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
             valid_items = [
                 i for i in cat_info['items']
@@ -3428,7 +3904,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
 
         # 기타유동자산 (남은 항목 합계)
         if 기타유동자산_total and abs(기타유동자산_total) > 0:
-            bs_items.append(('기타유동자산', '', 기타유동자산_total))
+            bs_items.append(('기타유동자산', '유동자산', 기타유동자산_total))
             # 기타유동자산에 포함된 세부항목들 (중복 항목 제외)
             valid_기타유동 = [i for i in 기타유동자산_items if not is_redundant_child('기타유동자산', i['name'])]
             if len(valid_기타유동) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
@@ -3439,7 +3915,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
         # 매각예정자산 (유동자산 섹션에 포함)
         매각예정자산 = find_bs_val(['매각예정비유동자산', '매각예정자산', '처분자산집단'], year) or 0
         if 매각예정자산:
-            bs_items.append(('매각예정자산', '', 매각예정자산))
+            bs_items.append(('매각예정자산', '유동자산', 매각예정자산))
 
         # ===== 비유동자산 =====
         bs_items.append(('비유동자산', '', 비유동자산))
@@ -3456,7 +3932,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
         for cat_info in selected_비유동자산:
             cat = cat_info['name']
             cat_display = 비유동자산_카테고리_표시명.get(cat, cat)
-            bs_items.append((cat_display, '', cat_info['total']))
+            bs_items.append((cat_display, '비유동자산', cat_info['total']))
             # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
             valid_items = [
                 i for i in cat_info['items']
@@ -3469,7 +3945,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     bs_items.append((item['name'], cat_display, item['value']))
 
         if 기타비유동자산_total and abs(기타비유동자산_total) > 0:
-            bs_items.append(('기타비유동자산', '', 기타비유동자산_total))
+            bs_items.append(('기타비유동자산', '비유동자산', 기타비유동자산_total))
             # 기타비유동자산에 포함된 세부항목들 (중복 항목 제외)
             valid_기타비유동 = [i for i in 기타비유동자산_items if not is_redundant_child('기타비유동자산', i['name'])]
             if len(valid_기타비유동) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
@@ -3488,7 +3964,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
 
         for cat_info in selected_유동부채:
             cat = cat_info['name']
-            bs_items.append((cat, '', cat_info['total']))
+            bs_items.append((cat, '유동부채', cat_info['total']))
             # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
             valid_items = [
                 i for i in cat_info['items']
@@ -3501,7 +3977,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     bs_items.append((item['name'], cat, item['value']))
 
         if 기타유동부채_total and abs(기타유동부채_total) > 0:
-            bs_items.append(('기타유동부채', '', 기타유동부채_total))
+            bs_items.append(('기타유동부채', '유동부채', 기타유동부채_total))
             # 기타유동부채에 포함된 세부항목들 (중복 항목 제외)
             valid_기타유동부채 = [i for i in 기타유동부채_items if not is_redundant_child('기타유동부채', i['name'])]
             if len(valid_기타유동부채) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
@@ -3512,7 +3988,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
         # 매각예정부채 별도 추출 (섹션 외부에 있을 수 있음)
         매각예정부채 = find_bs_val(['매각예정비유동부채', '매각예정부채'], year) or 0
         if 매각예정부채:
-            bs_items.append(('매각예정부채', '', 매각예정부채))
+            bs_items.append(('매각예정부채', '유동부채', 매각예정부채))
 
         # ===== 비유동부채 =====
         bs_items.append(('비유동부채', '', 비유동부채))
@@ -3531,7 +4007,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
         for cat_info in selected_비유동부채:
             cat = cat_info['name']
             cat_display = 비유동부채_카테고리_표시명.get(cat, cat)
-            bs_items.append((cat_display, '', cat_info['total']))
+            bs_items.append((cat_display, '비유동부채', cat_info['total']))
             # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
             valid_items = [
                 i for i in cat_info['items']
@@ -3544,7 +4020,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     bs_items.append((item['name'], cat_display, item['value']))
 
         if 기타비유동부채_total and abs(기타비유동부채_total) > 0:
-            bs_items.append(('기타비유동부채', '', 기타비유동부채_total))
+            bs_items.append(('기타비유동부채', '비유동부채', 기타비유동부채_total))
             # 기타비유동부채에 포함된 세부항목들 (중복 항목 제외)
             valid_기타비유동부채 = [i for i in 기타비유동부채_items if not is_redundant_child('기타비유동부채', i['name'])]
             if len(valid_기타비유동부채) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
@@ -3648,9 +4124,16 @@ def create_vcm_format(fs_data, excel_filepath=None):
     all_rows = filtered_bs_rows + rows
 
     # ========== 타입 컬럼 추가 ==========
+    # 하위항목 표시 대상 섹션 (BS + IS)
+    sections_with_subitems = [
+        '유동자산', '비유동자산', '유동부채', '비유동부채', '자본',
+        '매출', '매출원가', '판매비와관리비', '영업외수익', '영업외비용'
+    ]
+
     # 타입 결정 함수
-    def get_item_type(item_name):
+    def get_item_type(item_name, item_parent=''):
         name = item_name.strip()
+        parent = (item_parent or '').strip()
 
         # highlight 타입 (강조 항목)
         highlight_items = ['영업이익', '당기순이익', 'EBITDA']
@@ -3659,7 +4142,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
 
         # total 타입 (합계 항목)
         total_items = ['매출총이익', '자산총계', '부채총계', '자본총계', '부채와자본총계',
-                       '법인세비용차감전이익', 'NWC', 'Net Debt']
+                       '법인세비용차감전이익', '법인세비용차감전순이익', 'NWC', 'Net Debt']
         if name in total_items:
             return 'total'
 
@@ -3676,40 +4159,54 @@ def create_vcm_format(fs_data, excel_filepath=None):
         if name in category_items:
             return 'category'
 
-        # subitem 타입 (들여쓰기 있는 항목)
+        # subitem 타입 (부모가 있는 하위항목)
+        if parent in sections_with_subitems:
+            return 'subitem'
+
+        # subitem 타입 (들여쓰기 있는 항목 - IS fallback)
         if item_name.startswith('  '):
             return 'subitem'
 
-        # 기본값
+        # BS 하위항목 판별: 로마숫자로 시작하지 않고, 대분류/합계/하이라이트가 아닌 항목
+        # IS 항목은 로마숫자로 시작하거나 들여쓰기가 있음
+        is_section_prefixes = ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ']
+        is_is_item = any(name.startswith(prefix) for prefix in is_section_prefixes)
+
+        # IS 대분류가 아닌 BS 항목은 subitem으로 처리
+        if not is_is_item:
+            return 'subitem'
+
+        # 기본값 (IS 대분류)
         return 'item'
 
     # 각 행에 타입 추가
     for row in all_rows:
-        row['타입'] = get_item_type(row.get('항목', ''))
+        row['타입'] = get_item_type(row.get('항목', ''), row.get('부모', ''))
 
-    # ========== 복사용테이블 생성 (단위: 백만원, 포맷팅 완료) ==========
+    # ========== Financials 시트 생성 (단위: 백만원, 포맷팅 완료) ==========
     # 규칙:
     # - 부모 없는 항목 → 표시
-    # - IS 섹션(매출, 매출원가, 판관비, 영업외수익/비용)의 하위항목 → 표시
-    # - 그 외 (BS 세부항목, 기타XXX 하위, NWC/NetDebt 하위) → 제외 (툴팁용)
+    # - BS/IS 섹션의 하위항목 → 표시 (들여쓰기)
+    # - NWC/NetDebt 하위항목 → 제외 (툴팁용)
     display_rows = []
     unit_divisor = 1000000  # 원 → 백만원 (1백만 = 1,000,000)
-
-    # IS 섹션: 하위항목 표시 허용
-    is_sections_with_subitems = ['매출', '매출원가', '판매비와관리비', '영업외수익', '영업외비용']
 
     for row in all_rows:
         item_name = row.get('항목', '')
         item_type = row.get('타입', 'item')
         item_parent = row.get('부모', '')
 
+        # NWC/NetDebt 하위항목 제외 (툴팁용)
+        if '[NWC]' in item_name or '[NetDebt]' in item_name:
+            continue
+
         # 부모 없는 항목 → 표시
         if not item_parent or not str(item_parent).strip():
             pass  # 표시
-        # IS 섹션의 하위항목 → 표시
-        elif str(item_parent).strip() in is_sections_with_subitems:
+        # BS/IS 섹션의 하위항목 → 표시
+        elif str(item_parent).strip() in sections_with_subitems:
             pass  # 표시
-        # 그 외 (BS 세부항목, 기타XXX 하위, NWC/NetDebt 하위) → 제외
+        # 그 외 (기타XXX 하위 등) → 제외
         else:
             continue
 
@@ -3746,7 +4243,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
     cols_order = ['항목', '타입', '부모'] + [c for c in vcm_df.columns if c not in ['항목', '타입', '부모']]
     vcm_df = vcm_df[[c for c in cols_order if c in vcm_df.columns]]
 
-    # 복사용테이블 DataFrame
+    # Financials(표시용) DataFrame
     display_df = pd.DataFrame(display_rows)
 
     return vcm_df, display_df
@@ -3895,6 +4392,11 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
         # 기업개황정보 시트 (가장 먼저)
         if company_info:
             try:
+                # 업종명 조회 (KSIC 코드 → 업종명)
+                induty_code = company_info.get('induty_code', '')
+                induty_name = KSIC_CODES.get(induty_code, '') if induty_code and KSIC_CODES else ''
+
+                # 웹 프론트와 동일한 순서/항목
                 info_rows = [
                     ['항목', '내용'],
                     ['회사명', company_info.get('corp_name', '')],
@@ -3902,20 +4404,25 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                     ['대표자', company_info.get('ceo_nm', '')],
                     ['시장구분', company_info.get('market_name', '')],
                     ['종목코드', company_info.get('stock_code', '')],
-                    ['DART고유번호', company_info.get('corp_code', '')],
                     ['법인번호', company_info.get('jurir_no', '')],
                     ['사업자번호', company_info.get('bizr_no', '')],
-                    ['업종코드', company_info.get('induty_code', '')],
+                    ['업종코드', induty_code],
+                    ['업종명', induty_name],
                     ['설립일', company_info.get('est_dt_formatted', '')],
                     ['결산월', company_info.get('acc_mt_formatted', '')],
                     ['주소', company_info.get('adres', '')],
-                    ['전화번호', company_info.get('phn_no', '')],
-                    ['팩스번호', company_info.get('fax_no', '')],
                     ['홈페이지', company_info.get('hm_url', '')],
-                    ['IR페이지', company_info.get('ir_url', '')],
                 ]
                 info_df = pd.DataFrame(info_rows[1:], columns=info_rows[0])
                 info_df.to_excel(writer, sheet_name='기업개황', index=False)
+
+                # 기업개황 시트 정렬 스타일 적용
+                from openpyxl.styles import Alignment
+                info_ws = writer.book['기업개황']
+                for row in range(2, info_ws.max_row + 1):  # 헤더 제외
+                    info_ws.cell(row=row, column=1).alignment = Alignment(horizontal='left', vertical='center')  # A열 좌측
+                    info_ws.cell(row=row, column=2).alignment = Alignment(horizontal='right', vertical='center')  # B열 우측
+
                 print(f"[Excel] 기업개황 시트 저장 완료")
             except Exception as e:
                 print(f"[Excel] 기업개황 시트 저장 실패: {e}")
@@ -3985,20 +4492,299 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
 
             print(f"[VCM] create_vcm_format 완료: {len(vcm_df) if vcm_df is not None else 0}개 항목")
 
+            # preview_data 직접 저장 (엑셀 형식과 무관하게 원본 데이터 유지)
+            vcm_preview_data = None
+            display_preview_data = None
             if vcm_df is not None and not vcm_df.empty:
-                print(f"[VCM] VCM 데이터 저장 중... ({len(vcm_df)}행)")
-                vcm_df.to_excel(writer, sheet_name='VCM전용포맷', index=False)
-                print(f"[VCM] VCM전용포맷 시트 저장 완료")
+                vcm_preview_data = safe_dataframe_to_json(vcm_df)
+                print(f"[VCM] vcm_preview_data 생성: {len(vcm_preview_data)}개 행")
+            if display_df is not None and not display_df.empty:
+                display_preview_data = safe_dataframe_to_json(display_df)
+                print(f"[VCM] display_preview_data 생성: {len(display_preview_data)}개 행")
+
+            if vcm_df is not None and not vcm_df.empty:
+                print(f"[VCM] Frontdata 저장 중... ({len(vcm_df)}행)")
+                vcm_df.to_excel(writer, sheet_name='Frontdata', index=False)
+
+                # Frontdata 헤더 스타일 적용
+                from openpyxl.styles import PatternFill, Font, Alignment
+                fd_ws = writer.book['Frontdata']
+                fd_header_fill = PatternFill(start_color='131313', end_color='131313', fill_type='solid')
+                fd_header_font = Font(bold=True, color='FFFFFF')
+                fd_header_align = Alignment(horizontal='center', vertical='center')
+                for col in range(1, fd_ws.max_column + 1):
+                    cell = fd_ws.cell(row=1, column=col)
+                    cell.fill = fd_header_fill
+                    cell.font = fd_header_font
+                    cell.alignment = fd_header_align
+                fd_ws.row_dimensions[1].height = 30  # 헤더 행 높이 2배
+
+                print(f"[VCM] Frontdata 시트 저장 완료")
 
             if display_df is not None and not display_df.empty:
-                print(f"[VCM] 복사용테이블 저장 중... ({len(display_df)}행)")
-                display_df.to_excel(writer, sheet_name='복사용테이블', index=False)
-                print(f"[VCM] 복사용테이블 시트 저장 완료")
+                print(f"[VCM] Financials 저장 중... ({len(display_df)}행)")
+
+                # 타입 정보는 vcm_df에서 가져옴
+                item_names = display_df['항목'].tolist() if '항목' in display_df.columns else []
+
+                # vcm_df에서 타입 정보 매핑
+                type_map = {}
+                if vcm_df is not None and '항목' in vcm_df.columns and '타입' in vcm_df.columns:
+                    for _, row in vcm_df.iterrows():
+                        type_map[row['항목']] = row.get('타입', 'item')
+                type_info = [type_map.get(name, 'item') for name in item_names]
+
+                display_df_clean = display_df.copy()
+
+                # 재무상태표/손익계산서 분리 (매출 기준)
+                is_start_idx = None
+                for idx, name in enumerate(item_names):
+                    if name and name.strip() == '매출':
+                        is_start_idx = idx
+                        break
+
+                if is_start_idx is None:
+                    is_start_idx = len(item_names)  # 손익계산서 없으면 전체가 재무상태표
+
+                bs_rows = display_df_clean.iloc[:is_start_idx].reset_index(drop=True)
+                is_rows = display_df_clean.iloc[is_start_idx:].reset_index(drop=True)
+                bs_types = type_info[:is_start_idx]
+                is_types = type_info[is_start_idx:]
+
+                print(f"[VCM] 재무상태표: {len(bs_rows)}행, 손익계산서: {len(is_rows)}행")
+
+                # 빈 시트 생성 후 좌우 배치
+                from openpyxl import Workbook
+                from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+
+                # 시트 생성
+                if 'Financials' in writer.book.sheetnames:
+                    del writer.book['Financials']
+                ws = writer.book.create_sheet('Financials')
+
+                # 스타일 정의
+                header_fill = PatternFill(start_color='131313', end_color='131313', fill_type='solid')  # 섹션 헤더 (진한 검정)
+                th_fill = PatternFill(start_color='6b7280', end_color='6b7280', fill_type='solid')  # 컬럼 헤더 (연한 회색)
+                category_fill = PatternFill(start_color='f3f4f6', end_color='f3f4f6', fill_type='solid')
+                total_fill = PatternFill(start_color='fef3c7', end_color='fef3c7', fill_type='solid')
+                highlight_fill = PatternFill(start_color='fef2f2', end_color='fef2f2', fill_type='solid')
+
+                white_font = Font(color='FFFFFF', bold=True)
+                bold_font = Font(bold=True)
+                th_font = Font(color='FFFFFF', bold=True)  # 컬럼 헤더용 흰색 글자
+                total_font = Font(bold=True, color='92400e')
+                highlight_font = Font(bold=True, color='dc2626')
+                gray_font = Font(color='6b7280')
+                thin_border = Border(bottom=Side(style='thin', color='e5e7eb'))
+
+                # 컬럼 정보
+                data_cols = list(display_df_clean.columns)  # (단위: 백만원), FY2020, FY2021, ...
+                num_cols = len(data_cols)
+                is_start_col = num_cols + 2  # 재무상태표 컬럼 + 빈 컬럼 1개 후 시작
+
+                def apply_cell_style(cell, item_type, is_first_col=False, is_header=False, is_section_header=False):
+                    """셀 스타일 적용"""
+                    if is_section_header:
+                        cell.fill = header_fill
+                        cell.font = white_font
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                    elif is_header:
+                        cell.fill = th_fill
+                        cell.font = th_font  # 흰색 글자
+                        cell.alignment = Alignment(horizontal='left' if is_first_col else 'right', vertical='center')
+                    else:
+                        cell.border = thin_border
+                        cell.alignment = Alignment(horizontal='left' if is_first_col else 'right', vertical='center')
+
+                        if item_type == 'category':
+                            cell.fill = category_fill
+                            cell.font = bold_font
+                        elif item_type == 'total':
+                            cell.fill = total_fill
+                            cell.font = total_font
+                        elif item_type == 'highlight':
+                            cell.fill = highlight_fill
+                            cell.font = highlight_font
+                        elif item_type in ['subitem', 'percent']:
+                            cell.font = gray_font
+                            if is_first_col:
+                                cell.alignment = Alignment(horizontal='left', vertical='center', indent=2)
+
+                def write_table(start_col, section_name, df_rows, types_list):
+                    """테이블 작성 (섹션 헤더 + 컬럼 헤더 + 데이터)"""
+                    # 행1: 섹션 헤더
+                    ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=start_col + num_cols - 1)
+                    cell = ws.cell(row=1, column=start_col, value=section_name)
+                    apply_cell_style(cell, None, is_section_header=True)
+
+                    # 행2: 컬럼 헤더
+                    for col_idx, col_name in enumerate(data_cols):
+                        cell = ws.cell(row=2, column=start_col + col_idx, value=col_name)
+                        apply_cell_style(cell, None, is_first_col=(col_idx == 0), is_header=True)
+
+                    # 행3~: 데이터
+                    for row_idx, (_, row_data) in enumerate(df_rows.iterrows()):
+                        item_type = types_list[row_idx] if row_idx < len(types_list) else 'item'
+                        for col_idx, col_name in enumerate(data_cols):
+                            cell = ws.cell(row=3 + row_idx, column=start_col + col_idx, value=row_data[col_name])
+                            apply_cell_style(cell, item_type, is_first_col=(col_idx == 0))
+
+                # 재무상태표 작성 (A열부터)
+                write_table(1, '재무상태표', bs_rows, bs_types)
+
+                # 손익계산서 작성 (빈 컬럼 1개 후)
+                if len(is_rows) > 0:
+                    write_table(is_start_col, '손익계산서', is_rows, is_types)
+
+                # 헤더 행 높이 설정 (섹션 헤더만 2배)
+                ws.row_dimensions[1].height = 30  # 섹션 헤더만 높게
+                # 행2 (컬럼 헤더)는 기본 높이 유지
+
+                print(f"[VCM] Financials 시트 저장 완료 (좌우 배치)")
 
         except Exception as e:
             import traceback
             print(f"[VCM] VCM 포맷 생성 실패: {e}")
             print(f"[VCM] 상세 에러:\n{traceback.format_exc()}")
+
+        # 모든 시트의 컬럼 너비 자동 조절
+        try:
+            from openpyxl.utils import get_column_letter
+            workbook = writer.book
+            for sheet_name in workbook.sheetnames:
+                worksheet = workbook[sheet_name]
+
+                # Financials 시트는 고정 너비 사용 (좌우 배치)
+                if sheet_name == 'Financials':
+                    # 재무상태표: A~F열 (항목명 20, FY컬럼 10)
+                    worksheet.column_dimensions['A'].width = 20
+                    worksheet.column_dimensions['B'].width = 10
+                    worksheet.column_dimensions['C'].width = 10
+                    worksheet.column_dimensions['D'].width = 10
+                    worksheet.column_dimensions['E'].width = 10
+                    worksheet.column_dimensions['F'].width = 10
+                    # 빈 컬럼: G열
+                    worksheet.column_dimensions['G'].width = 3
+                    # 손익계산서: H~M열 (항목명 20, FY컬럼 10)
+                    worksheet.column_dimensions['H'].width = 20
+                    worksheet.column_dimensions['I'].width = 10
+                    worksheet.column_dimensions['J'].width = 10
+                    worksheet.column_dimensions['K'].width = 10
+                    worksheet.column_dimensions['L'].width = 10
+                    worksheet.column_dimensions['M'].width = 10
+                    continue
+
+                for column_cells in worksheet.columns:
+                    max_length = 0
+                    column_letter = get_column_letter(column_cells[0].column)
+
+                    for cell in column_cells:
+                        try:
+                            if cell.value:
+                                # 한글은 약 2배 너비 차지
+                                cell_length = 0
+                                cell_str = str(cell.value)
+                                for char in cell_str:
+                                    if ord(char) > 127:  # 한글/특수문자
+                                        cell_length += 2
+                                    else:
+                                        cell_length += 1
+                                if cell_length > max_length:
+                                    max_length = cell_length
+                        except:
+                            pass
+                    # 최소 너비 8, 최대 너비 60
+                    adjusted_width = min(max(max_length + 2, 8), 60)
+                    worksheet.column_dimensions[column_letter].width = adjusted_width
+            print(f"[Excel] 컬럼 너비 자동 조절 완료")
+
+            # 모든 시트의 헤더 행 높이 설정 (2배 = 30pt)
+            for sheet_name in workbook.sheetnames:
+                worksheet = workbook[sheet_name]
+                worksheet.row_dimensions[1].height = 30
+            print(f"[Excel] 헤더 행 높이 설정 완료")
+        except Exception as e:
+            print(f"[Excel] 컬럼 너비 조절 실패: {e}")
+
+        # 모든 시트의 숫자 셀 포맷팅 (우측 정렬 + 천 단위 구분자)
+        # 텍스트로 저장된 숫자도 실제 숫자로 변환
+        try:
+            from openpyxl.styles import Alignment
+            workbook = writer.book
+            for sheet_name in workbook.sheetnames:
+                worksheet = workbook[sheet_name]
+                for row in worksheet.iter_rows():
+                    for cell in row:
+                        # 이미 숫자인 경우
+                        if isinstance(cell.value, (int, float)) and cell.value is not None:
+                            cell.alignment = Alignment(horizontal='right', vertical='center')
+                            if isinstance(cell.value, int) or (isinstance(cell.value, float) and cell.value == int(cell.value)):
+                                cell.number_format = '#,##0'
+                            else:
+                                cell.number_format = '#,##0.0'  # 소수점 한 자리
+                        # 문자열인데 숫자로 변환 가능한 경우
+                        elif isinstance(cell.value, str) and cell.value.strip():
+                            try:
+                                # 콤마 제거 후 숫자 변환 시도
+                                cleaned = cell.value.replace(',', '').strip()
+                                # 음수 처리: -123 또는 (123) 형식
+                                is_negative = False
+                                if cleaned.startswith('(') and cleaned.endswith(')'):
+                                    cleaned = cleaned[1:-1]
+                                    is_negative = True
+                                elif cleaned.startswith('-'):
+                                    cleaned = cleaned[1:]
+                                    is_negative = True
+
+                                # 퍼센트 처리: 6.8% -> 0.068
+                                is_percent = cleaned.endswith('%')
+                                if is_percent:
+                                    cleaned = cleaned[:-1].strip()
+
+                                # 숫자인지 확인 (소수점 하나만 허용)
+                                if cleaned.replace('.', '', 1).isdigit():
+                                    num_value = float(cleaned)
+                                    if is_negative:
+                                        num_value = -num_value
+                                    # 퍼센트면 100으로 나누고 퍼센트 포맷 적용
+                                    if is_percent:
+                                        num_value = num_value / 100
+                                        cell.value = num_value
+                                        cell.number_format = '0.0%'
+                                    # 정수면 int로 변환
+                                    elif num_value == int(num_value):
+                                        cell.value = int(num_value)
+                                        cell.number_format = '#,##0'
+                                    else:
+                                        cell.value = num_value
+                                        cell.number_format = '#,##0.0'  # 소수점 한 자리
+                                    cell.alignment = Alignment(horizontal='right', vertical='center')
+                            except (ValueError, TypeError):
+                                pass  # 숫자로 변환 불가능한 문자열은 무시
+            print(f"[Excel] 숫자 포맷팅 완료 (우측 정렬 + 천 단위 구분자, 텍스트→숫자 변환 포함)")
+        except Exception as e:
+            print(f"[Excel] 숫자 포맷팅 실패: {e}")
+
+        # 시트 순서 재배치: 기업개황 → Financials → ... → Frontdata(맨 끝)
+        try:
+            workbook = writer.book
+
+            # Financials를 기업개황 바로 다음으로 이동
+            if 'Financials' in workbook.sheetnames:
+                current_idx = workbook.sheetnames.index('Financials')
+                if current_idx != 1:
+                    workbook.move_sheet('Financials', offset=1 - current_idx)
+
+            # Frontdata를 맨 끝으로 이동
+            if 'Frontdata' in workbook.sheetnames:
+                current_idx = workbook.sheetnames.index('Frontdata')
+                target_idx = len(workbook.sheetnames) - 1
+                if current_idx != target_idx:
+                    workbook.move_sheet('Frontdata', offset=target_idx - current_idx)
+
+            print(f"[Excel] 시트 순서 재배치 완료: {workbook.sheetnames}")
+        except Exception as e:
+            print(f"[Excel] 시트 순서 재배치 실패: {e}")
 
 
 @app.get("/api/status/{task_id}")
@@ -4014,11 +4800,19 @@ async def get_task_status(task_id: str):
         "message": task['message'],
         "filename": task.get('filename')
     }
-    
+
     # 완료 시 미리보기 데이터 포함
     if task['status'] == 'completed' and task.get('preview_data'):
         result['preview_data'] = task['preview_data']
-    
+
+    # 현재주소 (사업보고서 기준) 포함
+    if task.get('current_address'):
+        result['current_address'] = task['current_address']
+
+    # 현재 대표자 (사업보고서 기준) 포함
+    if task.get('current_ceo'):
+        result['current_ceo'] = task['current_ceo']
+
     return result
 
 
@@ -4047,7 +4841,7 @@ async def cancel_task(task_id: str):
 
 
 # ============================================================
-# AI 인사이트 분석 API
+# 재무분석 AI 분석 API
 # ============================================================
 @app.post("/api/analyze/{task_id}")
 async def analyze_financial_data(task_id: str):
@@ -4123,10 +4917,70 @@ async def run_financial_analysis(task_id: str):
         # 분석 실행 (콜백 전달)
         result = await analyzer.analyze(preview_data, company_info, update_progress)
 
+        # 사업보고서에서 최신 대표자/주소 추출
+        update_progress(95, '[5/5] 최신 기업정보 확인 중')
+        try:
+            from dart_company_info import DartCompanyInfo
+            dart_info = DartCompanyInfo()
+            corp_code = task.get('corp_code', '')
+            print(f"[ANALYSIS] corp_code 확인: '{corp_code}'")
+            if corp_code:
+                latest_info = dart_info.get_company_info_from_report(corp_code)
+                print(f"[ANALYSIS] latest_info 결과: {latest_info}")
+                if latest_info:
+                    # 정기보고서가 없는 경우, 기업개황정보를 최신으로 사용
+                    if latest_info.get('no_report'):
+                        print(f"[ANALYSIS] 정기보고서 없음 - 기업개황정보를 최신으로 사용")
+                        # 기업개황정보에서 대표자/주소 가져오기
+                        if company_info and company_info.get('ceo_nm'):
+                            result['current_ceo'] = company_info['ceo_nm']
+                            print(f"[ANALYSIS] 기업개황 대표자 사용: {company_info['ceo_nm']}")
+                        if company_info and company_info.get('adres'):
+                            result['current_address'] = company_info['adres']
+                            print(f"[ANALYSIS] 기업개황 주소 사용: {company_info['adres']}")
+                        result['no_report'] = True  # 프론트엔드에 알림
+                    else:
+                        if latest_info.get('ceo'):
+                            result['current_ceo'] = latest_info['ceo']
+                            print(f"[ANALYSIS] 최신 대표자: {latest_info['ceo']}")
+                        else:
+                            print(f"[ANALYSIS] latest_info에 ceo 없음")
+                        if latest_info.get('address'):
+                            result['current_address'] = latest_info['address']
+                            print(f"[ANALYSIS] 최신 주소: {latest_info['address']}")
+                        else:
+                            print(f"[ANALYSIS] latest_info에 address 없음")
+                else:
+                    print(f"[ANALYSIS] latest_info가 None 또는 빈 값")
+            else:
+                print(f"[ANALYSIS] corp_code가 비어있음")
+        except Exception as info_err:
+            print(f"[ANALYSIS] 최신 기업정보 추출 실패: {info_err}")
+            import traceback
+            traceback.print_exc()
+
         task['analysis_status'] = 'completed'
         task['analysis_progress'] = 100
         task['analysis_message'] = '분석 완료'
         task['analysis_result'] = result
+
+        # LLM 사용량 로깅 (로그인한 사용자인 경우)
+        if task.get('user_id'):
+            try:
+                # 토큰 정보 추출 (result에 포함되어 있으면 사용, 없으면 기본값)
+                token_info = result.get('token_usage', {}) if result else {}
+                db.log_llm_usage(
+                    user_id=task['user_id'],
+                    corp_code=task.get('corp_code', ''),
+                    corp_name=task.get('corp_name', ''),
+                    model_name=token_info.get('model', 'gemini-2.5-pro'),
+                    input_tokens=token_info.get('input_tokens', 0),
+                    output_tokens=token_info.get('output_tokens', 0),
+                    cost=token_info.get('cost', 0)
+                )
+                print(f"[ANALYSIS] LLM 사용량 기록 완료: user_id={task['user_id']}")
+            except Exception as log_err:
+                print(f"[ANALYSIS] LLM 사용량 기록 실패: {log_err}")
 
     except Exception as e:
         print(f"[ANALYSIS ERROR] {e}")
@@ -4152,27 +5006,287 @@ async def get_analysis_status(task_id: str):
     }
 
 
+def apply_excel_formatting(filepath: str):
+    """기존 엑셀 파일에 포맷팅 재적용 (문자열→숫자 변환 포함)"""
+    try:
+        from openpyxl import load_workbook
+        from openpyxl.styles import Alignment
+        from openpyxl.utils import get_column_letter
+
+        wb = load_workbook(filepath)
+        total_converted = 0
+
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            sheet_converted = 0
+
+            # 컬럼 너비 자동 조절
+            for column_cells in ws.columns:
+                max_length = 0
+                column_letter = get_column_letter(column_cells[0].column)
+                for cell in column_cells:
+                    try:
+                        if cell.value:
+                            cell_length = 0
+                            cell_str = str(cell.value)
+                            for char in cell_str:
+                                if ord(char) > 127:
+                                    cell_length += 2
+                                else:
+                                    cell_length += 1
+                            if cell_length > max_length:
+                                max_length = cell_length
+                    except:
+                        pass
+                adjusted_width = min(max(max_length + 2, 8), 60)
+                ws.column_dimensions[column_letter].width = adjusted_width
+
+            # 숫자 셀 포맷팅 (우측 정렬 + 천 단위 구분자 + 문자열→숫자 변환)
+            for row in ws.iter_rows():
+                for cell in row:
+                    # 이미 숫자인 경우
+                    if isinstance(cell.value, (int, float)) and cell.value is not None:
+                        cell.alignment = Alignment(horizontal='right', vertical='center')
+                        if isinstance(cell.value, int) or (isinstance(cell.value, float) and cell.value == int(cell.value)):
+                            cell.number_format = '#,##0'
+                        else:
+                            cell.number_format = '#,##0.0'  # 소수점 한 자리
+                    # 문자열인데 숫자로 변환 가능한 경우
+                    elif isinstance(cell.value, str) and cell.value.strip():
+                        try:
+                            cleaned = cell.value.replace(',', '').strip()
+
+                            # '-'만 있는 경우 스킵 (대시 기호)
+                            if cleaned == '-' or cleaned == '':
+                                continue
+
+                            is_negative = False
+                            if cleaned.startswith('(') and cleaned.endswith(')'):
+                                cleaned = cleaned[1:-1]
+                                is_negative = True
+                            elif cleaned.startswith('-') and len(cleaned) > 1:
+                                cleaned = cleaned[1:]
+                                is_negative = True
+
+                            # 퍼센트 처리
+                            is_percent = cleaned.endswith('%')
+                            if is_percent:
+                                cleaned = cleaned[:-1].strip()
+
+                            # 빈 문자열 체크
+                            if not cleaned:
+                                continue
+
+                            if cleaned.replace('.', '', 1).isdigit():
+                                num_value = float(cleaned)
+                                if is_negative:
+                                    num_value = -num_value
+                                if is_percent:
+                                    num_value = num_value / 100
+                                    cell.value = num_value
+                                    cell.number_format = '0.0%'
+                                elif num_value == int(num_value):
+                                    cell.value = int(num_value)
+                                    cell.number_format = '#,##0'
+                                else:
+                                    cell.value = num_value
+                                    cell.number_format = '#,##0.0'  # 소수점 한 자리
+                                cell.alignment = Alignment(horizontal='right', vertical='center')
+                                sheet_converted += 1
+                        except (ValueError, TypeError, OverflowError):
+                            pass
+
+            if sheet_converted > 0:
+                print(f"  - {sheet_name}: {sheet_converted}개 셀 변환")
+            total_converted += sheet_converted
+
+        wb.save(filepath)
+        print(f"[Excel] 포맷팅 재적용 완료: {filepath} (총 {total_converted}개 셀 변환)")
+        return True
+    except Exception as e:
+        import traceback
+        print(f"[Excel] 포맷팅 재적용 실패: {e}")
+        traceback.print_exc()
+        return False
+
+
 @app.get("/api/download/{task_id}")
 async def download_file(task_id: str):
     """파일 다운로드 API"""
     task = TASKS.get(task_id)
+
+    # 서버 재시작 후에도 파일 다운로드 가능하도록 fallback
     if not task:
-        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
-    
+        # output 폴더에서 가장 최근 파일 찾기 시도
+        output_dir = os.path.join(os.path.dirname(__file__), 'output')
+        if os.path.exists(output_dir):
+            files = [f for f in os.listdir(output_dir) if f.endswith('.xlsx')]
+            if files:
+                # 가장 최근 파일 사용
+                files.sort(key=lambda x: os.path.getmtime(os.path.join(output_dir, x)), reverse=True)
+                latest_file = files[0]
+                filepath = os.path.join(output_dir, latest_file)
+
+                # 다운로드 전 포맷팅 재적용
+                apply_excel_formatting(filepath)
+
+                return FileResponse(
+                    path=filepath,
+                    filename=latest_file,
+                    media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다. 재추출이 필요합니다.")
+
     if task['status'] != 'completed':
         raise HTTPException(status_code=400, detail="작업이 완료되지 않았습니다.")
-    
+
     filepath = task.get('file_path')
     if not filepath or not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
-    
+
+    # 다운로드 전 포맷팅 재적용 (서버 코드 변경사항 반영)
+    apply_excel_formatting(filepath)
+
     filename = task.get('filename', 'financial_statement.xlsx')
-    
+
     return FileResponse(
         path=filepath,
         filename=filename,
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
+
+
+@app.get("/api/download-file/{filename}")
+async def download_file_by_name(filename: str):
+    """파일명으로 직접 다운로드 (서버 재시작 후에도 사용 가능)"""
+    # 보안: 파일명에 경로 조작 문자 포함 시 거부
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="잘못된 파일명입니다.")
+
+    output_dir = os.path.join(os.path.dirname(__file__), 'output')
+    filepath = os.path.join(output_dir, filename)
+
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+
+    # 다운로드 전 포맷팅 재적용
+    apply_excel_formatting(filepath)
+
+    return FileResponse(
+        path=filepath,
+        filename=filename,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
+@app.post("/api/add-insight/{task_id}")
+async def add_insight_to_excel(task_id: str, request: Request):
+    """재무분석 AI를 엑셀 파일에 추가하는 API"""
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
+
+    filepath = task.get('file_path')
+    if not filepath or not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+
+    try:
+        data = await request.json()
+        report = data.get('report', '')
+
+        if not report:
+            raise HTTPException(status_code=400, detail="보고서 내용이 없습니다.")
+
+        # 엑셀 파일에 재무분석 AI 시트 추가
+        from openpyxl import load_workbook
+        from openpyxl.styles import Font, Alignment, PatternFill
+
+        wb = load_workbook(filepath)
+
+        # 기존 재무분석 AI 시트가 있으면 삭제
+        if '재무분석 AI' in wb.sheetnames:
+            del wb['재무분석 AI']
+
+        # 새 시트 생성 (Financials 다음에 위치)
+        insight_sheet = wb.create_sheet('재무분석 AI')
+
+        # Financials 다음으로 이동 (기업개황 → Financials → 재무분석 AI → ... → Frontdata)
+        if 'Financials' in wb.sheetnames:
+            target_idx = wb.sheetnames.index('Financials') + 1
+            current_idx = wb.sheetnames.index('재무분석 AI')
+            if current_idx != target_idx:
+                wb.move_sheet('재무분석 AI', offset=target_idx - current_idx)
+
+        # 스타일 정의
+        title_font = Font(name='맑은 고딕', size=14, bold=True, color='1F4E79')
+        header_font = Font(name='맑은 고딕', size=12, bold=True, color='2E75B6')
+        subheader_font = Font(name='맑은 고딕', size=11, bold=True, color='404040')
+        normal_font = Font(name='맑은 고딕', size=10)
+
+        # 마크다운 및 HTML 포맷팅 제거 함수
+        def strip_markdown(text):
+            import re
+            # HTML 태그 제거 (strong, em, li, ul, ol, p, br, h1-h6 등)
+            text = re.sub(r'<strong>(.+?)</strong>', r'\1', text)
+            text = re.sub(r'<em>(.+?)</em>', r'\1', text)
+            text = re.sub(r'<li>', '', text)
+            text = re.sub(r'</li>', '', text)
+            text = re.sub(r'<ul>|</ul>|<ol>|</ol>', '', text)
+            text = re.sub(r'<p>|</p>', '', text)
+            text = re.sub(r'<br\s*/?>', '', text)
+            text = re.sub(r'<h[1-6]>|</h[1-6]>', '', text)
+            # **bold** 제거 - 더 강력한 패턴 (한글, 특수문자 포함)
+            text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+            # __bold__ 제거
+            text = re.sub(r'__(.+?)__', r'\1', text)
+            # *italic* 제거 (단독 별표만)
+            text = re.sub(r'(?<!\*)\*([^*\n]+)\*(?!\*)', r'\1', text)
+            # _italic_ 제거 (단독 밑줄만)
+            text = re.sub(r'(?<!_)_([^_\n]+)_(?!_)', r'\1', text)
+            # 리스트 기호 제거 (- 또는 * 로 시작하는 줄)
+            text = re.sub(r'^[-*]\s+', '', text)
+            # 번호 리스트 제거 (1. 2. 등)
+            text = re.sub(r'^\d+\.\s+', '', text)
+            return text
+
+        # 마크다운 텍스트를 줄별로 분리하여 엑셀에 작성
+        lines = report.split('\n')
+        row = 1
+
+        for line in lines:
+            # 마크다운 포맷팅 제거
+            clean_line = strip_markdown(line.strip())
+            cell = insight_sheet.cell(row=row, column=1, value=clean_line)
+
+            # 스타일 적용
+            if line.startswith('# '):
+                cell.value = strip_markdown(line[2:].strip())
+                cell.font = title_font
+            elif line.startswith('## '):
+                cell.value = strip_markdown(line[3:].strip())
+                cell.font = header_font
+            elif line.startswith('### '):
+                cell.value = strip_markdown(line[4:].strip())
+                cell.font = subheader_font
+            elif line.startswith('- **') or line.startswith('* **'):
+                cell.font = normal_font
+            else:
+                cell.font = normal_font
+
+            cell.alignment = Alignment(wrap_text=True, vertical='top')
+            row += 1
+
+        # 열 너비 설정
+        insight_sheet.column_dimensions['A'].width = 100
+
+        wb.save(filepath)
+        wb.close()
+
+        return {"success": True, "message": "재무분석 AI가 엑셀에 추가되었습니다."}
+
+    except Exception as e:
+        print(f"[오류] 재무분석 AI 엑셀 추가 실패: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/api/task/{task_id}")
@@ -4188,7 +5302,7 @@ async def delete_task(task_id: str):
                 pass
         # 작업 삭제
         del TASKS[task_id]
-    
+
     return {"success": True}
 
 

@@ -3,30 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PE 전용 딥 리서치</title>
+    <title>Valulens - PE 전용 딥 리서치</title>
     <style>
+        :root {
+            /* Primary - Navy Blue (템플릿 #373c5f 계열) */
+            --primary: #373c5f;
+            --primary-dark: #2a2e4a;
+            --primary-light: #4a5080;
+
+            /* Accent - Gold (템플릿 #b49132) */
+            --accent: #b49132;
+            --accent-dark: #9a7c2a;
+            --accent-light: #c9a64a;
+
+            /* Text Colors */
+            --text-dark: #1a1a1a;
+            --text-medium: #4a5568;
+            --text-light: #6b7280;
+
+            /* Background Colors */
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+
+            /* Border Colors */
+            --border-light: #e2e8f0;
+            --border-medium: #cbd5e0;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
+        html {
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
         body {
             font-family: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #f5f6f8;
+            background: var(--bg-primary);
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            padding: 40px 20px;
+            padding: 110px 20px 40px 20px;
+            overflow-x: hidden;
+            overflow-y: auto;
         }
-        
+
         .container {
             background: #ffffff;
             border-radius: 12px;
             padding: 48px;
             width: 100%;
             max-width: 1200px;
+            margin: 0 auto;
             box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
             border: 1px solid #e8e8e8;
         }
@@ -74,8 +104,8 @@
         
         input[type="text"]:focus {
             outline: none;
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(180, 145, 50, 0.2);
             background: #ffffff;
         }
         
@@ -90,57 +120,57 @@
         }
         
         .btn-primary {
-            background: #2563eb;
+            background: var(--accent);
             color: white;
         }
-        
+
         .btn-primary:hover {
-            background: #1d4ed8;
-            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+            background: var(--accent-dark);
+            box-shadow: 0 2px 8px rgba(180, 145, 50, 0.35);
         }
 
         .btn-secondary {
-            background: #6b7280;
+            background: #131313;
             color: white;
         }
 
         .btn-secondary:hover {
-            background: #4b5563;
-            box-shadow: 0 2px 8px rgba(107, 114, 128, 0.25);
+            background: #2a2a2a;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
         }
 
         .btn-danger {
-            background: #dc2626;
+            background: #7d7d7d;
             color: white;
         }
-        
+
         .btn-danger:hover {
-            background: #b91c1c;
-            box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
+            background: #5c5c5c;
+            box-shadow: 0 2px 8px rgba(125, 125, 125, 0.25);
         }
         
         .btn-success {
-            background: #059669;
+            background: #131313;
             color: white;
         }
-        
+
         .btn-success:hover {
-            background: #047857;
-            box-shadow: 0 2px 8px rgba(5, 150, 105, 0.25);
+            background: #2a2a2a;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
         }
 
         .btn-ai {
-            background: linear-gradient(135deg, #8b5cf6, #6366f1);
+            background: var(--accent);
             color: white;
         }
 
         .btn-ai:hover {
-            background: linear-gradient(135deg, #7c3aed, #4f46e5);
-            box-shadow: 0 2px 8px rgba(139, 92, 246, 0.35);
+            background: var(--accent-dark);
+            box-shadow: 0 2px 8px rgba(180, 145, 50, 0.4);
         }
 
         .btn-ai:disabled {
-            background: #a5b4fc;
+            background: #c9b896;
             cursor: not-allowed;
         }
 
@@ -153,7 +183,7 @@
         .analysis-start-container {
             text-align: center;
             padding: 30px 20px;
-            background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+            background: linear-gradient(135deg, #f0f4f8, #e2e8f0);
             border-radius: 12px;
             margin: 10px 0;
         }
@@ -167,8 +197,8 @@
         /* AI 분석 섹션 */
         .analysis-section {
             margin-top: 20px;
-            background: linear-gradient(135deg, #f5f3ff, #ede9fe);
-            border: 1px solid #c4b5fd;
+            background: #f5f5f5;
+            border: 1px solid var(--border-medium);
             border-radius: 12px;
             padding: 20px;
         }
@@ -183,15 +213,15 @@
         .analysis-header h3 {
             margin: 0;
             font-size: 1.1rem;
-            color: #5b21b6;
+            color: var(--primary-dark);
         }
 
         .analysis-status {
             font-size: 0.85rem;
             padding: 4px 12px;
             border-radius: 20px;
-            background: #ddd6fe;
-            color: #6d28d9;
+            background: #e2e8f0;
+            color: var(--primary);
         }
 
         .analysis-status.running {
@@ -207,6 +237,25 @@
         .analysis-status.failed {
             background: #fee2e2;
             color: #dc2626;
+        }
+
+        .btn-copy {
+            font-size: 0.8rem;
+            padding: 4px 12px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-copy:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-copy.copied {
+            background: var(--accent);
         }
 
         .analysis-message {
@@ -232,50 +281,67 @@
             background: white;
             border-radius: 8px;
             padding: 20px;
-            max-height: 600px;
-            overflow-y: auto;
             font-size: 0.9rem;
             line-height: 1.6;
+            text-align: left;
         }
 
         .analysis-result h1 {
             font-size: 1.3rem;
-            color: #1e1b4b;
-            border-bottom: 2px solid #8b5cf6;
+            color: var(--primary-dark);
+            border-bottom: 2px solid var(--accent);
             padding-bottom: 8px;
             margin-bottom: 16px;
         }
 
         .analysis-result h2 {
             font-size: 1.1rem;
-            color: #3730a3;
+            color: var(--primary);
             margin-top: 20px;
             margin-bottom: 12px;
         }
 
         .analysis-result h3 {
             font-size: 1rem;
-            color: #4c1d95;
+            color: var(--primary-dark);
             margin-top: 16px;
             margin-bottom: 8px;
         }
 
         .analysis-result ul, .analysis-result ol {
-            padding-left: 20px;
+            padding-left: 0;
+            margin-left: 0;
+            list-style: none;
         }
 
         .analysis-result li {
-            margin-bottom: 6px;
+            margin-bottom: 8px;
+            padding-left: 0;
+            text-indent: 0;
         }
 
         .analysis-result strong {
-            color: #5b21b6;
+            color: var(--primary);
         }
 
         .btn:disabled {
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .btn-shake {
+            animation: shake 0.5s ease-in-out;
+            background: #f59e0b !important;
+            border-color: #f59e0b !important;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-4px); }
+            40% { transform: translateX(4px); }
+            60% { transform: translateX(-4px); }
+            80% { transform: translateX(4px); }
         }
         
         /* 검색 히스토리 */
@@ -346,6 +412,7 @@
         
         .search-results.show {
             display: block;
+            margin-top: 16px;
         }
         
         .result-item {
@@ -423,10 +490,33 @@
         .company-info-title {
             font-size: 1rem;
             font-weight: 600;
-            color: #374151;
+            color: var(--primary);
             margin: 0 0 12px 0;
             padding-bottom: 8px;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 2px solid var(--accent);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .company-info-title:hover {
+            color: var(--primary-dark);
+        }
+
+        .company-info-toggle {
+            font-size: 0.75rem;
+            color: #7d7d7d;
+        }
+
+        .company-info-content {
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .company-info-content.collapsed {
+            max-height: 0 !important;
         }
 
         .company-info-loading {
@@ -442,7 +532,7 @@
             width: 16px;
             height: 16px;
             border: 2px solid #e5e7eb;
-            border-top-color: #2563eb;
+            border-top-color: var(--primary);
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -478,7 +568,7 @@
         }
 
         .company-info-table a {
-            color: #2563eb;
+            color: var(--primary);
             text-decoration: none;
         }
 
@@ -487,8 +577,8 @@
         }
 
         .selected-company {
-            background: #f0f9ff;
-            border: 1px solid #bae6fd;
+            background: #f8f9fa;
+            border: 1px solid #e5e7eb;
             padding: 12px 16px;
             border-radius: 8px;
             margin-bottom: 16px;
@@ -496,10 +586,10 @@
             justify-content: space-between;
             align-items: center;
         }
-        
+
         .selected-company-name {
             font-weight: 500;
-            color: #0c4a6e;
+            color: #374151;
         }
         
         .progress-bar-container {
@@ -512,10 +602,12 @@
         
         .progress-bar {
             height: 100%;
-            background: #2563eb;
+            background: var(--primary);
             border-radius: 6px;
             transition: width 0.3s ease;
             width: 0%;
+            font-size: 0;
+            overflow: hidden;
         }
 
         /* 분석 진행바 (더 큰 사이즈) */
@@ -651,29 +743,97 @@
             padding: 10px 20px;
             border: 1px solid transparent;
             border-bottom: none;
-            background: #f3f4f6;
+            background: rgba(19, 19, 19, 0.08);
             border-radius: 6px 6px 0 0;
             cursor: pointer;
             font-size: 0.85rem;
             transition: all 0.15s;
-            color: #6b7280;
-            font-weight: 500;
+            color: #131313;
+            font-weight: 600;
             margin-right: 2px;
         }
-        
+
         .preview-tab:hover {
-            color: #374151;
-            background: #e5e7eb;
+            color: #131313;
+            background: rgba(19, 19, 19, 0.15);
         }
-        
+
         .preview-tab.active {
-            background: #ffffff;
-            color: #1f2937;
-            border: 1px solid #e5e7eb;
-            border-bottom: 1px solid #ffffff;
-            font-weight: 600;
+            background: #131313;
+            color: #ffffff;
+            border: 1px solid #131313;
+            border-bottom: 1px solid #131313;
         }
-        
+
+        /* 상위 탭 메뉴 (재무정보 / 재무분석 AI) */
+        .main-tabs-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .main-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .main-tab {
+            padding: 10px 28px;
+            border: 1px solid #3a3a3a;
+            background: rgba(19, 19, 19, 0.08);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #131313;
+            transition: all 0.15s;
+        }
+
+        .main-tab:hover {
+            background: rgba(19, 19, 19, 0.15);
+            border-color: #131313;
+            color: #131313;
+        }
+
+        .main-tab.active {
+            background: #131313;
+            border-color: #131313;
+            color: #ffffff;
+        }
+
+        .main-tab.analyzing {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #ffffff;
+            animation: pulse-analyzing 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse-analyzing {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .main-tab.completed:not(.active) {
+            background: rgba(19, 19, 19, 0.15);
+            border-color: #3a3a3a;
+            color: #131313;
+        }
+
+        .main-tab.completed.active {
+            background: #131313;
+            border-color: #131313;
+            color: #ffffff;
+        }
+
+        .main-tab-content {
+            display: none;
+        }
+
+        .main-tab-content.active {
+            display: block;
+        }
+
         .preview-content {
             border: 1px solid #e5e7eb;
             border-radius: 0 8px 8px 8px;
@@ -696,20 +856,25 @@
             white-space: nowrap;
         }
         
-        .preview-table td:first-child,
-        .preview-table th:first-child {
+        .preview-table td:first-child {
             text-align: left;
             font-weight: 500;
             color: #374151;
         }
+
+        .preview-table th:first-child {
+            text-align: left;
+            font-weight: 600;
+            color: #ffffff;
+        }
         
         .preview-table th {
-            background: #f9fafb;
+            background: #131313;
             font-weight: 600;
-            color: #4b5563;
+            color: #ffffff;
             position: sticky;
             top: 0;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid #2a2a2a;
         }
         
         .preview-table tr:hover {
@@ -750,19 +915,22 @@
             flex: 1;
             min-width: 0;
             overflow-x: auto;
+            display: table;
+            width: 100%;
         }
-        
+
         .vcm-title {
-            background: #1f2937;
+            display: table-caption;
+            caption-side: top;
+            background: #131313;
             color: white;
             padding: 10px 14px;
             font-weight: 600;
             text-align: center;
-            margin-bottom: 0;
             font-size: 0.9rem;
             letter-spacing: 0.5px;
         }
-        
+
         .vcm-table {
             width: 100%;
             border-collapse: collapse;
@@ -840,15 +1008,861 @@
             outline: 2px solid #2563eb;
             outline-offset: -2px;
         }
+
+        /* ============================================================
+           상단 고정 헤더 스타일
+           ============================================================ */
+        .top-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #131313;
+            border-bottom: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px 48px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #131313;
+        }
+
+        .brand-section h1 {
+            text-align: left;
+            margin-bottom: 2px;
+            font-size: 1.5rem;
+            color: #b49132;
+            background: none;
+            -webkit-background-clip: unset;
+            -webkit-text-fill-color: unset;
+            background-clip: unset;
+        }
+
+        .brand-section .subtitle {
+            text-align: left;
+            margin-bottom: 0;
+            font-size: 0.8rem;
+            color: darkgray;
+        }
+
+        .user-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-guest {
+            display: flex;
+            gap: 8px;
+        }
+
+        .user-logged-in {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .user-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+        }
+
+        .user-email {
+            font-size: 0.9rem;
+            color: #ffffff;
+            font-weight: 500;
+        }
+
+        .user-menu-container {
+            position: relative;
+        }
+
+        .user-menu-trigger {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .user-menu-trigger:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .user-menu-trigger .arrow {
+            font-size: 0.6rem;
+            color: #9ca3af;
+            transition: transform 0.2s;
+        }
+
+        .user-menu-trigger.open .arrow {
+            transform: rotate(180deg);
+        }
+
+        .user-menu-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 4px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            min-width: 160px;
+            z-index: 1000;
+            display: none;
+            overflow: hidden;
+        }
+
+        .user-menu-dropdown.show {
+            display: block;
+        }
+
+        .user-menu-item {
+            display: block;
+            width: 100%;
+            padding: 10px 16px;
+            text-align: left;
+            background: none;
+            border: none;
+            font-size: 0.875rem;
+            color: #374151;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .user-menu-item:hover {
+            background: #f3f4f6;
+        }
+
+        .user-menu-item.danger {
+            color: #dc2626;
+        }
+
+        .user-menu-item.danger:hover {
+            background: #fef2f2;
+        }
+
+        .user-menu-divider {
+            height: 1px;
+            background: #e5e7eb;
+            margin: 4px 0;
+        }
+
+        /* 내 정보 모달 스타일 */
+        .profile-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .profile-modal-overlay.show {
+            display: flex;
+        }
+
+        .profile-modal {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 420px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .profile-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .profile-modal-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: #111827;
+        }
+
+        .profile-modal-body {
+            padding: 24px;
+        }
+
+        .profile-section {
+            margin-bottom: 24px;
+        }
+
+        .profile-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .profile-section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .profile-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .profile-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .profile-info-label {
+            color: #6b7280;
+            font-size: 0.875rem;
+        }
+
+        .profile-info-value {
+            color: #111827;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .profile-form-group {
+            margin-bottom: 16px;
+        }
+
+        .profile-form-group label {
+            display: block;
+            font-size: 0.875rem;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+
+        .profile-form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .profile-form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(180, 145, 50, 0.2);
+        }
+
+        .profile-btn-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .profile-message {
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            margin-top: 12px;
+        }
+
+        .profile-message.success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .profile-message.error {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+        .user-tier {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .user-tier.free {
+            background: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            color: #374151;
+        }
+
+        .user-tier.basic {
+            background: rgba(55, 60, 95, 0.4);
+            color: #9ca3af;
+        }
+
+        .user-tier.pro {
+            background: rgba(180, 145, 50, 0.25);
+            color: #b49132;
+        }
+
+        .user-tokens {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.1);
+            color: darkgray;
+        }
+
+        .user-tokens.low {
+            background: var(--accent);
+            color: white;
+        }
+
+        /* 헤더용 (다크 배경) */
+        .top-header .btn-outline {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #ffffff;
+        }
+
+        .top-header .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* 모달용 (밝은 배경) */
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #e6e6e6;
+            color: var(--primary);
+        }
+
+        .btn-outline:hover {
+            background: #f4f4f4;
+            border-color: #d1d1d1;
+        }
+
+        .btn-sm {
+            padding: 8px 14px;
+            font-size: 0.85rem;
+        }
+
+        .btn-full {
+            width: 100%;
+        }
+
+        /* ============================================================
+           로그인/회원가입 모달 스타일
+           ============================================================ */
+        .auth-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .auth-modal-overlay.active {
+            display: flex;
+        }
+
+        .auth-modal {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            position: relative;
+            animation: modalSlideIn 0.3s ease;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .auth-modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: #f3f4f6;
+            border-radius: 50%;
+            font-size: 1.25rem;
+            color: #6b7280;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .auth-modal-close:hover {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .auth-form h2 {
+            text-align: center;
+            color: #1a1a1a;
+            margin-bottom: 8px;
+            font-size: 1.5rem;
+        }
+
+        .auth-logo {
+            text-align: center;
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .auth-subtitle {
+            text-align: center;
+            color: #6b7280;
+            margin-bottom: 28px;
+            font-size: 0.9rem;
+        }
+
+        .auth-input-group {
+            margin-bottom: 20px;
+        }
+
+        .auth-input-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .auth-input-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #fafafa;
+        }
+
+        .auth-input-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(180, 145, 50, 0.2);
+            background: #ffffff;
+        }
+
+        .auth-error {
+            color: #dc2626;
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+            min-height: 20px;
+            text-align: center;
+        }
+
+        .auth-switch {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 0.9rem;
+            color: #6b7280;
+        }
+
+        .auth-switch a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .auth-switch a:hover {
+            text-decoration: underline;
+        }
+
+        /* 반응형 헤더 */
+        @media (max-width: 600px) {
+            .header-content {
+                flex-direction: column;
+                gap: 12px;
+                padding: 12px 20px;
+            }
+
+            body {
+                padding-top: 130px;
+            }
+
+            .brand-section {
+                text-align: center;
+            }
+
+            .brand-section h1 {
+                text-align: center;
+                font-size: 1.3rem;
+            }
+
+            .brand-section .subtitle {
+                text-align: center;
+            }
+
+            .auth-modal {
+                margin: 20px;
+                padding: 32px 24px;
+            }
+        }
+
+        /* ============================================================
+           관리자 버튼 스타일
+           ============================================================ */
+        .btn-admin {
+            background: #7d7d7d;
+            color: white;
+            border: none;
+        }
+
+        .btn-admin:hover {
+            background: #5c5c5c;
+            box-shadow: 0 2px 8px rgba(125, 125, 125, 0.3);
+        }
+
+        /* ============================================================
+           회원관리 모달 스타일
+           ============================================================ */
+        .admin-modal-overlay,
+        .edit-user-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            z-index: 1001;
+            justify-content: center;
+            align-items: center;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .admin-modal-overlay.active,
+        .edit-user-modal-overlay.active {
+            display: flex;
+        }
+
+        .admin-modal {
+            background: #ffffff;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 900px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: modalSlideIn 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .edit-user-modal {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 32px;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: modalSlideIn 0.3s ease;
+        }
+
+        .admin-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 32px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .admin-modal-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: #1a1a1a;
+        }
+
+        .admin-stats {
+            display: flex;
+            gap: 16px;
+            padding: 20px 32px;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .stat-item {
+            flex: 1;
+            text-align: center;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-value {
+            display: block;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+
+        .admin-table-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 32px 32px;
+        }
+
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .admin-table th,
+        .admin-table td {
+            padding: 12px 8px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .admin-table th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+            position: sticky;
+            top: 0;
+        }
+
+        .admin-table tr:hover {
+            background: #f9fafb;
+        }
+
+        .admin-table .loading-row {
+            text-align: center;
+            color: #6b7280;
+            padding: 40px;
+        }
+
+        .tier-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .tier-badge.free {
+            background: #f4f4f4;
+            color: #7d7d7d;
+        }
+
+        .tier-badge.basic {
+            background: #e6e6e6;
+            color: var(--primary);
+        }
+
+        .tier-badge.pro {
+            background: rgba(180, 145, 50, 0.15);
+            color: var(--accent);
+        }
+
+        .tier-badge.admin {
+            background: rgba(55, 60, 95, 0.15);
+            color: var(--primary);
+        }
+
+        .usage-info {
+            font-size: 0.8rem;
+            color: #6b7280;
+            line-height: 1.4;
+        }
+
+        /* 인라인 편집 스타일 */
+        .inline-select {
+            padding: 6px 8px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            background: #fafafa;
+            cursor: pointer;
+            min-width: 80px;
+        }
+
+        .inline-select:hover {
+            border-color: #d1d5db;
+        }
+
+        .inline-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(180, 145, 50, 0.2);
+        }
+
+        .inline-select:disabled {
+            background: #f3f4f6;
+            cursor: not-allowed;
+        }
+
+        .inline-date {
+            padding: 6px 8px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            background: #fafafa;
+            width: 130px;
+        }
+
+        .inline-date:hover {
+            border-color: #d1d5db;
+        }
+
+        .inline-date:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(180, 145, 50, 0.2);
+        }
+
+        .usage-cell {
+            text-align: center;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .btn-icon {
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            background: #fafafa;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            margin-right: 4px;
+        }
+
+        .btn-icon:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+        }
+
+        .btn-icon-danger:hover {
+            background: #fee2e2;
+            border-color: #fca5a5;
+            color: #dc2626;
+        }
+
+        @media (max-width: 768px) {
+            .admin-modal {
+                max-height: 95vh;
+            }
+
+            .admin-stats {
+                flex-wrap: wrap;
+            }
+
+            .stat-item {
+                flex: 1 1 45%;
+            }
+
+            .admin-table {
+                font-size: 0.8rem;
+            }
+
+            .admin-table th,
+            .admin-table td {
+                padding: 8px 4px;
+            }
+
+            .edit-user-actions {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- 상단 고정 헤더 -->
+    <header class="top-header">
+        <div class="header-content">
+            <div class="brand-section">
+                <h1>Valulens</h1>
+                <p class="subtitle">LLM & DART 기반 딥 리서치 플랫폼 밸류랜즈</p>
+            </div>
+            <div class="user-section" id="userSection">
+                <!-- 비로그인 상태 -->
+                <div class="user-guest" id="userGuest">
+                    <button class="btn btn-outline" onclick="showAuthModal('login')">로그인</button>
+                    <button class="btn btn-primary" onclick="showAuthModal('register')">회원가입</button>
+                </div>
+                <!-- 로그인 상태 -->
+                <div class="user-logged-in" id="userLoggedIn" style="display: none;">
+                    <div class="user-info">
+                        <div class="user-menu-container">
+                            <div class="user-menu-trigger" id="userMenuTrigger" onclick="toggleUserMenu()">
+                                <span class="user-email" id="userEmail"></span>
+                                <span class="arrow">▼</span>
+                            </div>
+                            <div class="user-menu-dropdown" id="userMenuDropdown">
+                                <button class="user-menu-item" onclick="showProfileModal()">내 정보</button>
+                                <a href="/admin" class="user-menu-item" id="adminMenuItem" style="display: none; text-decoration: none;">회원관리</a>
+                                <div class="user-menu-divider"></div>
+                                <button class="user-menu-item danger" onclick="logout()">로그아웃</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <span class="user-tier" id="userTier"></span>
+                            <span class="user-tokens" id="userTokens"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
     <div class="container">
-        <h1>PE 전용 딥 리서치</h1>
-        <p class="subtitle">DART 기반 재무제표 추출 시스템 · 코스피, 코스닥, 코넥스, 비상장</p>
-        
-        <!-- 검색 섹션 -->
-        <div class="search-section">
+        <!-- 검색 섹션 (로그인 후에만 표시) -->
+        <div class="search-section" id="mainContent" style="display: none;">
             <div class="input-group">
                 <input type="text" id="companyInput" placeholder="기업명을 입력하세요 (예: 삼성전자)" />
                 <button class="btn btn-primary" id="searchBtn" onclick="searchCompany()">검색</button>
@@ -874,21 +1888,26 @@
                 <select id="startYear"></select>
                 <label>~ 종료 연도:</label>
                 <select id="endYear"></select>
-                <button class="btn btn-secondary" id="extractOnlyBtn" onclick="startExtraction(false)" title="재무상태표와 손익계산서만 추출됩니다. 이후에 추가로 AI 분석이 가능합니다.">재무제표 추출</button>
-                <button class="btn btn-primary" id="extractBtn" onclick="startExtraction(true)" title="AI분석과 재무제표 분석이 모두 한번에 진행됩니다.">통합추출</button>
+                <button class="btn btn-secondary" id="extractBtn" onclick="startExtraction(true)" title="AI분석과 재무제표 분석이 모두 한번에 진행됩니다.">통합추출</button>
             </div>
         </div>
 
         <!-- 기업개황정보 섹션 (독립) -->
         <div class="company-info-wrapper" id="companyInfoWrapper" style="display: none;">
             <div class="company-info-section" id="companyInfoSection">
-                <h3 class="company-info-title">기업개황정보</h3>
-                <div class="company-info-loading" id="companyInfoLoading">
-                    <span class="spinner"></span> 기업정보 로딩 중...
+                <h3 class="company-info-title" onclick="toggleCompanyInfo()">
+                    <span>기업개황정보</span>
+                    <span style="font-size: 0.75rem; font-weight: normal; color: #9ca3af; margin-left: 12px;">대표자와 주소는 통합 추출 이후에 최신정보를 반영하여 업데이트 됩니다.</span>
+                    <span class="company-info-toggle" id="companyInfoToggle">접기 ▲</span>
+                </h3>
+                <div class="company-info-content" id="companyInfoContent">
+                    <div class="company-info-loading" id="companyInfoLoading">
+                        <span class="spinner"></span> 기업정보 로딩 중...
+                    </div>
+                    <table class="company-info-table" id="companyInfoTable" style="display: none;">
+                        <tbody id="companyInfoBody"></tbody>
+                    </table>
                 </div>
-                <table class="company-info-table" id="companyInfoTable" style="display: none;">
-                    <tbody id="companyInfoBody"></tbody>
-                </table>
             </div>
         </div>
 
@@ -905,61 +1924,802 @@
         
         <!-- 완료 섹션 -->
         <div class="complete-section" id="completeSection">
-            <div class="action-buttons">
+            <!-- 상위 탭 메뉴 -->
+            <div class="main-tabs-container">
+                <div class="main-tabs">
+                    <button class="main-tab active" data-main-tab="financial" onclick="showMainTab('financial')">재무정보</button>
+                    <button class="main-tab" data-main-tab="insight" id="insightTabBtn" onclick="showMainTab('insight')">재무분석 AI</button>
+                </div>
                 <button class="btn btn-success" id="downloadBtn" onclick="downloadFile()">엑셀 다운로드</button>
-                <button class="btn btn-primary" onclick="resetAll()">새로 검색</button>
             </div>
 
-            <!-- AI 분석 섹션 -->
-            <div class="analysis-section" id="analysisSection" style="display: none;">
-                <div class="analysis-header">
-                    <h3>AI 인사이트 분석</h3>
-                    <span class="analysis-status" id="analysisStatus"></span>
-                </div>
-                <!-- AI 분석 시작 버튼 (재무제표만 추출 시 표시) -->
-                <div class="analysis-start-container" id="analysisStartContainer" style="display: none;">
-                    <p class="analysis-start-description">재무제표 데이터를 기반으로 AI가 이상 패턴을 분석하고 인사이트를 제공합니다.</p>
-                    <button class="btn btn-ai btn-large" id="analyzeBtn" onclick="startAnalysis()">AI 인사이트 분석 시작</button>
-                </div>
-                <div class="analysis-progress" id="analysisProgress" style="display: none;">
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" id="analysisProgressBar">0%</div>
+            <!-- 재무분석 AI 탭 콘텐츠 -->
+            <div class="main-tab-content" id="insightTabContent">
+                <div class="analysis-section" id="analysisSection">
+                    <div class="analysis-header">
+                        <span class="analysis-status" id="analysisStatus"></span>
+                        <button class="btn btn-copy" id="analysisCopyBtn" onclick="copyAnalysisResult()" style="display: none;">복사</button>
                     </div>
-                    <p class="analysis-message" id="analysisMessage">분석 준비 중...</p>
+                    <!-- AI 분석 시작 버튼 (재무제표만 추출 시 표시) -->
+                    <div class="analysis-start-container" id="analysisStartContainer" style="display: none;">
+                        <p class="analysis-start-description">재무제표 데이터를 기반으로 AI가 이상 패턴을 분석하고 인사이트를 제공합니다.</p>
+                        <button class="btn btn-ai btn-large" id="analyzeBtn" onclick="startAnalysis()">재무분석 AI 분석 시작</button>
+                    </div>
+                    <div class="analysis-progress" id="analysisProgress" style="display: none;">
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="analysisProgressBar">0%</div>
+                        </div>
+                        <p class="analysis-message" id="analysisMessage">분석 준비 중...</p>
+                    </div>
+                    <div class="analysis-result" id="analysisResult" style="display: none;"></div>
                 </div>
-                <div class="analysis-result" id="analysisResult" style="display: none;"></div>
             </div>
 
-            <!-- 미리보기 탭 -->
-            <div class="preview-section" id="previewSection">
-                <div class="preview-tabs">
-                    <button class="preview-tab active" data-tab="vcm" onclick="showPreviewTab('vcm')">VCM 전용 포맷</button>
-                    <button class="preview-tab" data-tab="bs" onclick="showPreviewTab('bs')">재무상태표</button>
-                    <button class="preview-tab" data-tab="is" onclick="showPreviewTab('is')">손익계산서</button>
-                    <button class="preview-tab" data-tab="cf" onclick="showPreviewTab('cf')">현금흐름표</button>
-                </div>
-                <div class="preview-content" id="previewContent">
-                    <p class="preview-placeholder">데이터 로딩 중...</p>
+            <!-- 재무정보 탭 콘텐츠 -->
+            <div class="main-tab-content active" id="financialTabContent">
+                <div class="preview-section" id="previewSection">
+                    <div class="preview-tabs">
+                        <button class="preview-tab active" data-tab="vcm" onclick="showPreviewTab('vcm')">Financials</button>
+                        <button class="preview-tab" data-tab="bs" onclick="showPreviewTab('bs')">재무상태표</button>
+                        <button class="preview-tab" data-tab="is" onclick="showPreviewTab('is')">손익계산서</button>
+                        <button class="preview-tab" data-tab="cf" onclick="showPreviewTab('cf')">현금흐름표</button>
+                    </div>
+                    <div class="preview-content" id="previewContent">
+                        <p class="preview-placeholder">데이터 로딩 중...</p>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-    
+
+    <!-- 로그인/회원가입 모달 -->
+    <div class="auth-modal-overlay" id="authModalOverlay" onclick="closeAuthModal(event)">
+        <div class="auth-modal" onclick="event.stopPropagation()">
+            <button class="auth-modal-close" onclick="closeAuthModal()">&times;</button>
+
+            <!-- 로그인 폼 -->
+            <div class="auth-form" id="loginForm">
+                <div class="auth-logo">Valulens</div>
+                <h2>로그인</h2>
+                <p class="auth-subtitle">LLM & DART 기반 딥 리서치 플랫폼</p>
+
+                <div class="auth-input-group">
+                    <label for="loginEmail">이메일</label>
+                    <input type="email" id="loginEmail" placeholder="email@example.com" />
+                </div>
+                <div class="auth-input-group">
+                    <label for="loginPassword">비밀번호</label>
+                    <input type="password" id="loginPassword" placeholder="비밀번호 입력" />
+                </div>
+
+                <div class="auth-error" id="loginError"></div>
+
+                <button class="btn btn-primary btn-full" id="loginSubmitBtn" onclick="submitLogin()">로그인</button>
+
+                <p class="auth-switch">
+                    계정이 없으신가요? <a href="#" onclick="switchAuthForm('register')">회원가입</a>
+                </p>
+            </div>
+
+            <!-- 회원가입 폼 -->
+            <div class="auth-form" id="registerForm" style="display: none;">
+                <div class="auth-logo">Valulens</div>
+                <h2>회원가입</h2>
+                <p class="auth-subtitle">무료로 시작하세요</p>
+
+                <div class="auth-input-group">
+                    <label for="registerEmail">이메일</label>
+                    <input type="email" id="registerEmail" placeholder="email@example.com" />
+                </div>
+                <div class="auth-input-group">
+                    <label for="registerPassword">비밀번호</label>
+                    <input type="password" id="registerPassword" placeholder="6자 이상 입력" />
+                </div>
+                <div class="auth-input-group">
+                    <label for="registerPasswordConfirm">비밀번호 확인</label>
+                    <input type="password" id="registerPasswordConfirm" placeholder="비밀번호 재입력" />
+                </div>
+
+                <div class="auth-error" id="registerError"></div>
+
+                <button class="btn btn-primary btn-full" id="registerSubmitBtn" onclick="submitRegister()">회원가입</button>
+
+                <p class="auth-switch">
+                    이미 계정이 있으신가요? <a href="#" onclick="switchAuthForm('login')">로그인</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 내 정보 모달 -->
+    <div class="profile-modal-overlay" id="profileModalOverlay" onclick="closeProfileModal(event)">
+        <div class="profile-modal" onclick="event.stopPropagation()">
+            <div class="profile-modal-header">
+                <h2>내 정보</h2>
+                <button class="auth-modal-close" onclick="closeProfileModal()">&times;</button>
+            </div>
+            <div class="profile-modal-body">
+                <!-- 계정 정보 -->
+                <div class="profile-section">
+                    <div class="profile-section-title">계정 정보</div>
+                    <div class="profile-info-row">
+                        <span class="profile-info-label">이메일</span>
+                        <span class="profile-info-value" id="profileEmail">-</span>
+                    </div>
+                    <div class="profile-info-row">
+                        <span class="profile-info-label">등급</span>
+                        <span class="profile-info-value" id="profileTier">-</span>
+                    </div>
+                    <div class="profile-info-row">
+                        <span class="profile-info-label">잔여 토큰</span>
+                        <span class="profile-info-value" id="profileTokens">-</span>
+                    </div>
+                </div>
+
+                <!-- 이용권 정보 -->
+                <div class="profile-section">
+                    <div class="profile-section-title">이용권 정보</div>
+                    <div class="profile-info-row">
+                        <span class="profile-info-label">시작일</span>
+                        <span class="profile-info-value" id="profileStartDate">-</span>
+                    </div>
+                    <div class="profile-info-row">
+                        <span class="profile-info-label">만료일</span>
+                        <span class="profile-info-value" id="profileEndDate">-</span>
+                    </div>
+                    <div class="profile-info-row">
+                        <span class="profile-info-label">가입일</span>
+                        <span class="profile-info-value" id="profileCreatedAt">-</span>
+                    </div>
+                </div>
+
+                <!-- 비밀번호 변경 -->
+                <div class="profile-section">
+                    <button class="btn btn-outline" onclick="togglePasswordChange()" id="passwordChangeBtn" style="width: 100%;">비밀번호 변경</button>
+                    <div id="passwordChangeForm" style="display: none; margin-top: 16px;">
+                        <div class="profile-form-group">
+                            <label>현재 비밀번호</label>
+                            <input type="password" id="currentPassword" placeholder="현재 비밀번호 입력">
+                        </div>
+                        <div class="profile-form-group">
+                            <label>새 비밀번호</label>
+                            <input type="password" id="newPassword" placeholder="새 비밀번호 입력">
+                        </div>
+                        <div class="profile-form-group">
+                            <label>새 비밀번호 확인</label>
+                            <input type="password" id="confirmPassword" placeholder="새 비밀번호 다시 입력">
+                        </div>
+                        <div class="profile-btn-row">
+                            <button class="btn btn-outline" onclick="togglePasswordChange()">취소</button>
+                            <button class="btn btn-primary" onclick="changePassword()">변경</button>
+                        </div>
+                        <div class="profile-message" id="passwordMessage" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 회원관리 모달 (관리자 전용) -->
+    <div class="admin-modal-overlay" id="adminModalOverlay" onclick="closeAdminModal(event)">
+        <div class="admin-modal" onclick="event.stopPropagation()">
+            <div class="admin-modal-header">
+                <h2>회원관리</h2>
+                <button class="auth-modal-close" onclick="closeAdminModal()">&times;</button>
+            </div>
+
+            <div class="admin-stats" id="adminStats">
+                <div class="stat-item">
+                    <span class="stat-value" id="statTotalUsers">-</span>
+                    <span class="stat-label">전체 회원</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="statProUsers">-</span>
+                    <span class="stat-label">Pro 회원</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="statBasicUsers">-</span>
+                    <span class="stat-label">Basic 회원</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="statFreeUsers">-</span>
+                    <span class="stat-label">Free 회원</span>
+                </div>
+            </div>
+
+            <div class="admin-table-container">
+                <table class="admin-table" id="adminUserTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>이메일</th>
+                            <th>등급</th>
+                            <th>검색</th>
+                            <th>유료 시작일</th>
+                            <th>만료일</th>
+                            <th>가입일</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminUserTableBody">
+                        <tr><td colspan="8" class="loading-row">로딩 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <script>
         // ============================================================
         // 전역 변수
         // ============================================================
+        let currentUser = null;   // 현재 로그인한 사용자
         let selectedCorp = null;  // 선택된 기업 정보
         let currentTaskId = null;  // 현재 작업 ID
         let statusCheckInterval = null;  // 상태 확인 인터벌
         let previewData = null;  // 미리보기 데이터
         let isIntegratedMode = false;  // 통합추출 모드 (AI 분석 자동 실행)
         let isAnalysisCompleted = false;  // AI 분석 완료 여부
-        
+
+        // ============================================================
+        // 인증 관련 함수
+        // ============================================================
+
+        // 모달 열기
+        function showAuthModal(type) {
+            const overlay = document.getElementById('authModalOverlay');
+            overlay.classList.add('active');
+            switchAuthForm(type);
+        }
+
+        // 모달 닫기 (로그인 상태에서만 가능)
+        function closeAuthModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            // 비로그인 상태에서는 닫을 수 없음
+            if (!currentUser) return;
+
+            const overlay = document.getElementById('authModalOverlay');
+            overlay.classList.remove('active');
+            // 에러 메시지 초기화
+            document.getElementById('loginError').textContent = '';
+            document.getElementById('registerError').textContent = '';
+        }
+
+        // 폼 전환
+        function switchAuthForm(type) {
+            const loginForm = document.getElementById('loginForm');
+            const registerForm = document.getElementById('registerForm');
+
+            if (type === 'login') {
+                loginForm.style.display = 'block';
+                registerForm.style.display = 'none';
+            } else {
+                loginForm.style.display = 'none';
+                registerForm.style.display = 'block';
+            }
+        }
+
+        // 로그인 제출
+        async function submitLogin() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorEl = document.getElementById('loginError');
+            const btn = document.getElementById('loginSubmitBtn');
+
+            errorEl.textContent = '';
+
+            if (!email || !password) {
+                errorEl.textContent = '이메일과 비밀번호를 입력해주세요.';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '로그인 중...';
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    errorEl.textContent = data.detail || '로그인에 실패했습니다.';
+                    return;
+                }
+
+                // 성공
+                currentUser = data.user;
+                updateUserUI();
+                closeAuthModal();
+
+                // 입력 필드 초기화
+                document.getElementById('loginEmail').value = '';
+                document.getElementById('loginPassword').value = '';
+
+            } catch (err) {
+                console.error('Login error:', err);
+                errorEl.textContent = '서버 연결에 실패했습니다.';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '로그인';
+            }
+        }
+
+        // 회원가입 제출
+        async function submitRegister() {
+            const email = document.getElementById('registerEmail').value.trim();
+            const password = document.getElementById('registerPassword').value;
+            const passwordConfirm = document.getElementById('registerPasswordConfirm').value;
+            const errorEl = document.getElementById('registerError');
+            const btn = document.getElementById('registerSubmitBtn');
+
+            errorEl.textContent = '';
+
+            if (!email || !password || !passwordConfirm) {
+                errorEl.textContent = '모든 필드를 입력해주세요.';
+                return;
+            }
+
+            if (password !== passwordConfirm) {
+                errorEl.textContent = '비밀번호가 일치하지 않습니다.';
+                return;
+            }
+
+            if (password.length < 6) {
+                errorEl.textContent = '비밀번호는 6자 이상이어야 합니다.';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '가입 중...';
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    errorEl.textContent = data.detail || '회원가입에 실패했습니다.';
+                    return;
+                }
+
+                // 성공 - 자동 로그인
+                alert('회원가입이 완료되었습니다! 로그인해주세요.');
+                switchAuthForm('login');
+                document.getElementById('loginEmail').value = email;
+
+                // 입력 필드 초기화
+                document.getElementById('registerEmail').value = '';
+                document.getElementById('registerPassword').value = '';
+                document.getElementById('registerPasswordConfirm').value = '';
+
+            } catch (err) {
+                console.error('Register error:', err);
+                errorEl.textContent = '서버 연결에 실패했습니다.';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '회원가입';
+            }
+        }
+
+        // 로그아웃
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+            } catch (err) {
+                console.error('Logout error:', err);
+            }
+            currentUser = null;
+            closeUserMenu();
+            updateUserUI();
+        }
+
+        // 사용자 메뉴 토글
+        function toggleUserMenu() {
+            const trigger = document.getElementById('userMenuTrigger');
+            const dropdown = document.getElementById('userMenuDropdown');
+            const isOpen = dropdown.classList.toggle('show');
+            trigger.classList.toggle('open', isOpen);
+        }
+
+        function closeUserMenu() {
+            const trigger = document.getElementById('userMenuTrigger');
+            const dropdown = document.getElementById('userMenuDropdown');
+            dropdown.classList.remove('show');
+            trigger.classList.remove('open');
+        }
+
+        // 드롭다운 외부 클릭 시 닫기
+        document.addEventListener('click', function(e) {
+            const menuContainer = document.querySelector('.user-menu-container');
+            if (menuContainer && !menuContainer.contains(e.target)) {
+                closeUserMenu();
+            }
+        });
+
+        // 내 정보 모달
+        function showProfileModal() {
+            closeUserMenu();
+            const overlay = document.getElementById('profileModalOverlay');
+            overlay.classList.add('show');
+
+            // 사용자 정보 채우기
+            if (currentUser) {
+                document.getElementById('profileEmail').textContent = currentUser.email;
+
+                const tierNames = { free: 'Free', basic: 'Basic', pro: 'Pro' };
+                document.getElementById('profileTier').textContent = tierNames[currentUser.tier] || currentUser.tier;
+
+                if (currentUser.role === 'admin') {
+                    document.getElementById('profileTokens').textContent = '무제한';
+                } else {
+                    const tokens = currentUser.tokens !== null && currentUser.tokens !== undefined ? currentUser.tokens : 0;
+                    document.getElementById('profileTokens').textContent = tokens + '개';
+                }
+
+                // 이용권 정보
+                document.getElementById('profileStartDate').textContent = currentUser.subscription_start || '-';
+                document.getElementById('profileEndDate').textContent = currentUser.subscription_end || '-';
+                document.getElementById('profileCreatedAt').textContent = currentUser.created_at ? currentUser.created_at.split('T')[0] : '-';
+            }
+
+            // 비밀번호 변경 폼 숨기기 및 초기화
+            document.getElementById('passwordChangeBtn').style.display = 'block';
+            document.getElementById('passwordChangeForm').style.display = 'none';
+            document.getElementById('currentPassword').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+            document.getElementById('passwordMessage').style.display = 'none';
+        }
+
+        function closeProfileModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('profileModalOverlay').classList.remove('show');
+        }
+
+        function togglePasswordChange() {
+            const btn = document.getElementById('passwordChangeBtn');
+            const form = document.getElementById('passwordChangeForm');
+            const isHidden = form.style.display === 'none';
+
+            btn.style.display = isHidden ? 'none' : 'block';
+            form.style.display = isHidden ? 'block' : 'none';
+
+            // 폼 숨길 때 초기화
+            if (!isHidden) {
+                document.getElementById('currentPassword').value = '';
+                document.getElementById('newPassword').value = '';
+                document.getElementById('confirmPassword').value = '';
+                document.getElementById('passwordMessage').style.display = 'none';
+            }
+        }
+
+        // 비밀번호 변경
+        async function changePassword() {
+            const currentPw = document.getElementById('currentPassword').value;
+            const newPw = document.getElementById('newPassword').value;
+            const confirmPw = document.getElementById('confirmPassword').value;
+            const messageEl = document.getElementById('passwordMessage');
+
+            messageEl.style.display = 'none';
+
+            if (!currentPw || !newPw || !confirmPw) {
+                messageEl.textContent = '모든 필드를 입력해주세요.';
+                messageEl.className = 'profile-message error';
+                messageEl.style.display = 'block';
+                return;
+            }
+
+            if (newPw !== confirmPw) {
+                messageEl.textContent = '새 비밀번호가 일치하지 않습니다.';
+                messageEl.className = 'profile-message error';
+                messageEl.style.display = 'block';
+                return;
+            }
+
+            if (newPw.length < 6) {
+                messageEl.textContent = '비밀번호는 6자 이상이어야 합니다.';
+                messageEl.className = 'profile-message error';
+                messageEl.style.display = 'block';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        current_password: currentPw,
+                        new_password: newPw
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    messageEl.textContent = data.detail || '비밀번호 변경에 실패했습니다.';
+                    messageEl.className = 'profile-message error';
+                    messageEl.style.display = 'block';
+                    return;
+                }
+
+                messageEl.textContent = '비밀번호가 변경되었습니다.';
+                messageEl.className = 'profile-message success';
+                messageEl.style.display = 'block';
+
+                // 필드 초기화
+                document.getElementById('currentPassword').value = '';
+                document.getElementById('newPassword').value = '';
+                document.getElementById('confirmPassword').value = '';
+
+            } catch (err) {
+                console.error('Change password error:', err);
+                messageEl.textContent = '서버 연결에 실패했습니다.';
+                messageEl.className = 'profile-message error';
+                messageEl.style.display = 'block';
+            }
+        }
+
+        // 현재 로그인 상태 확인
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/me');
+                const data = await response.json();
+
+                if (data.logged_in) {
+                    currentUser = data.user;
+                } else {
+                    currentUser = null;
+                }
+                updateUserUI();
+            } catch (err) {
+                console.error('Auth check error:', err);
+                currentUser = null;
+                updateUserUI();
+            }
+        }
+
+        // 사용자 UI 업데이트
+        function updateUserUI() {
+            const guestEl = document.getElementById('userGuest');
+            const loggedInEl = document.getElementById('userLoggedIn');
+            const emailEl = document.getElementById('userEmail');
+            const tierEl = document.getElementById('userTier');
+            const tokensEl = document.getElementById('userTokens');
+            const mainContent = document.getElementById('mainContent');
+            const overlay = document.getElementById('authModalOverlay');
+            const closeBtn = document.querySelector('.auth-modal-close');
+            const adminMenuItem = document.getElementById('adminMenuItem');
+
+            if (currentUser) {
+                // 로그인 상태
+                guestEl.style.display = 'none';
+                loggedInEl.style.display = 'flex';
+                emailEl.textContent = currentUser.email;
+
+                // 등급 표시
+                const tierNames = { free: 'Free', basic: 'Basic', pro: 'Pro' };
+                tierEl.textContent = tierNames[currentUser.tier] || currentUser.tier;
+                tierEl.className = 'user-tier ' + currentUser.tier;
+
+                // 토큰 표시 (관리자는 무제한)
+                if (currentUser.role === 'admin') {
+                    tokensEl.textContent = '토큰: ∞';
+                    tokensEl.className = 'user-tokens';
+                } else {
+                    const tokens = currentUser.tokens !== null && currentUser.tokens !== undefined ? currentUser.tokens : 0;
+                    tokensEl.textContent = `토큰: ${tokens}`;
+                    tokensEl.className = tokens <= 3 ? 'user-tokens low' : 'user-tokens';
+                }
+
+                // 관리자 메뉴 표시/숨김
+                if (currentUser.role === 'admin') {
+                    adminMenuItem.style.display = 'block';
+                } else {
+                    adminMenuItem.style.display = 'none';
+                }
+
+                // 메인 콘텐츠 표시
+                mainContent.style.display = 'block';
+
+                // 모달 닫기
+                overlay.classList.remove('active');
+                closeBtn.style.display = 'flex';
+            } else {
+                // 비로그인 상태
+                guestEl.style.display = 'flex';
+                loggedInEl.style.display = 'none';
+                adminMenuItem.style.display = 'none';
+
+                // 메인 콘텐츠 숨김
+                mainContent.style.display = 'none';
+
+                // 로그인 모달 자동 표시 (닫기 버튼 숨김)
+                overlay.classList.add('active');
+                closeBtn.style.display = 'none';
+                switchAuthForm('login');
+            }
+        }
+
+        // ============================================================
+        // 회원관리 기능 (관리자 전용)
+        // ============================================================
+        function showAdminModal() {
+            const overlay = document.getElementById('adminModalOverlay');
+            overlay.classList.add('active');
+            loadUserList();
+        }
+
+        function closeAdminModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            const overlay = document.getElementById('adminModalOverlay');
+            overlay.classList.remove('active');
+        }
+
+        async function loadUserList() {
+            const tbody = document.getElementById('adminUserTableBody');
+            tbody.innerHTML = '<tr><td colspan="8" class="loading-row">로딩 중...</td></tr>';
+
+            try {
+                const response = await fetch('/api/admin/users');
+                if (!response.ok) {
+                    throw new Error('권한이 없습니다');
+                }
+
+                const data = await response.json();
+                const users = data.users || [];
+
+                // 통계 업데이트
+                document.getElementById('statTotalUsers').textContent = users.length;
+                document.getElementById('statProUsers').textContent = users.filter(u => u.tier === 'pro').length;
+                document.getElementById('statBasicUsers').textContent = users.filter(u => u.tier === 'basic').length;
+                document.getElementById('statFreeUsers').textContent = users.filter(u => u.tier === 'free').length;
+
+                // 테이블 렌더링
+                if (users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="loading-row">등록된 회원이 없습니다</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = users.map(user => {
+                    const isAdmin = user.role === 'admin';
+                    const subStart = user.subscription_start ? user.subscription_start.split('T')[0] : '';
+                    const subEnd = user.expires_at ? user.expires_at.split('T')[0] : '';
+                    const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString('ko-KR') : '-';
+
+                    return `
+                        <tr data-user-id="${user.id}">
+                            <td>${user.id}</td>
+                            <td>${user.email}${isAdmin ? ' <span class="tier-badge admin">Admin</span>' : ''}</td>
+                            <td>
+                                <select class="inline-select" onchange="updateUserField(${user.id}, 'tier', this.value)" ${isAdmin ? 'disabled' : ''}>
+                                    <option value="free" ${user.tier === 'free' ? 'selected' : ''}>Free</option>
+                                    <option value="basic" ${user.tier === 'basic' ? 'selected' : ''}>Basic</option>
+                                    <option value="pro" ${user.tier === 'pro' ? 'selected' : ''}>Pro</option>
+                                </select>
+                            </td>
+                            <td class="usage-cell">${user.search_used || 0}</td>
+                            <td>
+                                <input type="date" class="inline-date" value="${subStart}"
+                                       onchange="updateUserField(${user.id}, 'subscription_start', this.value)" />
+                            </td>
+                            <td>
+                                <input type="date" class="inline-date" value="${subEnd}"
+                                       onchange="updateUserField(${user.id}, 'expires_at', this.value)" />
+                            </td>
+                            <td>${createdAt}</td>
+                            <td>
+                                <button class="btn-icon" onclick="resetUserUsageById(${user.id})" title="사용량 초기화">↺</button>
+                                ${!isAdmin ? `<button class="btn-icon btn-icon-danger" onclick="deleteUserById(${user.id})" title="삭제">✕</button>` : ''}
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error('Load users error:', err);
+                tbody.innerHTML = '<tr><td colspan="8" class="loading-row">회원 목록을 불러올 수 없습니다</td></tr>';
+            }
+        }
+
+        // 인라인 필드 업데이트
+        async function updateUserField(userId, field, value) {
+            try {
+                const body = {};
+                body[field] = value || null;
+
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || '수정 실패');
+                }
+
+                // 등급 변경 시 통계 새로고침
+                if (field === 'tier') {
+                    loadUserList();
+                }
+
+            } catch (err) {
+                alert('오류: ' + err.message);
+                loadUserList();  // 실패 시 원래 값으로 복원
+            }
+        }
+
+        // 사용량 초기화
+        async function resetUserUsageById(userId) {
+            if (!confirm('이 회원의 사용량을 초기화하시겠습니까?')) return;
+
+            try {
+                const response = await fetch(`/api/admin/users/${userId}/reset-usage`, {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || '초기화 실패');
+                }
+
+                loadUserList();
+
+            } catch (err) {
+                alert('오류: ' + err.message);
+            }
+        }
+
+        // 회원 삭제
+        async function deleteUserById(userId) {
+            if (!confirm('정말로 이 회원을 삭제하시겠습니까?\n관련된 모든 데이터가 삭제됩니다.')) return;
+
+            try {
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || '삭제 실패');
+                }
+
+                loadUserList();
+
+            } catch (err) {
+                alert('오류: ' + err.message);
+            }
+        }
+
+        // Enter 키로 폼 제출
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                const overlay = document.getElementById('authModalOverlay');
+                if (overlay.classList.contains('active')) {
+                    const loginForm = document.getElementById('loginForm');
+                    if (loginForm.style.display !== 'none') {
+                        submitLogin();
+                    } else {
+                        submitRegister();
+                    }
+                }
+            }
+        });
+
         // ============================================================
         // 초기화
         // ============================================================
         document.addEventListener('DOMContentLoaded', function() {
+            // 로그인 상태 확인
+            checkAuth();
             // 연도 선택 옵션 생성
             const currentYear = new Date().getFullYear();
             const startYearSelect = document.getElementById('startYear');
@@ -1148,6 +2908,14 @@
         // ============================================================
         let companyInfoData = null;  // 기업개황정보 저장용
 
+        function toggleCompanyInfo() {
+            const content = document.getElementById('companyInfoContent');
+            const toggle = document.getElementById('companyInfoToggle');
+            const isCollapsed = content.classList.toggle('collapsed');
+            toggle.classList.toggle('collapsed', isCollapsed);
+            toggle.textContent = isCollapsed ? '펼치기 ▼' : '접기 ▲';
+        }
+
         async function loadCompanyInfo(corpCode) {
             const wrapperEl = document.getElementById('companyInfoWrapper');
             const loadingEl = document.getElementById('companyInfoLoading');
@@ -1174,19 +2942,20 @@
                 companyInfoData = info;  // 저장
 
                 // 테이블 렌더링
+                const pendingNote = '<span style="color: #9ca3af; font-size: 0.85em; margin-left: 8px;">(최신정보 업데이트 전)</span>';
                 const rows = [
                     ['회사명', info.corp_name],
                     ['영문명', info.corp_name_eng],
-                    ['대표자', info.ceo_nm],
+                    ['대표자', info.ceo_nm + pendingNote],
                     ['시장구분', info.market_name],
                     ['종목코드', info.stock_code || '-'],
                     ['법인번호', info.jurir_no || '-'],
                     ['사업자번호', info.bizr_no || '-'],
                     ['업종코드', info.induty_code || '-'],
+                    ['업종명', info.induty_name || '-'],
                     ['설립일', info.est_dt_formatted || '-'],
                     ['결산월', info.acc_mt_formatted || '-'],
-                    ['주소', info.adres || '-'],
-                    ['전화번호', info.phn_no || '-'],
+                    ['주소', (info.adres || '-') + pendingNote],
                     ['홈페이지', info.hm_url ? `<a href="${info.hm_url}" target="_blank">${info.hm_url}</a>` : '-'],
                 ];
 
@@ -1204,12 +2973,120 @@
                 loadingEl.innerHTML = `<span style="color: #ef4444;">기업정보 로드 실패: ${error.message}</span>`;
             }
         }
-        
+
+        function updateCurrentAddress(currentAddress) {
+            // 기업개황정보 테이블에서 주소 행 찾아서 현재주소 추가
+            const bodyEl = document.getElementById('companyInfoBody');
+            if (!bodyEl) return;
+
+            const rows = bodyEl.querySelectorAll('tr');
+            for (const row of rows) {
+                const labelCell = row.querySelector('td:first-child');
+                if (labelCell && labelCell.textContent === '주소') {
+                    const valueCell = row.querySelector('td:last-child');
+                    if (valueCell) {
+                        const originalAddress = valueCell.textContent;
+                        // 이미 현재주소가 추가되어 있으면 스킵
+                        if (!valueCell.innerHTML.includes('현재주소:')) {
+                            valueCell.innerHTML = `${originalAddress} <span style="color: var(--primary); font-weight: 500;">(현재주소: ${currentAddress})</span>`;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        // AI 분석 완료 후 최신 대표자/주소 업데이트
+        function updateCompanyInfoFromAnalysis(currentCeo, currentAddress) {
+            const bodyEl = document.getElementById('companyInfoBody');
+            if (!bodyEl) return;
+
+            const rows = bodyEl.querySelectorAll('tr');
+            for (const row of rows) {
+                const labelCell = row.querySelector('td:first-child');
+                if (!labelCell) continue;
+
+                const label = labelCell.textContent.trim();
+                const valueCell = row.querySelector('td:last-child');
+                if (!valueCell) continue;
+
+                // 대표자 업데이트
+                if (label === '대표자' && currentCeo) {
+                    // 이미 최신정보 확인/상태 배지가 있으면 스킵 (업데이트 전은 제외)
+                    const hasLatestBadge = valueCell.innerHTML.includes('최신정보 확인됨') || valueCell.innerHTML.includes('최신정보 상태');
+                    if (!hasLatestBadge) {
+                        // "(최신정보 업데이트 전)" 제거하고 원본 추출
+                        let originalCeo = valueCell.textContent.replace(/\(최신정보 업데이트 전\)/g, '').trim();
+                        originalCeo = originalCeo.split('→')[0].trim();
+
+                        // 원본과 최신이 같으면 확인됨 표시, 다르면 최신 정보만 표시
+                        if (originalCeo === currentCeo) {
+                            valueCell.innerHTML = `${currentCeo} <span style="background: #10b981; color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">최신정보 확인됨</span>`;
+                        } else {
+                            valueCell.innerHTML = `${currentCeo} <span style="background: var(--accent); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">최신정보</span>`;
+                        }
+                    }
+                }
+
+                // 주소 업데이트
+                if (label === '주소' && currentAddress) {
+                    // 이미 최신정보 확인/상태 배지가 있으면 스킵 (업데이트 전은 제외)
+                    const hasLatestBadge = valueCell.innerHTML.includes('최신정보 확인됨') || valueCell.innerHTML.includes('최신정보 상태');
+                    if (!hasLatestBadge) {
+                        // "(최신정보 업데이트 전)" 제거하고 원본 추출
+                        let originalAddress = valueCell.textContent.replace(/\(최신정보 업데이트 전\)/g, '').trim();
+                        if (originalAddress.includes('(현재주소:')) {
+                            originalAddress = originalAddress.split('(현재주소:')[0].trim();
+                        }
+
+                        // 원본과 최신이 같으면 확인됨 표시, 다르면 변경 표시
+                        if (originalAddress === currentAddress) {
+                            valueCell.innerHTML = `${currentAddress} <span style="background: #10b981; color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">최신정보 확인됨</span>`;
+                        } else {
+                            valueCell.innerHTML = `${currentAddress} <span style="background: var(--accent); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">최신정보</span>`;
+                        }
+                    }
+                }
+            }
+
+            // 섹션 제목 업데이트
+            updateCompanyInfoTitle(true);
+        }
+
+        // 기업개황정보 섹션 제목 업데이트
+        function updateCompanyInfoTitle(isLatest) {
+            const titleEl = document.querySelector('#companyInfoSection .company-info-title span:first-child');
+            const subtitleEl = document.querySelector('#companyInfoSection .company-info-title span:nth-child(2)');
+
+            if (isLatest) {
+                if (titleEl) {
+                    titleEl.textContent = '기업개황정보';
+                }
+                if (subtitleEl) {
+                    subtitleEl.innerHTML = '<span style="color: var(--accent); font-weight: 500;">✓ 최신 정보 상태입니다.</span>';
+                }
+            } else {
+                if (titleEl) {
+                    titleEl.textContent = '기업개황정보';
+                }
+                if (subtitleEl) {
+                    subtitleEl.innerHTML = '대표자와 주소는 통합 추출 이후에 최신정보를 반영하여 업데이트 됩니다.';
+                    subtitleEl.style.color = '#9ca3af';
+                }
+            }
+        }
+
         // ============================================================
         // 재무제표 추출 시작
         // ============================================================
         async function startExtraction(integrated = false) {
             if (!selectedCorp) return;
+
+            // 토큰 체크
+            if (currentUser && currentUser.tokens !== null && currentUser.tokens !== undefined && currentUser.tokens <= 0) {
+                alert('토큰이 부족합니다.\n유료 결제를 진행해 주세요.');
+                return;
+            }
 
             // 통합추출 모드 설정
             isIntegratedMode = integrated;
@@ -1284,6 +3161,10 @@
                     stopStatusCheck();
                     // 미리보기 데이터 저장
                     previewData = data.preview_data || null;
+                    // 현재 대표자/주소 업데이트 (사업보고서 기준)
+                    if (data.current_ceo || data.current_address) {
+                        updateCompanyInfoFromAnalysis(data.current_ceo, data.current_address);
+                    }
                     showComplete();
                 } else if (data.status === 'error') {
                     stopStatusCheck();
@@ -1340,6 +3221,9 @@
             document.getElementById('extractingSection').classList.remove('show');
             document.getElementById('completeSection').classList.add('show');
 
+            // 토큰 갱신 (차감된 토큰 반영)
+            checkAuth();
+
             // 미리보기 표시
             if (previewData) {
                 showPreviewTab('vcm');  // 기본으로 VCM 포맷 표시
@@ -1347,9 +3231,6 @@
                 document.getElementById('previewContent').innerHTML =
                     '<p class="preview-placeholder">미리보기 데이터가 없습니다.</p>';
             }
-
-            // AI 분석 섹션 표시
-            document.getElementById('analysisSection').style.display = 'block';
 
             if (isIntegratedMode) {
                 // 통합추출 모드: 자동으로 AI 분석 시작
@@ -1363,7 +3244,29 @@
                 document.getElementById('analysisStatus').textContent = '';
             }
         }
-        
+
+        // 상위 탭 전환 (재무분석 AI / 재무정보)
+        function showMainTab(tabName) {
+            // 탭 버튼 활성화 상태 변경
+            document.querySelectorAll('.main-tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.dataset.mainTab === tabName) {
+                    tab.classList.add('active');
+                }
+            });
+
+            // 탭 콘텐츠 표시/숨김
+            document.querySelectorAll('.main-tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+
+            if (tabName === 'insight') {
+                document.getElementById('insightTabContent').classList.add('active');
+            } else if (tabName === 'financial') {
+                document.getElementById('financialTabContent').classList.add('active');
+            }
+        }
+
         function showPreviewTab(tabName) {
             // 탭 버튼 활성화 상태 변경
             document.querySelectorAll('.preview-tab').forEach(tab => {
@@ -1372,9 +3275,9 @@
                     tab.classList.add('active');
                 }
             });
-            
+
             const content = document.getElementById('previewContent');
-            
+
             // VCM 전용 포맷
             if (tabName === 'vcm') {
                 content.innerHTML = renderVCMFormat();
@@ -2162,10 +4065,15 @@
             // vcm_display가 있으면 단순화된 렌더링 사용
             if (vcmDisplay.length > 0 && vcmMeta.length > 0) {
                 console.log('[VCM] 단순화된 렌더링 사용 (vcm_display 기반)');
+                console.log('[VCM DEBUG] vcmMeta 샘플 (처음 10개):', vcmMeta.slice(0, 10).map(r => ({ 항목: r['항목'], 타입: r['타입'], 부모: r['부모'] })));
+                console.log('[VCM DEBUG] vcmDisplay 샘플 (처음 10개):', vcmDisplay.slice(0, 10).map(r => r['항목']));
 
                 // 타입 조회 헬퍼 (vcm 메타데이터에서)
                 function getItemType(itemName) {
                     const meta = vcmMeta.find(r => r['항목'] === itemName);
+                    if (!meta) {
+                        console.log('[VCM DEBUG] 타입 찾기 실패:', itemName, '| vcmMeta에서 찾은 항목들:', vcmMeta.filter(r => r['항목']?.includes(itemName.trim().substring(0,5))).map(r => r['항목']));
+                    }
                     return meta ? meta['타입'] : 'item';
                 }
 
@@ -2243,15 +4151,37 @@
                         let tooltip = '';
                         let hasChildren = false;
 
-                        // 각 연도별 자식 항목 툴팁 생성
-                        const children = getChildItems(parentName, y);
-                        if (children.length > 0) {
-                            hasChildren = true;
-                            const childLines = children.map(c => {
-                                const fmtVal = typeof c.value === 'number' ? c.value.toLocaleString('ko-KR') : c.value;
-                                return `${c.name}: ${fmtVal}`;
-                            });
-                            tooltip = `[${y} 세부내역]\n${childLines.join('\n')}\n─────────\n합계: ${typeof val === 'number' ? val.toLocaleString('ko-KR') : val}`;
+                        // BS 대분류는 툴팁 불필요 (이미 하위 항목이 테이블에 표시됨)
+                        const bsCategoriesNoTooltip = ['유동자산', '비유동자산', '유동부채', '비유동부채'];
+                        const skipTooltip = bsCategoriesNoTooltip.includes(parentName.trim());
+
+                        // 각 연도별 자식 항목 툴팁 생성 (BS 대분류 제외)
+                        if (!skipTooltip) {
+                            const children = getChildItems(parentName, y);
+                            if (children.length > 0) {
+                                hasChildren = true;
+                                // 중복 값 필터링: 같은 값을 가진 항목 중 가장 구체적인 이름만 유지
+                                const uniqueChildren = [];
+                                const seenValues = new Map(); // value -> item
+                                for (const c of children) {
+                                    const valKey = String(c.value);
+                                    if (seenValues.has(valKey)) {
+                                        // 같은 값이 이미 있으면, 더 구체적인 이름(더 긴 이름)을 유지
+                                        const existing = seenValues.get(valKey);
+                                        if (c.name.length > existing.name.length) {
+                                            seenValues.set(valKey, c);
+                                        }
+                                    } else {
+                                        seenValues.set(valKey, c);
+                                    }
+                                }
+                                const filteredChildren = Array.from(seenValues.values());
+                                const childLines = filteredChildren.map(c => {
+                                    const fmtVal = typeof c.value === 'number' ? c.value.toLocaleString('ko-KR') : c.value;
+                                    return `${c.name}: ${fmtVal}`;
+                                });
+                                tooltip = `[${y} 세부내역]\n${childLines.join('\n')}\n─────────\n합계: ${typeof val === 'number' ? val.toLocaleString('ko-KR') : val}`;
+                            }
                         }
 
                         // 숫자인 경우 천 단위 콤마 추가
@@ -2311,15 +4241,49 @@
                                 tooltip = `[${y} 계산식]\n영업이익: ${fmt(영업이익)}\n+ 감가상각비: ${fmt(감가상각비)}\n+ 무형자산상각비: ${fmt(무형자산상각비)}\n─────────\n= EBITDA: ${typeof val === 'number' ? val.toLocaleString('ko-KR') : val}`;
                             }
                         } else {
-                            // 일반 항목: 자식 항목 툴팁 생성
-                            const children = getChildItems(parentName, y);
-                            if (children.length > 0) {
-                                hasChildren = true;
-                                const childLines = children.map(c => {
-                                    const fmtVal = typeof c.value === 'number' ? c.value.toLocaleString('ko-KR') : c.value;
-                                    return `${c.name}: ${fmtVal}`;
-                                });
-                                tooltip = `[${y} 세부내역]\n${childLines.join('\n')}\n─────────\n합계: ${typeof val === 'number' ? val.toLocaleString('ko-KR') : val}`;
+                            // IS 대분류는 툴팁 불필요 (이미 하위 항목이 테이블에 표시됨)
+                            const isCategoriesNoTooltip = ['매출', '매출원가', '판매비와관리비', '영업외수익', '영업외비용'];
+                            const skipTooltip = isCategoriesNoTooltip.includes(parentName.trim());
+
+                            // 일반 항목: 자식 항목 툴팁 생성 (IS 대분류 제외)
+                            if (!skipTooltip) {
+                                const children = getChildItems(parentName, y);
+                                if (children.length > 0) {
+                                    hasChildren = true;
+                                    // 중복 값 필터링: 같은 값을 가진 항목 중 가장 구체적인 이름만 유지
+                                    const seenValues = new Map();
+                                    for (const c of children) {
+                                        const valKey = String(c.value);
+                                        if (seenValues.has(valKey)) {
+                                            const existing = seenValues.get(valKey);
+                                            if (c.name.length > existing.name.length) {
+                                                seenValues.set(valKey, c);
+                                            }
+                                        } else {
+                                            seenValues.set(valKey, c);
+                                        }
+                                    }
+                                    const filteredChildren = Array.from(seenValues.values());
+                                    // 자녀 값 합계 계산 (원 단위 → 백만원 변환 필요 여부 확인)
+                                    let childSum = 0;
+                                    const childLines = filteredChildren.map(c => {
+                                        let numVal = typeof c.value === 'number' ? c.value : parseFloat(String(c.value).replace(/,/g, ''));
+                                        // 값이 100만 이상이면 원 단위로 간주하고 백만원으로 변환
+                                        if (!isNaN(numVal) && Math.abs(numVal) >= 1000000) {
+                                            numVal = numVal / 1000000;
+                                        }
+                                        childSum += isNaN(numVal) ? 0 : numVal;
+                                        const fmtVal = !isNaN(numVal) ? numVal.toLocaleString('ko-KR', {maximumFractionDigits: 1}) : c.value;
+                                        return `${c.name}: ${fmtVal}`;
+                                    });
+                                    // 부모 값이 없으면 자녀 합계로 대체
+                                    const displayTotal = (val === null || val === undefined || val === '') ? childSum : val;
+                                    tooltip = `[${y} 세부내역]\n${childLines.join('\n')}\n─────────\n합계: ${typeof displayTotal === 'number' ? displayTotal.toLocaleString('ko-KR', {maximumFractionDigits: 1}) : displayTotal}`;
+                                    // 부모 값이 없을 때 자녀 합계를 val에 할당
+                                    if (val === null || val === undefined || val === '') {
+                                        val = childSum > 0 ? childSum : val;
+                                    }
+                                }
                             }
                         }
 
@@ -2327,7 +4291,7 @@
                         let displayVal = val;
                         if (typeof val === 'number' && !isNaN(val)) {
                             displayVal = val.toLocaleString('ko-KR');
-                        } else if (val === null || val === undefined) {
+                        } else if (val === null || val === undefined || val === '') {
                             displayVal = '';
                         }
                         isTableHtml += `<td class="${hasChildren ? 'calc-cell' : ''}" title="${tooltip}">${displayVal}</td>`;
@@ -2355,41 +4319,35 @@
             // ========== 기존 복잡한 렌더링 (fallback) ==========
             console.log('[VCM] 기존 렌더링 사용 (vcm_display 없음)');
 
-            // 동적 bsItems 생성 - VCM 데이터에서 직접 읽기
+            // 동적 bsItems 생성 - VCM 데이터에서 직접 읽기 (백엔드 타입 필드 활용)
             const vcmData = previewData?.vcm || [];
             const bsItems = [];
 
             // VCM 데이터에서 재무상태표 항목만 추출 (NWC 이전까지)
-            const categoryNames = ['유동자산', '비유동자산', '유동부채', '비유동부채'];
-            const totalNames = ['자산총계', '부채총계', '자본총계', '부채와자본총계'];
-            // 정확한 매칭으로 손익계산서 시작점 판단 (매출채권 등과 혼동 방지)
             const stopNames = ['NWC', 'Net Debt'];
 
             for (const row of vcmData) {
                 const name = row['항목'];
-                const parent = row['부모'];
+                const itemType = row['타입'] || 'item';  // 백엔드에서 설정한 타입 사용
 
                 // NWC, Net Debt 이후는 손익계산서이므로 제외 (정확히 일치할 때만)
                 if (stopNames.includes(name)) break;
                 if (!name) continue;
 
-                // 세부 항목 (부모가 있는 항목) - 테이블에서 제외, 툴팁에서만 사용
-                if (parent && parent !== '') {
-                    continue;  // 세부항목은 툴팁으로만 표시
-                }
+                // 백엔드 타입에 따라 분류 (손익계산서와 동일한 방식)
+                const isCategory = itemType === 'category';
+                const isTotal = itemType === 'total' || itemType === 'highlight';
+                const isSubItem = itemType === 'subitem';
+                const isHighlight = itemType === 'highlight';
 
-                // 카테고리 (유동자산, 비유동자산 등)
-                if (categoryNames.includes(name)) {
-                    bsItems.push({ name: name, isCategory: true, fromVcm: true });
-                }
-                // 총계 (자산총계, 부채총계 등)
-                else if (totalNames.includes(name)) {
-                    bsItems.push({ name: name, isTotal: true, fromVcm: true });
-                }
-                // 일반 항목
-                else {
-                    bsItems.push({ name: name, isSubItem: true, fromVcm: true });
-                }
+                bsItems.push({
+                    name: name,
+                    isCategory: isCategory,
+                    isTotal: isTotal,
+                    isSubItem: isSubItem,
+                    isHighlight: isHighlight,
+                    fromVcm: true
+                });
             }
 
             // VCM 데이터가 없으면 기본 구조 사용 (fallback)
@@ -3114,7 +5072,7 @@
         }
 
         // ============================================================
-        // AI 인사이트 분석
+        // 재무분석 AI 분석
         // ============================================================
         let analysisCheckInterval = null;
 
@@ -3123,9 +5081,20 @@
 
             // 시작 버튼 숨기고 진행 표시
             document.getElementById('analysisStartContainer').style.display = 'none';
-            document.getElementById('analysisSection').style.display = 'block';
             document.getElementById('analysisProgress').style.display = 'block';
             document.getElementById('analysisResult').style.display = 'none';
+
+            // 버튼 텍스트 원복 (재시도 시)
+            document.getElementById('analyzeBtn').textContent = '재무분석 AI 분석 시작';
+
+            // 재무분석 AI 탭 버튼 분석 중 표시
+            const insightTabBtn = document.getElementById('insightTabBtn');
+            insightTabBtn.textContent = '재무분석중...(0%)';
+            insightTabBtn.classList.add('analyzing');
+            insightTabBtn.classList.remove('completed');
+
+            // 복사 버튼 숨김
+            document.getElementById('analysisCopyBtn').style.display = 'none';
 
             // 진행바 초기화
             const progressBar = document.getElementById('analysisProgressBar');
@@ -3139,6 +5108,7 @@
 
             const statusEl = document.getElementById('analysisStatus');
             statusEl.textContent = '진행 중';
+            statusEl.style.display = '';
             statusEl.className = 'analysis-status running';
 
             try {
@@ -3189,6 +5159,12 @@
                     progressBar.style.width = `${data.progress}%`;
                     progressBar.textContent = `${data.progress}%`;
 
+                    // 탭 버튼에도 진행률 표시
+                    const insightTabBtn = document.getElementById('insightTabBtn');
+                    if (insightTabBtn.classList.contains('analyzing')) {
+                        insightTabBtn.textContent = `재무분석중...(${data.progress}%)`;
+                    }
+
                     const messageEl = document.getElementById('analysisMessage');
                     messageEl.textContent = data.message || '분석 중';
                     messageEl.classList.add('loading');
@@ -3214,10 +5190,22 @@
             }
         }
 
+        let analysisReportText = '';  // 복사용 원본 텍스트 저장
+
         function showAnalysisResult(result) {
+            // 분석 실패 또는 이상 패턴 없음 체크
+            if (!result || !result.report || result.no_anomalies || result.success === false) {
+                const errorMsg = result?.error || '이상 패턴을 감지하지 못했습니다. 다시 시도해주세요.';
+                showAnalysisError(errorMsg);
+                return;
+            }
+
             const statusEl = document.getElementById('analysisStatus');
-            statusEl.textContent = '완료';
-            statusEl.className = 'analysis-status completed';
+            statusEl.style.display = 'none';  // 상태 텍스트 숨김
+
+            // 복사 버튼 표시
+            const copyBtn = document.getElementById('analysisCopyBtn');
+            copyBtn.style.display = 'inline-block';
 
             // 로딩 애니메이션 제거
             document.getElementById('analysisMessage').classList.remove('loading');
@@ -3227,20 +5215,98 @@
             const resultEl = document.getElementById('analysisResult');
             resultEl.style.display = 'block';
 
-            if (result && result.report) {
-                // 마크다운을 HTML로 변환 (간단한 변환)
-                resultEl.innerHTML = markdownToHtml(result.report);
-            } else {
-                resultEl.innerHTML = '<p>분석 결과가 없습니다.</p>';
-            }
+            // 원본 텍스트 저장 (복사용)
+            analysisReportText = result.report;
+            // 마크다운을 HTML로 변환 (간단한 변환)
+            resultEl.innerHTML = markdownToHtml(result.report);
+
+            // 엑셀에 재무분석 AI 탭 추가
+            addInsightToExcel(result.report);
 
             isAnalysisCompleted = true;
+
+            // 재무분석 AI 탭 버튼 완료 표시
+            const insightTabBtn = document.getElementById('insightTabBtn');
+            insightTabBtn.textContent = '재무분석 AI';
+            insightTabBtn.classList.remove('analyzing');
+            insightTabBtn.classList.add('completed');
+
+            // 최신 대표자/주소 정보가 있으면 기업개황정보 업데이트
+            if (result.current_ceo || result.current_address) {
+                updateCompanyInfoFromAnalysis(result.current_ceo, result.current_address);
+                console.log('기업개황정보 업데이트 완료:', { ceo: result.current_ceo, address: result.current_address });
+            }
+        }
+
+        function stripMarkdown(text) {
+            return text
+                // 헤더 제거: # ## ### 등
+                .replace(/^#{1,6}\s+/gm, '')
+                // 굵은 글씨 **text** → text
+                .replace(/\*\*(.*?)\*\*/g, '$1')
+                // 기울임 *text* → text
+                .replace(/\*(.*?)\*/g, '$1')
+                // 리스트 기호 제거: - item → item
+                .replace(/^[-*]\s+/gm, '')
+                // 번호 리스트: 1. item → item (번호 유지)
+                .replace(/^(\d+)\.\s+/gm, '$1. ')
+                // 수평선 제거
+                .replace(/^---+$/gm, '')
+                // 연속 빈 줄 정리
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+        }
+
+        async function copyAnalysisResult() {
+            if (!analysisReportText) {
+                alert('복사할 내용이 없습니다.');
+                return;
+            }
+
+            try {
+                const plainText = stripMarkdown(analysisReportText);
+                await navigator.clipboard.writeText(plainText);
+                const copyBtn = document.getElementById('analysisCopyBtn');
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = '복사됨';
+                copyBtn.classList.add('copied');
+
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            } catch (err) {
+                console.error('복사 실패:', err);
+                alert('복사에 실패했습니다.');
+            }
+        }
+
+        async function addInsightToExcel(report) {
+            if (!currentTaskId) return;
+
+            try {
+                const response = await fetch(`/api/add-insight/${currentTaskId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ report: report })
+                });
+
+                if (response.ok) {
+                    console.log('재무분석 AI가 엑셀에 추가되었습니다.');
+                }
+            } catch (error) {
+                console.error('엑셀에 인사이트 추가 실패:', error);
+            }
         }
 
         function showAnalysisError(message) {
             const statusEl = document.getElementById('analysisStatus');
             statusEl.textContent = '실패';
+            statusEl.style.display = '';
             statusEl.className = 'analysis-status failed';
+
+            // 복사 버튼 숨김
+            document.getElementById('analysisCopyBtn').style.display = 'none';
 
             // 로딩 애니메이션 제거
             document.getElementById('analysisMessage').classList.remove('loading');
@@ -3248,10 +5314,13 @@
 
             const resultEl = document.getElementById('analysisResult');
             resultEl.style.display = 'block';
-            resultEl.innerHTML = `<p style="color: #dc2626;">분석 실패: ${message}</p>`;
+            resultEl.innerHTML = `<p style="color: #dc2626; text-align: center; padding: 20px;">분석 실패: ${message}</p>`;
 
-            // 실패 시 다시 시작 버튼 표시
-            document.getElementById('analysisStartContainer').style.display = 'block';
+            // 실패 시 다시 분석하기 버튼 표시
+            const startContainer = document.getElementById('analysisStartContainer');
+            startContainer.style.display = 'block';
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            analyzeBtn.textContent = '다시 분석하기';
         }
 
         function markdownToHtml(markdown) {
@@ -3280,6 +5349,28 @@
 
         function downloadFile() {
             if (!currentTaskId) return;
+
+            const downloadBtn = document.getElementById('downloadBtn');
+
+            // AI 분석 완료 여부 체크
+            if (!isAnalysisCompleted) {
+                // 버튼에 "AI 분석중" 표시 및 흔들림 효과
+                const originalText = downloadBtn.textContent;
+                downloadBtn.textContent = 'AI 분석중...';
+                downloadBtn.classList.add('btn-shake');
+                downloadBtn.disabled = true;
+
+                setTimeout(() => {
+                    downloadBtn.textContent = originalText;
+                    downloadBtn.classList.remove('btn-shake');
+                    downloadBtn.disabled = false;
+                }, 1500);
+
+                // 재무분석 AI 탭으로 이동
+                showMainTab('insight');
+                return;
+            }
+
             // 페이지 이동 없이 다운로드 (화면 유지)
             const link = document.createElement('a');
             link.href = `/api/download/${currentTaskId}`;
@@ -3320,9 +5411,9 @@
             document.getElementById('companyInfoLoading').innerHTML = '<span class="spinner"></span> 기업정보 로딩 중...';
             document.getElementById('companyInfoTable').style.display = 'none';
             document.getElementById('companyInfoBody').innerHTML = '';
+            updateCompanyInfoTitle(false);  // 제목 초기화
 
             // AI 분석 섹션 초기화
-            document.getElementById('analysisSection').style.display = 'none';
             document.getElementById('analysisStartContainer').style.display = 'none';
             document.getElementById('analysisProgress').style.display = 'none';
             document.getElementById('analysisResult').style.display = 'none';
@@ -3335,6 +5426,24 @@
             analysisProgressBar.textContent = '0%';
             isIntegratedMode = false;
             isAnalysisCompleted = false;
+            analysisReportText = '';
+
+            // 복사 버튼 초기화
+            const copyBtn = document.getElementById('analysisCopyBtn');
+            copyBtn.style.display = 'none';
+            copyBtn.textContent = '복사';
+            copyBtn.classList.remove('copied');
+            document.getElementById('analysisStatus').style.display = '';
+
+            // 상위 탭 초기화 (재무정보 탭으로)
+            document.querySelectorAll('.main-tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.dataset.mainTab === 'financial') tab.classList.add('active');
+            });
+            document.querySelectorAll('.main-tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById('financialTabContent').classList.add('active');
 
             // 진행바 초기화
             const progressBar = document.getElementById('progressBar');

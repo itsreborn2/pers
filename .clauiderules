@@ -25,4 +25,4 @@ uvicorn server:app --host 0.0.0.0 --port 8000
 - 서버 함수: `create_vcm_format()` (server.py:1641)
 - 재무상태표 + 손익계산서 통합 생성
 - 원 단위로 저장, 프론트에서 동적 표시
-- 엑셀 시트명: "VCM전용포맷"
+- 엑셀 시트명: "Financials"

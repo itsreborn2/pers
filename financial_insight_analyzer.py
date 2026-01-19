@@ -42,7 +42,7 @@ class Anomaly:
     item: str           # 이상 항목명
     finding: str        # 수치와 변화 (사실만)
     context: str        # 관련 항목 수치
-    hint: str           # 조사 방향 힌트 (가설/추정)
+    search_queries: List[str] = None  # 원인 추적 검색어 리스트 (검색어 생성 에이전트가 채움)
 
 
 @dataclass
@@ -95,33 +95,39 @@ class FinancialInsightAnalyzer:
         print(f"{'='*60}")
 
         # 1단계: 업종 파악 (Flash + Search)
-        update(10, f'[1/4] 업종 파악 중 - {company_name}')
+        update(10, f'[1/5] 업종 파악 중 - {company_name}')
         industry_info = await self._identify_industry(company_info)
         print(f"  → 업종: {industry_info.get('industry', '파악 실패')}")
 
         # 2단계: 이상 감지 (Pro)
-        update(20, '[2/4] 재무제표 이상 패턴 감지 중')
+        update(20, '[2/5] 재무제표 이상 패턴 감지 중')
         anomalies = await self._detect_anomalies(financial_data, company_info, industry_info)
         print(f"  → 감지된 이상 패턴: {len(anomalies)}개")
 
         if not anomalies:
             update(100, '분석 완료 - 이상 패턴 없음')
             return {
-                "success": True,
+                "success": False,
+                "no_anomalies": True,
                 "company_name": company_name,
                 "industry_info": industry_info,
                 "anomalies": [],
-                "insights": "특이한 이상 패턴이 감지되지 않았습니다.",
-                "report": "재무제표가 안정적으로 보입니다."
+                "insights": "이상 패턴 감지에 실패했습니다. 다시 시도해주세요.",
+                "report": None,
+                "error": "이상 패턴을 감지하지 못했습니다. AI 분석을 다시 시도해주세요."
             }
 
-        # 3단계: 이상 패턴별 웹 리서치 병렬 실행 (Pro+Search)
-        update(35, f'[3/4] 웹 리서치 진행 중 - {len(anomalies)}개 병렬 분석')
+        # 3단계: 원인 추적 검색어 생성 (Pro)
+        update(30, f'[3/5] 원인 추적 검색어 생성 중 - {len(anomalies)}개 패턴')
+        anomalies = await self._generate_search_queries(anomalies, company_info, industry_info)
+
+        # 4단계: 이상 패턴별 웹 리서치 병렬 실행 (Pro+Search)
+        update(45, f'[4/5] 웹 리서치 진행 중 - {len(anomalies)}개 병렬 분석')
         search_results = await self._execute_parallel_research(anomalies, company_info, industry_info)
         print(f"  → 완료된 리서치: {len(search_results)}개")
 
-        # 4단계: 종합 보고서 생성 (Pro)
-        update(80, '[4/4] 종합 보고서 생성 중')
+        # 5단계: 종합 보고서 생성 (Pro)
+        update(80, '[5/5] 종합 보고서 생성 중')
         report = await self._generate_report(
             financial_data, company_info, industry_info,
             anomalies, search_results
@@ -265,15 +271,13 @@ JSON 배열로 반환:
         "period": "FY2024",
         "item": "당기순이익",
         "finding": "130억원 흑자전환 (전년 -80억원, +262%)",
-        "context": "영업이익 54억원, 영업외수익 248억원",
-        "hint": "영업이익 대비 당기순이익 괴리, 일회성 영업외수익 가능성"
+        "context": "영업이익 54억원, 영업외수익 248억원"
     }},
     {{
         "period": "FY2020-FY2024",
         "item": "자본총계",
         "finding": "5년 연속 자본잠식 (-200억 → -527억)",
-        "context": "누적결손금 1,200억원, 상환전환우선주 800억원",
-        "hint": "지속적 적자 누적, 재무구조 취약"
+        "context": "누적결손금 1,200억원, 상환전환우선주 800억원"
     }}
 ]
 
@@ -281,7 +285,6 @@ JSON 배열로 반환:
 - period: 단일 연도("FY2024") 또는 기간("FY2020-FY2024")
 - finding: 수치와 변화 사실만 기재
 - context: 관련 항목 수치
-- hint: 조사 방향 힌트 (가설/추정만, 지시 없이)
 - 이상 징후가 없으면 빈 배열 [] 반환
 """
 
@@ -305,8 +308,7 @@ JSON 배열로 반환:
                     period=a.get('period', ''),
                     item=a.get('item', ''),
                     finding=a.get('finding', ''),
-                    context=a.get('context', ''),
-                    hint=a.get('hint', '')
+                    context=a.get('context', '')
                 )
                 for a in anomalies_data
             ]
@@ -315,6 +317,150 @@ JSON 배열로 반환:
             print(f"  [오류] 이상 감지 실패: {e}")
             return []
 
+    async def _generate_search_queries(
+        self,
+        anomalies: List[Anomaly],
+        company_info: Dict[str, Any],
+        industry_info: Dict[str, Any]
+    ) -> List[Anomaly]:
+        """
+        이상 패턴별 원인 추적 검색어 생성 (Pro 모델)
+
+        각 이상 패턴에 대해 원인을 찾기 위한 다양한 검색어를 생성합니다.
+        재무 수치 자체가 아닌, 그 원인이 될 수 있는 사건/뉴스를 찾는 검색어입니다.
+        """
+        company_name = company_info.get('corp_name', '')
+        industry = industry_info.get('industry', '')
+        competitors = industry_info.get('competitors', [])
+        competitors_str = ', '.join(competitors[:3]) if competitors else ''
+
+        # 모든 이상 패턴을 JSON으로 구성
+        anomalies_json = json.dumps([
+            {
+                "period": a.period,
+                "item": a.item,
+                "finding": a.finding,
+                "context": a.context
+            }
+            for a in anomalies
+        ], ensure_ascii=False, indent=2)
+
+        prompt = f"""당신은 M&A 실사 전문가입니다. 아래 재무제표 이상 패턴들의 **원인**을 찾기 위한 웹 검색어를 생성해주세요.
+
+## 중요 지침
+⚠️ **재무 수치 자체를 검색하지 마세요!** 우리는 이미 재무제표 데이터를 가지고 있습니다.
+⚠️ **원인이 될 수 있는 사건, 뉴스, 공시를 찾는 검색어**를 생성하세요.
+
+## 회사 정보
+- 회사명: {company_name}
+- 업종: {industry}
+- 주요 경쟁사: {competitors_str}
+
+## 분석 대상 이상 패턴들
+{anomalies_json}
+
+## 검색어 생성 가이드
+
+### 잘못된 검색어 예시 (❌ 사용 금지)
+- "{company_name} 2024년 재무제표" → 이미 가지고 있음
+- "{company_name} 매출액" → 이미 가지고 있음
+- "{company_name} 영업이익" → 이미 가지고 있음
+
+### 올바른 검색어 예시 (✅ 이런 방향으로)
+**대손상각비 급증의 경우:**
+- "{company_name} 거래처 부도"
+- "{company_name} 채권 회수 문제"
+- "{industry} 대금 연체 증가 2024"
+- "{company_name} 소송 패소"
+
+**매출 급감의 경우:**
+- "{company_name} 주요 고객 이탈"
+- "{company_name} 계약 해지"
+- "{industry} 수요 감소 2024"
+- "{company_name} 경쟁 심화"
+
+**유형자산 급증의 경우:**
+- "{company_name} 신규 공장"
+- "{company_name} 설비 투자"
+- "{company_name} 인수합병"
+- "{company_name} 사업 확장"
+
+**차입금 급증의 경우:**
+- "{company_name} 대출"
+- "{company_name} 회사채 발행"
+- "{company_name} 자금 조달"
+- "{company_name} 유동성 위기"
+
+## 출력 형식
+각 이상 패턴에 대해 **최소 5개 이상**의 다양한 검색어를 생성하세요.
+반드시 아래 JSON 형식으로만 출력하세요:
+
+```json
+[
+    {{
+        "period": "FY2024",
+        "item": "대손상각비",
+        "search_queries": [
+            "{company_name} 거래처 부도 2024",
+            "{company_name} 채권 회수 실패",
+            "{company_name} 매출채권 손상",
+            "{industry} 대금 연체율 2024",
+            "{company_name} 소송 손해배상",
+            "..."
+        ]
+    }},
+    ...
+]
+```
+
+모든 이상 패턴에 대해 빠짐없이 검색어를 생성하세요."""
+
+        try:
+            print(f"  [검색어 생성 시작] {len(anomalies)}개 이상 패턴")
+
+            response = self.client.models.generate_content(
+                model=MODEL_PRO,
+                contents=prompt
+            )
+
+            result_text = response.text
+
+            # JSON 파싱
+            if "```json" in result_text:
+                result_text = result_text.split("```json")[1].split("```")[0]
+            elif "```" in result_text:
+                result_text = result_text.split("```")[1].split("```")[0]
+
+            queries_data = json.loads(result_text.strip())
+
+            # 생성된 검색어를 Anomaly 객체에 매핑
+            queries_map = {
+                (q['period'], q['item']): q.get('search_queries', [])
+                for q in queries_data
+            }
+
+            for anomaly in anomalies:
+                key = (anomaly.period, anomaly.item)
+                anomaly.search_queries = queries_map.get(key, [])
+                print(f"    → {anomaly.item}: {len(anomaly.search_queries)}개 검색어 생성")
+
+            total_queries = sum(len(a.search_queries or []) for a in anomalies)
+            print(f"  [검색어 생성 완료] 총 {total_queries}개 검색어")
+
+            return anomalies
+
+        except Exception as e:
+            print(f"  [오류] 검색어 생성 실패: {e}")
+            # 실패 시 기본 검색어 설정
+            for anomaly in anomalies:
+                year = anomaly.period.replace('FY', '').split('-')[-1] if anomaly.period else ''
+                anomaly.search_queries = [
+                    f"{company_name} {anomaly.item} {year}",
+                    f"{company_name} {year}년 주요 이슈",
+                    f"{industry} {year}년 동향"
+                ]
+            return anomalies
+
     def _build_research_prompt(
         self,
         anomaly: Anomaly,
@@ -322,41 +468,62 @@ JSON 배열로 반환:
         industry_info: Dict[str, Any]
     ) -> str:
         """
-        이상 패턴별 웹 리서치 프롬프트 생성 (템플릿 기반)
+        이상 패턴별 웹 리서치 프롬프트 생성 (생성된 검색어 사용)
         """
         company_name = company_info.get('corp_name', '')
         industry = industry_info.get('industry', '')
-        competitors = industry_info.get('competitors', [])
-        competitors_str = ', '.join(competitors[:3]) if competitors else '정보 없음'
-        # period에서 연도 추출 (FY2024 또는 FY2020-FY2024 형태)
-        period = anomaly.period if anomaly.period else ''
-        year = period.replace('FY', '').split('-')[-1] if period else ''  # 마지막 연도 사용
 
-        research_prompt = f"""당신은 M&A 실사 전문가입니다. 아래 재무제표 이상 패턴의 원인을 웹 검색을 통해 조사하고 분석해주세요.
+        # 생성된 검색어 리스트 포맷팅
+        search_queries = anomaly.search_queries or []
+        search_queries_str = "\n".join([f"- {q}" for q in search_queries]) if search_queries else "- (검색어 없음)"
+
+        research_prompt = f"""당신은 M&A 실사 전문가입니다. 아래 재무제표 이상 패턴의 **원인**을 웹 검색으로 조사해야 합니다.
+
+## [절대 규칙] 사실 기반 응답만 허용
+🚫 **절대 금지 사항:**
+- 검색 결과 없이 추측하거나 가정하는 것
+- "~일 수 있습니다", "~로 추정됩니다" 같은 추론
+- 사전 학습된 일반 지식으로 답변하는 것
+- 검색에서 찾지 못한 내용을 마치 찾은 것처럼 작성하는 것
+
+✅ **반드시 준수:**
+- 오직 웹 검색에서 찾은 **실제 뉴스/기사/공시 내용만** 인용
+- 검색 결과가 없으면 솔직하게 "찾지 못했습니다"라고 명시
+- 모든 내용에 출처(기사 제목, 날짜, 매체)를 명시
+
+## [필수] 웹 검색 수행 지침
+⚠️ **반드시 Google Search 도구로 아래 검색어들을 실제로 검색하세요.**
+⚠️ **재무 수치 검색 금지!** 이미 재무제표 데이터를 가지고 있습니다.
 
 ## 회사 정보
 - 회사명: {company_name}
 - 업종: {industry}
-- 경쟁사: {competitors_str}
 
 ## 분석 대상 이상 패턴
 - 기간: {anomaly.period}
 - 항목: {anomaly.item}
-- 발견: {anomaly.finding}
+- 발견 사실: {anomaly.finding}
 - 관련 항목: {anomaly.context}
-- 힌트: {anomaly.hint}
 
-## 조사 항목
-위 이상 패턴의 원인을 파악하기 위해 다음 관점에서 웹 검색하여 조사해주세요:
+## ⭐ 필수 검색어 (아래 검색어들로 검색하세요)
+{search_queries_str}
 
-1. **기업 고유 원인**: {company_name}의 {year}년 관련 뉴스, 공시, 경영진 결정, 구조조정, M&A, 소송/과징금 등
-2. **산업 동향**: {industry} 업계의 {year}년 시장 상황, 경쟁 환경, 원가 변동
-3. **거시경제 영향**: {year}년 금리, 환율, 인플레이션, 경기 상황이 해당 업종에 미친 영향
-4. **경쟁사 비교**: {competitors_str} 등 경쟁사의 동일 시기 실적과 비교
+## 출력 형식 (엄격히 준수)
 
-## 출력
-조사 결과를 바탕으로 이상 패턴의 원인을 분석하여 보고해주세요.
-가능하면 구체적인 사실과 출처를 포함해주세요."""
+### 검색 결과 요약
+[웹 검색에서 찾은 **실제** 뉴스/기사/공시 내용만 요약]
+- 반드시 검색에서 찾은 사실만 기재
+- 찾지 못한 내용은 "관련 정보를 찾지 못함"으로 명시
+
+### 출처 (필수)
+- 출처1: [기사 제목] - [매체명] ([날짜])
+- 출처2: [기사 제목] - [매체명] ([날짜])
+※ 검색 결과가 없으면 "검색 결과에서 관련 출처를 찾지 못했습니다." 명시
+
+### 분석 결론
+[검색 결과에 기반한 사실만 기재. 추측 절대 금지]
+
+⚠️ **검색 결과가 없는 경우**: 반드시 "해당 이상 패턴의 원인을 설명하는 뉴스나 공시를 웹 검색에서 찾지 못했습니다."라고 명시하세요."""
 
         return research_prompt
 
@@ -375,8 +542,68 @@ JSON 배열로 반환:
 
         모든 이상 패턴은 병렬로 처리됨
         """
+        def extract_sources(response) -> List[str]:
+            """응답에서 소스 URL 추출"""
+            sources = []
+            if hasattr(response, 'candidates') and response.candidates:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'grounding_metadata'):
+                    metadata = candidate.grounding_metadata
+                    if hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
+                        for chunk in metadata.grounding_chunks:
+                            if hasattr(chunk, 'web') and hasattr(chunk.web, 'uri'):
+                                sources.append(chunk.web.uri)
+            return sources
+
+        def build_fallback_prompt(anomaly: Anomaly) -> str:
+            """소스 없을 때 사용할 대체 검색 프롬프트"""
+            company_name = company_info.get('corp_name', '')
+            industry = industry_info.get('industry', '')
+
+            # 더 넓은 범위의 대체 검색어
+            year = anomaly.period.replace('FY', '')
+            fallback_queries = [
+                f"{company_name} {year}년 뉴스",
+                f"{company_name} {year}년 실적 발표",
+                f"{company_name} 경영 이슈",
+                f"{company_name} 사업 현황",
+                f"{industry} {year}년 동향",
+                f"{industry} 업계 뉴스 {year}",
+            ]
+            queries_str = "\n".join([f"- {q}" for q in fallback_queries])
+
+            return f"""당신은 M&A 실사 전문가입니다. 아래 회사의 재무 이상 패턴 원인을 넓은 범위에서 웹 검색으로 조사해야 합니다.
+
+## [절대 규칙] 반드시 웹 검색 수행
+⚠️ **Google Search 도구를 반드시 사용하세요.**
+⚠️ 검색 결과 없이 응답하면 안 됩니다.
+
+## 회사 정보
+- 회사명: {company_name}
+- 업종: {industry}
+
+## 분석 대상
+- 기간: {anomaly.period}
+- 항목: {anomaly.item}
+- 발견 사실: {anomaly.finding}
+
+## ⭐ 대체 검색어 (반드시 검색)
+{queries_str}
+
+## 출력 형식
+### 검색 결과 요약
+[웹 검색에서 찾은 회사 관련 뉴스/기사 내용]
+
+### 출처
+- 출처1: [기사 제목] - [매체명] ([날짜])
+
+### 분석 결론
+[검색 결과에 기반한 분석 - 추측 금지]
+
+⚠️ 검색 결과가 전혀 없으면 "관련 정보를 웹 검색에서 찾지 못했습니다."라고 명시하세요."""
+
         def research_one_sync(anomaly: Anomaly) -> SearchResult:
-            """동기 함수로 API 호출 (스레드에서 실행)"""
+            """동기 함수로 API 호출 (스레드에서 실행) - Fallback 로직 포함"""
             # 1. 리서치 프롬프트 구성
             print(f"    [리서치 시작] {anomaly.period} {anomaly.item}")
             prompt = self._build_research_prompt(anomaly, company_info, industry_info)
@@ -389,7 +616,7 @@ JSON 배열로 반환:
             )
 
             try:
-                # 2. Pro + Search로 실제 웹 리서치 수행
+                # 2. Pro + Search로 실제 웹 리서치 수행 (1차 시도)
                 print(f"    [웹 리서치 시작] {anomaly.period} {anomaly.item}")
 
                 response = self.client.models.generate_content(
@@ -400,18 +627,34 @@ JSON 배열로 반환:
                     )
                 )
 
-                # 소스 URL 추출 시도
-                sources = []
-                if hasattr(response, 'candidates') and response.candidates:
-                    candidate = response.candidates[0]
-                    if hasattr(candidate, 'grounding_metadata'):
-                        metadata = candidate.grounding_metadata
-                        if hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
-                            for chunk in metadata.grounding_chunks:
-                                if hasattr(chunk, 'web') and hasattr(chunk.web, 'uri'):
-                                    sources.append(chunk.web.uri)
-
+                # 소스 URL 추출
+                sources = extract_sources(response)
                 result_text = response.text if response.text else "결과 없음"
+
+                # ★ Fallback 로직: 소스가 없으면 대체 검색어로 재시도
+                if not sources:
+                    print(f"    [Fallback 시작] {anomaly.period} {anomaly.item} - 소스 없음, 대체 검색어로 재시도")
+
+                    fallback_prompt = build_fallback_prompt(anomaly)
+                    fallback_response = self.client.models.generate_content(
+                        model=MODEL_RESEARCH,
+                        contents=fallback_prompt,
+                        config=types.GenerateContentConfig(
+                            tools=[types.Tool(google_search=types.GoogleSearch())]
+                        )
+                    )
+
+                    fallback_sources = extract_sources(fallback_response)
+                    fallback_text = fallback_response.text if fallback_response.text else ""
+
+                    if fallback_sources:
+                        print(f"    [Fallback 성공] {anomaly.period} {anomaly.item} - {len(fallback_sources)}개 소스 발견")
+                        sources = fallback_sources
+                        result_text = f"[대체 검색 결과]\n{fallback_text}"
+                    else:
+                        print(f"    [Fallback 실패] {anomaly.period} {anomaly.item} - 대체 검색도 소스 없음")
+                        result_text = f"{result_text}\n\n[참고: 대체 검색도 수행했으나 관련 출처를 찾지 못했습니다.]"
+
                 print(f"    [웹 리서치 완료] {anomaly.period} {anomaly.item}")
                 print(f"    ┌─────────────────────────────────────────────────────────")
                 print(f"    │ [리서치 결과] {anomaly.period} {anomaly.item}")
@@ -467,7 +710,7 @@ JSON 배열로 반환:
             search_summary += f"{sr.result}\n"
 
         anomalies_text = "\n".join([
-            f"- {a.period} {a.item}\n  발견: {a.finding}\n  관련항목: {a.context}\n  힌트: {a.hint}"
+            f"- {a.period} {a.item}\n  발견: {a.finding}\n  관련항목: {a.context}"
             for a in anomalies
         ])
 
@@ -488,8 +731,7 @@ JSON 배열로 반환:
 
 ## 보고서 작성 지침
 1. 각 이상 패턴에 대해 원인을 명확히 설명
-2. 기업 고유 이슈 vs 산업/거시경제 이슈 구분
-3. 핵심 인사이트 요약
+2. 핵심 인사이트 요약
 
 ## 출력 형식
 반드시 아래 형식을 정확히 따라 마크다운으로 작성하세요. 다른 섹션을 추가하지 마세요.
@@ -504,12 +746,10 @@ JSON 배열로 반환:
 ### 1. [발견사항 제목]
 - **현상**: (무엇이 발생했는지)
 - **원인**: (왜 발생했는지)
-- **평가**: (기업이슈/산업이슈/거시이슈 중 하나)
 
 ### 2. [발견사항 제목]
 - **현상**: ...
 - **원인**: ...
-- **평가**: ...
 
 (이하 동일한 형식으로 모든 발견사항 작성)
 
