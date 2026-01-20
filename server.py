@@ -778,40 +778,34 @@ async def extract_financial_data(
         except Exception as info_err:
             print(f"[EXTRACT] 사업보고서 정보 추출 오류: {info_err}")
 
-        task['progress'] = 70
-        task['message'] = '엑셀 파일 생성 중...'
+        task['progress'] = 90
+        task['message'] = '데이터 정리 중...'
 
-        # 엑셀 파일 저장
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"{corp_name}_재무제표_{timestamp}.xlsx"
-        filepath = os.path.join("output", filename)
-
-        # 최신 정보로 company_info 업데이트 (엑셀에 반영)
+        # 최신 정보로 company_info 업데이트
         if company_info:
             if current_ceo:
                 company_info['ceo_nm'] = current_ceo
-                print(f"[EXTRACT] 엑셀용 대표자 업데이트: {current_ceo}")
+                print(f"[EXTRACT] 대표자 업데이트: {current_ceo}")
             if current_address:
                 company_info['adres'] = current_address
-                print(f"[EXTRACT] 엑셀용 주소 업데이트: {current_address}")
+                print(f"[EXTRACT] 주소 업데이트: {current_address}")
 
-        # 엑셀 저장 (기업개황정보 포함)
-        await loop.run_in_executor(
-            None,
-            lambda: save_to_excel(fs_data, filepath, company_info)
-        )
-        
+        # 엑셀은 AI 분석 완료 후 생성 - fs_data와 company_info를 task에 저장
+        task['fs_data'] = fs_data
+        task['company_info'] = company_info
+        task['corp_name'] = corp_name
+
         # 취소 확인
         if task['cancelled']:
             cleanup_task(task_id)
             return
-        
-        # 완료
+
+        # 완료 (엑셀 파일은 아직 없음 - AI 분석 후 생성)
         task['status'] = 'completed'
         task['progress'] = 100
-        task['message'] = '완료!'
-        task['file_path'] = filepath
-        task['filename'] = filename
+        task['message'] = '추출 완료! AI 분석을 진행해주세요.'
+        task['file_path'] = None  # 아직 엑셀 없음
+        task['filename'] = None
 
         # 사용량 로깅 (로그인한 사용자인 경우)
         if task.get('user_id'):
@@ -4417,15 +4411,45 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                 info_df.to_excel(writer, sheet_name='기업개황', index=False)
 
                 # 기업개황 시트 정렬 스타일 적용
-                from openpyxl.styles import Alignment
+                from openpyxl.styles import Alignment, PatternFill, Font
                 info_ws = writer.book['기업개황']
+
+                # 헤더 행 스타일 적용 (#131313 배경, 흰색 글자)
+                header_fill = PatternFill(start_color='131313', end_color='131313', fill_type='solid')
+                header_font = Font(color='FFFFFF', bold=True)
+                for col in range(1, info_ws.max_column + 1):
+                    cell = info_ws.cell(row=1, column=col)
+                    cell.fill = header_fill
+                    cell.font = header_font
+
+                # 법인번호, 사업자번호, 업종코드는 텍스트로 포맷 (콤마 방지)
+                text_format_rows = ['법인번호', '사업자번호', '업종코드']
+
                 for row in range(2, info_ws.max_row + 1):  # 헤더 제외
-                    info_ws.cell(row=row, column=1).alignment = Alignment(horizontal='left', vertical='center')  # A열 좌측
-                    info_ws.cell(row=row, column=2).alignment = Alignment(horizontal='right', vertical='center')  # B열 우측
+                    cell_a = info_ws.cell(row=row, column=1)
+                    cell_b = info_ws.cell(row=row, column=2)
+                    cell_a.alignment = Alignment(horizontal='left', vertical='center')  # A열 좌측
+                    cell_b.alignment = Alignment(horizontal='right', vertical='center')  # B열 우측
+
+                    # 텍스트 포맷 적용 (숫자 콤마 방지)
+                    if cell_a.value in text_format_rows:
+                        cell_b.number_format = '@'  # 텍스트 포맷
 
                 print(f"[Excel] 기업개황 시트 저장 완료")
             except Exception as e:
                 print(f"[Excel] 기업개황 시트 저장 실패: {e}")
+        # 헤더 스타일 정의 (공통)
+        from openpyxl.styles import PatternFill, Font, Alignment
+        common_header_fill = PatternFill(start_color='131313', end_color='131313', fill_type='solid')
+        common_header_font = Font(color='FFFFFF', bold=True)
+
+        def apply_header_style(ws):
+            """시트의 헤더 행(1행)에 #131313 배경, 흰색 글자 적용"""
+            for col in range(1, ws.max_column + 1):
+                cell = ws.cell(row=1, column=col)
+                cell.fill = common_header_fill
+                cell.font = common_header_font
+
         for key, name in sheet_names.items():
             try:
                 df = fs_data[key]
@@ -4433,12 +4457,24 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                     # XBRL 형식인 경우 컬럼 정규화
                     df_normalized = normalize_xbrl_columns(df)
                     df_normalized.to_excel(writer, sheet_name=name, index=False)
+                    # 헤더 스타일 적용
+                    apply_header_style(writer.book[name])
             except Exception:
                 pass
         
         # 주석 테이블들 저장 (각 재무제표별)
         notes = fs_data.get('notes', {})
         if notes:
+            # 주석 시트 헤더 스타일 적용 함수
+            def apply_note_header_style(ws):
+                """주석 시트의 헤더 행(1행)에 #131313 배경, 흰색 글자, B열 이후 중앙정렬"""
+                for col in range(1, ws.max_column + 1):
+                    cell = ws.cell(row=1, column=col)
+                    cell.fill = common_header_fill
+                    cell.font = common_header_font
+                    if col >= 2:  # B열 이후 중앙정렬
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+
             # 손익계산서 관련 주석들
             is_notes = notes.get('is_notes', [])
             for idx, note in enumerate(is_notes[:5]):  # 최대 5개
@@ -4448,6 +4484,7 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                         note_df_normalized = normalize_xbrl_columns(note_df)
                         sheet_name = f'손익주석{idx+1}'
                         note_df_normalized.to_excel(writer, sheet_name=sheet_name, index=False)
+                        apply_note_header_style(writer.book[sheet_name])
                         print(f"[Excel] 주석 저장: {sheet_name}")
                 except Exception as e:
                     print(f"[Excel] 손익주석 저장 실패: {e}")
@@ -4461,10 +4498,11 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                         note_df_normalized = normalize_xbrl_columns(note_df)
                         sheet_name = f'재무주석{idx+1}'
                         note_df_normalized.to_excel(writer, sheet_name=sheet_name, index=False)
+                        apply_note_header_style(writer.book[sheet_name])
                         print(f"[Excel] 주석 저장: {sheet_name}")
                 except Exception as e:
                     print(f"[Excel] 재무주석 저장 실패: {e}")
-            
+
             # 현금흐름표 관련 주석들
             cf_notes = notes.get('cf_notes', [])
             for idx, note in enumerate(cf_notes[:3]):  # 최대 3개
@@ -4474,6 +4512,7 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                         note_df_normalized = normalize_xbrl_columns(note_df)
                         sheet_name = f'현금주석{idx+1}'
                         note_df_normalized.to_excel(writer, sheet_name=sheet_name, index=False)
+                        apply_note_header_style(writer.book[sheet_name])
                         print(f"[Excel] 주석 저장: {sheet_name}")
                 except Exception as e:
                     print(f"[Excel] 현금주석 저장 실패: {e}")
@@ -4518,6 +4557,25 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                     cell.font = fd_header_font
                     cell.alignment = fd_header_align
                 fd_ws.row_dimensions[1].height = 30  # 헤더 행 높이 2배
+
+                # Frontdata 하위항목 들여쓰기 적용 (타입이 subitem인 경우)
+                # 컬럼 인덱스 찾기
+                col_indices = {}
+                for col in range(1, fd_ws.max_column + 1):
+                    header_val = fd_ws.cell(row=1, column=col).value
+                    if header_val:
+                        col_indices[header_val] = col
+
+                type_col = col_indices.get('타입')
+                item_col = col_indices.get('항목')
+
+                if type_col and item_col:
+                    for row in range(2, fd_ws.max_row + 1):
+                        item_type = fd_ws.cell(row=row, column=type_col).value
+                        if item_type in ['subitem', 'percent']:
+                            # 항목 셀에 들여쓰기 적용
+                            item_cell = fd_ws.cell(row=row, column=item_col)
+                            item_cell.alignment = Alignment(horizontal='left', vertical='center', indent=2)
 
                 print(f"[VCM] Frontdata 시트 저장 완료")
 
@@ -4619,7 +4677,9 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
 
                     # 행2: 컬럼 헤더
                     for col_idx, col_name in enumerate(data_cols):
-                        cell = ws.cell(row=2, column=start_col + col_idx, value=col_name)
+                        # 첫 번째 컬럼(항목)은 "(단위: 백만원)"으로 표시
+                        display_col_name = '(단위: 백만원)' if col_idx == 0 else col_name
+                        cell = ws.cell(row=2, column=start_col + col_idx, value=display_col_name)
                         apply_cell_style(cell, None, is_first_col=(col_idx == 0), is_header=True)
 
                     # 행3~: 데이터
@@ -5010,15 +5070,50 @@ def apply_excel_formatting(filepath: str):
     """기존 엑셀 파일에 포맷팅 재적용 (문자열→숫자 변환 포함)"""
     try:
         from openpyxl import load_workbook
-        from openpyxl.styles import Alignment
+        from openpyxl.styles import Alignment, PatternFill, Font
         from openpyxl.utils import get_column_letter
 
         wb = load_workbook(filepath)
         total_converted = 0
 
+        # 헤더 스타일 정의 (#131313 배경, 흰색 글자)
+        header_fill = PatternFill(start_color='131313', end_color='131313', fill_type='solid')
+        header_font = Font(color='FFFFFF', bold=True)
+
+        # Financials 시트는 별도 처리 (이미 스타일 적용됨)
+        skip_header_sheets = ['Financials']
+
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
             sheet_converted = 0
+
+            # 헤더 행(1행) 스타일 적용 (Financials 제외)
+            if sheet_name not in skip_header_sheets:
+                for col in range(1, ws.max_column + 1):
+                    cell = ws.cell(row=1, column=col)
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    # 모든 헤더: 가로 중앙정렬 + 세로 중앙정렬
+                    cell.alignment = Alignment(horizontal='center', vertical='center')
+
+            # Frontdata 시트: 하위항목 들여쓰기 적용
+            if sheet_name == 'Frontdata':
+                # 컬럼 인덱스 찾기
+                col_indices = {}
+                for col in range(1, ws.max_column + 1):
+                    header_val = ws.cell(row=1, column=col).value
+                    if header_val:
+                        col_indices[header_val] = col
+
+                type_col = col_indices.get('타입')
+                item_col = col_indices.get('항목')
+
+                if type_col and item_col:
+                    for row in range(2, ws.max_row + 1):
+                        item_type = ws.cell(row=row, column=type_col).value
+                        if item_type in ['subitem', 'percent']:
+                            item_cell = ws.cell(row=row, column=item_col)
+                            item_cell.alignment = Alignment(horizontal='left', vertical='center', indent=2)
 
             # 컬럼 너비 자동 조절
             for column_cells in ws.columns:
@@ -5181,14 +5276,10 @@ async def download_file_by_name(filename: str):
 
 @app.post("/api/add-insight/{task_id}")
 async def add_insight_to_excel(task_id: str, request: Request):
-    """재무분석 AI를 엑셀 파일에 추가하는 API"""
+    """재무분석 AI를 엑셀 파일에 추가하는 API - AI 분석 완료 시 엑셀 파일 생성"""
     task = TASKS.get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
-
-    filepath = task.get('file_path')
-    if not filepath or not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
 
     try:
         data = await request.json()
@@ -5196,6 +5287,37 @@ async def add_insight_to_excel(task_id: str, request: Request):
 
         if not report:
             raise HTTPException(status_code=400, detail="보고서 내용이 없습니다.")
+
+        filepath = task.get('file_path')
+
+        # 엑셀 파일이 없으면 새로 생성
+        if not filepath or not os.path.exists(filepath):
+            print(f"[ADD-INSIGHT] 엑셀 파일 없음, 새로 생성 시작")
+
+            # task에서 데이터 가져오기
+            fs_data = task.get('fs_data')
+            company_info = task.get('company_info')
+            corp_name = task.get('corp_name', '기업')
+
+            if not fs_data:
+                raise HTTPException(status_code=400, detail="재무 데이터가 없습니다. 추출을 다시 진행해주세요.")
+
+            # 파일명 생성
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{corp_name}_재무제표_{timestamp}.xlsx"
+            filepath = os.path.join(OUTPUT_DIR, filename)
+
+            # 엑셀 파일 생성 (동기 함수를 스레드에서 실행)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: save_to_excel(fs_data, filepath, company_info)
+            )
+
+            # task에 파일 경로 저장
+            task['file_path'] = filepath
+            task['filename'] = filename
+            print(f"[ADD-INSIGHT] 엑셀 파일 생성 완료: {filepath}")
 
         # 엑셀 파일에 재무분석 AI 시트 추가
         from openpyxl import load_workbook

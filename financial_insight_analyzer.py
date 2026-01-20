@@ -61,6 +61,27 @@ class SearchResult:
     sources: List[str]
 
 
+def format_period(period: str) -> str:
+    """
+    기간 형식 변환
+    - "FY2024" → "24년"
+    - "FY2020-FY2024" → "20~24년"
+    """
+    if not period:
+        return period
+
+    if "-" in period:
+        # 기간: FY2020-FY2024 → 20~24년
+        parts = period.split("-")
+        start = parts[0].replace("FY", "")[-2:]  # 2020 → 20
+        end = parts[1].replace("FY", "")[-2:]    # 2024 → 24
+        return f"{start}~{end}년"
+    else:
+        # 단일 연도: FY2024 → 24년
+        year = period.replace("FY", "")[-2:]  # 2024 → 24
+        return f"{year}년"
+
+
 class FinancialInsightAnalyzer:
     """재무제표 AI 인사이트 분석기"""
 
@@ -232,37 +253,46 @@ class FinancialInsightAnalyzer:
 - 사업: {industry_info.get('business_description', '')}
 
 ## 재무 데이터
+**중요: 모든 금액의 단위는 '원(KRW)'입니다. 예: 1000000000 = 10억원, 100000000 = 1억원**
+
 {financial_summary}
 
 ## 분석 관점
 
-M&A 실사 전문가로서 다양한 시각에서 이상 징후를 찾아주세요.
-아래는 예시일 뿐이며, 이 외에도 발견되는 모든 이상 패턴을 보고해주세요.
+M&A 실사 전문가로서 다양한 시각에서 **긍정적/부정적 변화 모두** 찾아주세요.
+아래는 예시일 뿐이며, 이 외에도 발견되는 모든 유의미한 변화를 보고해주세요.
+
+**중요: 매출/이익 급증도 반드시 보고하세요 (원인 파악 필요: 대형계약, M&A, 일회성 등)**
 
 ### A. 손익계산서(IS) 분석 예시
-- 매출/영업이익/당기순이익 급변동, 흑자↔적자 전환
-- 매출원가율/판관비율 이상 변동
-- 영업외수익/비용 급증 (일회성 항목)
-- 특정 비용 항목 이상 (인건비, 대손상각비 등)
+- **매출 급증** (±20% 이상): 신규 대형계약, 인수합병, 일회성 매출 가능성
+- **매출 급감**: 주요 고객 이탈, 시장 변화, 사업부 매각
+- 영업이익/당기순이익 급변동 (증가/감소 모두), 흑자↔적자 전환
+- 매출원가율/판관비율 급변동 (개선/악화 모두)
+- 영업외수익/비용 급증 (일회성 항목: 자산매각익, 손상차손 등)
+- 특정 비용 항목 이상 (인건비, 대손상각비, 연구개발비 등)
 
 ### B. 재무상태표(BS) 분석 예시
-- 자산/부채 구조 급변, 부채비율 이상
+- 자산/부채 구조 급변 (증가/감소 모두), 부채비율 변동
 - 자본잠식, 누적결손금 심화
-- 매출채권/재고자산 급증 (부실 징후)
+- 매출채권/재고자산 급변 (급증: 부실 징후, 급감: 사업축소)
 - 충당부채/우발부채 급증 (숨겨진 리스크)
+- 유형자산/투자자산 급변 (대규모 투자, 자산매각)
 
 ### C. 현금흐름표(CF) 분석 예시
-- 영업현금흐름 적자 지속
+- 영업현금흐름 적자 지속 또는 급변
 - 투자/재무 현금흐름 이상 패턴
-- 현금 급감
+- 현금 급증/급감
 
 ### D. Cross-Check 분석 예시 (재무제표 간 비교)
 - [IS↔BS] 매출↑ but 매출채권 더 빠르게↑ → 매출 품질 의심
+- [IS↔BS] 매출↑ but 재고↑ → 과잉생산/판매부진
 - [IS↔CF] 당기순이익 흑자 but 영업현금흐름 적자 → 이익의 질 의심
 - [BS↔CF] 차입금↑ but 재무CF 불일치 → 숨겨진 거래
-- [전체] 다년간 지속 패턴 (3년 연속 적자, 자본잠식 심화 등)
+- [전체] 다년간 지속 패턴 (3년 연속 성장, 3년 연속 적자 등)
 
-위 예시 외에도 PE 투자자 관점에서 우려되는 모든 이상 징후를 빠짐없이 찾아주세요.
+위 예시 외에도 PE 투자자 관점에서 유의미한 모든 변화를 빠짐없이 찾아주세요.
+**긍정적 변화도 원인 파악이 필요하므로 반드시 포함하세요.**
 
 ## 출력 형식
 JSON 배열로 반환:
@@ -283,6 +313,7 @@ JSON 배열로 반환:
 
 주의사항:
 - period: 단일 연도("FY2024") 또는 기간("FY2020-FY2024")
+- item: 항목명만 기재 (예: "매출액", "당기순이익"). "(긍정적)", "(부정적)" 등 코멘트 절대 추가 금지!
 - finding: 수치와 변화 사실만 기재
 - context: 관련 항목 수치
 - 이상 징후가 없으면 빈 배열 [] 반환
@@ -477,53 +508,47 @@ JSON 배열로 반환:
         search_queries = anomaly.search_queries or []
         search_queries_str = "\n".join([f"- {q}" for q in search_queries]) if search_queries else "- (검색어 없음)"
 
-        research_prompt = f"""당신은 M&A 실사 전문가입니다. 아래 재무제표 이상 패턴의 **원인**을 웹 검색으로 조사해야 합니다.
+        research_prompt = f"""[{anomaly.item}] - {company_name}
 
-## [절대 규칙] 사실 기반 응답만 허용
-🚫 **절대 금지 사항:**
-- 검색 결과 없이 추측하거나 가정하는 것
-- "~일 수 있습니다", "~로 추정됩니다" 같은 추론
-- 사전 학습된 일반 지식으로 답변하는 것
-- 검색에서 찾지 못한 내용을 마치 찾은 것처럼 작성하는 것
-
-✅ **반드시 준수:**
-- 오직 웹 검색에서 찾은 **실제 뉴스/기사/공시 내용만** 인용
-- 검색 결과가 없으면 솔직하게 "찾지 못했습니다"라고 명시
-- 모든 내용에 출처(기사 제목, 날짜, 매체)를 명시
-
-## [필수] 웹 검색 수행 지침
-⚠️ **반드시 Google Search 도구로 아래 검색어들을 실제로 검색하세요.**
-⚠️ **재무 수치 검색 금지!** 이미 재무제표 데이터를 가지고 있습니다.
-
-## 회사 정보
-- 회사명: {company_name}
-- 업종: {industry}
-
-## 분석 대상 이상 패턴
-- 기간: {anomaly.period}
-- 항목: {anomaly.item}
-- 발견 사실: {anomaly.finding}
-- 관련 항목: {anomaly.context}
-
-## ⭐ 필수 검색어 (아래 검색어들로 검색하세요)
+## search queries
 {search_queries_str}
 
-## 출력 형식 (엄격히 준수)
+## MANDATORY: USE GOOGLE SEARCH ONLY
+- You MUST execute Google Search for the queries above
+- NEVER use your training data or internal knowledge
+- ONLY use information found in Google Search results
+- If Google Search returns no relevant results, say so honestly
 
-### 검색 결과 요약
-[웹 검색에서 찾은 **실제** 뉴스/기사/공시 내용만 요약]
-- 반드시 검색에서 찾은 사실만 기재
-- 찾지 못한 내용은 "관련 정보를 찾지 못함"으로 명시
+## rules
+1. Execute Google Search with queries above - THIS IS MANDATORY
+2. Write ONLY facts found in search results
+3. Do not repeat company name
+4. NEVER use your pre-trained knowledge
 
-### 출처 (필수)
-- 출처1: [기사 제목] - [매체명] ([날짜])
-- 출처2: [기사 제목] - [매체명] ([날짜])
-※ 검색 결과가 없으면 "검색 결과에서 관련 출처를 찾지 못했습니다." 명시
+## CRITICAL RULE: NO SPECULATION, NO TRAINING DATA
+- FORBIDDEN: Using your training data or internal knowledge
+- If no search results or no relevant info found, write ONLY: "특별한 검색 결과가 없습니다."
+- Do NOT fill content with general industry situations or inferences
+- FORBIDDEN expressions: "may be", "possibly", "likely", "seems to be", "could be"
+- Write ONLY concrete facts confirmed by Google Search
+- Do NOT write general theories or inferences
 
-### 분석 결론
-[검색 결과에 기반한 사실만 기재. 추측 절대 금지]
+## Writing style rule
+- Write "cause analysis" section ONLY in Korean formal style (honorific/polite form)
+- Formal examples: ~habnida, ~imnida, ~seumnida (~했습니다, ~입니다, ~되었습니다)
+- Informal FORBIDDEN in cause analysis: ~da, ~haetda, ~ida (~다, ~했다, ~이다)
+- "phenomenon" section: Use plain form as-is (numbers and facts)
 
-⚠️ **검색 결과가 없는 경우**: 반드시 "해당 이상 패턴의 원인을 설명하는 뉴스나 공시를 웹 검색에서 찾지 못했습니다."라고 명시하세요."""
+## Output format (MUST follow exactly) - USE KOREAN LABELS
+
+**현상**: {anomaly.finding}
+**원인 분석**: 특별한 검색 결과가 없습니다.
+
+Write content immediately after the colon
+- NO line break. Text starts right after colon
+- NO bullet points
+- If Google Search results exist with relevant info: Write concrete facts in Korean formal style
+- If NO relevant search results: Write ONLY "특별한 검색 결과가 없습니다." (DO NOT use training data)"""
 
         return research_prompt
 
@@ -572,35 +597,43 @@ JSON 배열로 반환:
             ]
             queries_str = "\n".join([f"- {q}" for q in fallback_queries])
 
-            return f"""당신은 M&A 실사 전문가입니다. 아래 회사의 재무 이상 패턴 원인을 넓은 범위에서 웹 검색으로 조사해야 합니다.
+            return f"""[Fallback] {anomaly.item} - {company_name}
 
-## [절대 규칙] 반드시 웹 검색 수행
-⚠️ **Google Search 도구를 반드시 사용하세요.**
-⚠️ 검색 결과 없이 응답하면 안 됩니다.
-
-## 회사 정보
-- 회사명: {company_name}
-- 업종: {industry}
-
-## 분석 대상
-- 기간: {anomaly.period}
-- 항목: {anomaly.item}
-- 발견 사실: {anomaly.finding}
-
-## ⭐ 대체 검색어 (반드시 검색)
+## fallback search queries
 {queries_str}
 
-## 출력 형식
-### 검색 결과 요약
-[웹 검색에서 찾은 회사 관련 뉴스/기사 내용]
+## MANDATORY: USE GOOGLE SEARCH ONLY
+- You MUST execute Google Search for the queries above
+- NEVER use your training data or internal knowledge
+- ONLY use information found in Google Search results
 
-### 출처
-- 출처1: [기사 제목] - [매체명] ([날짜])
+## rules
+1. Execute Google Search - THIS IS MANDATORY
+2. Write ONLY facts found in search results
+3. Do not repeat company name
+4. NEVER use your pre-trained knowledge
 
-### 분석 결론
-[검색 결과에 기반한 분석 - 추측 금지]
+## CRITICAL RULE: NO SPECULATION, NO TRAINING DATA
+- FORBIDDEN: Using your training data or internal knowledge
+- If no search results found, write ONLY: "특별한 검색 결과가 없습니다."
+- FORBIDDEN: general theories, inferences, "may be", "possibly", "likely"
+- Write ONLY concrete facts confirmed by Google Search
 
-⚠️ 검색 결과가 전혀 없으면 "관련 정보를 웹 검색에서 찾지 못했습니다."라고 명시하세요."""
+## Writing style rule
+- "cause analysis" section ONLY: Use Korean formal style (honorific)
+- Formal: ~habnida, ~imnida (~했습니다, ~입니다)
+- Informal FORBIDDEN: ~da, ~haetda (~다, ~했다)
+
+## Output format (MUST follow exactly) - USE KOREAN LABELS
+
+**현상**: {anomaly.finding}
+**원인 분석**: 특별한 검색 결과가 없습니다.
+
+Write content immediately after the colon
+- NO line break! Text starts right after colon
+- NO bullet points!
+- If Google Search results exist: Replace default text with found facts (in Korean formal style)
+- If NO relevant search results: Keep default text (DO NOT use training data)"""
 
         def research_one_sync(anomaly: Anomaly) -> SearchResult:
             """동기 함수로 API 호출 (스레드에서 실행) - Fallback 로직 포함"""
@@ -650,10 +683,11 @@ JSON 배열로 반환:
                     if fallback_sources:
                         print(f"    [Fallback 성공] {anomaly.period} {anomaly.item} - {len(fallback_sources)}개 소스 발견")
                         sources = fallback_sources
-                        result_text = f"[대체 검색 결과]\n{fallback_text}"
+                        result_text = fallback_text
                     else:
                         print(f"    [Fallback 실패] {anomaly.period} {anomaly.item} - 대체 검색도 소스 없음")
-                        result_text = f"{result_text}\n\n[참고: 대체 검색도 수행했으나 관련 출처를 찾지 못했습니다.]"
+                        # ★ 소스 없으면 LLM 응답 무시하고 기본값으로 강제 대체
+                        result_text = f"**현상**: {anomaly.finding}\n**원인 분석**: 특별한 검색 결과가 없습니다."
 
                 print(f"    [웹 리서치 완료] {anomaly.period} {anomaly.item}")
                 print(f"    ┌─────────────────────────────────────────────────────────")
@@ -703,59 +737,60 @@ JSON 배열로 반환:
         """
         company_name = company_info.get('corp_name', '')
 
-        # 검색 결과 요약 (전체 전달)
-        search_summary = ""
+        # 이상 패턴 + 리서치 결과 통합 (중복 제거)
+        # anomaly와 해당 search_result를 매칭
+        search_map = {}
         for sr in search_results:
-            search_summary += f"\n### {sr.task.query_type}: {sr.task.query}\n"
-            search_summary += f"{sr.result}\n"
+            key = (sr.task.anomaly.period, sr.task.anomaly.item)
+            search_map[key] = sr.result
 
-        anomalies_text = "\n".join([
-            f"- {a.period} {a.item}\n  발견: {a.finding}\n  관련항목: {a.context}"
-            for a in anomalies
-        ])
+        combined_findings = ""
+        for i, a in enumerate(anomalies, 1):
+            key = (a.period, a.item)
+            research = search_map.get(key, "**현상**: " + a.finding + "\n\n**원인 분석**: 특별한 검색 결과가 없습니다.")
+            period_display = format_period(a.period)
+            combined_findings += f"""
+### {i}. [{period_display}] {a.item}
+{research}
+"""
 
-        prompt = f"""
-당신은 PE(사모펀드)의 M&A 실사 보고서를 작성하는 전문가입니다.
-아래 정보를 종합하여 투자 검토용 재무 분석 보고서를 작성해주세요.
-
-## 회사 정보
-- 회사명: {company_name}
-- 업종: {industry_info.get('industry', '')}
+        # 업종 분석 결과를 간결하게 포맷
+        industry_summary = f"""- 업종: {industry_info.get('industry', '')}
 - 사업: {industry_info.get('business_description', '')}
+- 경쟁사: {', '.join(industry_info.get('competitors', [])[:3])}
+- 거시요인: {', '.join(industry_info.get('macro_factors', [])[:3])}"""
 
-## 감지된 이상 패턴
-{anomalies_text}
+        prompt = f"""[{company_name}] 재무 이상 패턴 정리
 
-## 조사 결과
-{search_summary}
+## 회사/업종 정보
+{industry_summary}
 
-## 보고서 작성 지침
-1. 각 이상 패턴에 대해 원인을 명확히 설명
-2. 핵심 인사이트 요약
+## 이상 패턴 및 조사 결과
+{combined_findings}
+
+## 작성 규칙 (★필수★)
+1. **정리만 하라** - 새로운 해석/추론/재작성 절대 금지
+2. 위 데이터의 **현상**, **원인 분석**을 그대로 복사
+3. 당신의 역할은 포맷 정리뿐. 내용 수정/추가 금지
 
 ## 출력 형식
-반드시 아래 형식을 정확히 따라 마크다운으로 작성하세요. 다른 섹션을 추가하지 마세요.
 
 # {company_name} 재무 분석 보고서
 
 ## 요약
-(3줄 이내 핵심 요약)
+(수치 변화를 문장으로 서술. 해석/평가 금지. 예시:
+"2023년 당기순이익이 전년 16억원에서 100.6억원으로 증가했습니다.
+2020년부터 2024년까지 매출총이익률이 6.8%에서 4.2%로 하락했습니다.")
 
 ## 주요 발견사항
 
-### 1. [발견사항 제목]
-- **현상**: (무엇이 발생했는지)
-- **원인**: (왜 발생했는지)
+### 1. [항목명]
+- **현상**: (위 **현상** 그대로 복사)
+- **원인 분석**: (위 **원인 분석** 그대로 복사)
 
-### 2. [발견사항 제목]
-- **현상**: ...
-- **원인**: ...
+(모든 이상 패턴 반복. 재작성 금지, 복사만)
 
-(이하 동일한 형식으로 모든 발견사항 작성)
-
----
-보고서는 여기서 끝납니다. "투자 시사점", "추가 확인 필요 사항" 등 다른 섹션을 절대 추가하지 마세요.
-"""
+---"""
 
         try:
             response = self.client.models.generate_content(

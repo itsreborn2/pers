@@ -154,9 +154,57 @@
             color: white;
         }
 
-        .btn-success:hover {
+        .btn-success:hover:not(:disabled) {
             background: #2a2a2a;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+        }
+
+        .btn-success:disabled {
+            background: #6a6a6a;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        /* 다운로드 버튼 툴팁 */
+        .download-btn-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .download-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: calc(100% + 10px);
+            right: 0;
+            background: #333;
+            color: white;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            z-index: 100;
+            transition: opacity 0.2s, visibility 0.2s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .download-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            right: 20px;
+            border-width: 8px;
+            border-style: solid;
+            border-color: #333 transparent transparent transparent;
+        }
+
+        .download-btn-wrapper:hover .download-tooltip:not(.hidden) {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .download-tooltip.hidden {
+            display: none;
         }
 
         .btn-ai {
@@ -602,7 +650,7 @@
         
         .progress-bar {
             height: 100%;
-            background: var(--primary);
+            background: #131313;
             border-radius: 6px;
             transition: width 0.3s ease;
             width: 0%;
@@ -780,7 +828,7 @@
 
         .main-tab {
             padding: 10px 28px;
-            border: 1px solid #3a3a3a;
+            border: 1px solid transparent;
             background: rgba(19, 19, 19, 0.08);
             border-radius: 6px;
             cursor: pointer;
@@ -792,7 +840,6 @@
 
         .main-tab:hover {
             background: rgba(19, 19, 19, 0.15);
-            border-color: #131313;
             color: #131313;
         }
 
@@ -816,7 +863,7 @@
 
         .main-tab.completed:not(.active) {
             background: rgba(19, 19, 19, 0.15);
-            border-color: #3a3a3a;
+            border-color: transparent;
             color: #131313;
         }
 
@@ -1307,13 +1354,13 @@
         }
 
         .user-tier.basic {
-            background: rgba(55, 60, 95, 0.4);
-            color: #9ca3af;
+            background: var(--accent);
+            color: white;
         }
 
         .user-tier.pro {
-            background: rgba(180, 145, 50, 0.25);
-            color: #b49132;
+            background: var(--accent);
+            color: white;
         }
 
         .user-tokens {
@@ -1322,7 +1369,7 @@
             border-radius: 12px;
             font-weight: 500;
             background: rgba(255, 255, 255, 0.1);
-            color: darkgray;
+            color: white;
         }
 
         .user-tokens.low {
@@ -1930,7 +1977,10 @@
                     <button class="main-tab active" data-main-tab="financial" onclick="showMainTab('financial')">재무정보</button>
                     <button class="main-tab" data-main-tab="insight" id="insightTabBtn" onclick="showMainTab('insight')">재무분석 AI</button>
                 </div>
-                <button class="btn btn-success" id="downloadBtn" onclick="downloadFile()">엑셀 다운로드</button>
+                <div class="download-btn-wrapper" id="downloadBtnWrapper">
+                    <button class="btn btn-success" id="downloadBtn" onclick="downloadFile()" disabled>엑셀 다운로드</button>
+                    <div class="download-tooltip" id="downloadTooltip">재무분석 AI 작업이 완료되면 다운로드가 가능합니다.</div>
+                </div>
             </div>
 
             <!-- 재무분석 AI 탭 콘텐츠 -->
@@ -2755,7 +2805,7 @@
         // 검색 히스토리 (로컬 스토리지)
         // ============================================================
         const HISTORY_KEY = 'pe_search_history';
-        const MAX_HISTORY = 5;
+        const MAX_HISTORY = 4;
         
         function getSearchHistory() {
             try {
@@ -5225,6 +5275,9 @@
 
             isAnalysisCompleted = true;
 
+            // 다운로드 버튼 활성화 및 툴팁 숨김
+            enableDownloadButton();
+
             // 재무분석 AI 탭 버튼 완료 표시
             const insightTabBtn = document.getElementById('insightTabBtn');
             insightTabBtn.textContent = '재무분석 AI';
@@ -5347,27 +5400,37 @@
             return `<p>${html}</p>`;
         }
 
+        // 다운로드 버튼 활성화 함수
+        function enableDownloadButton() {
+            const downloadBtn = document.getElementById('downloadBtn');
+            const downloadTooltip = document.getElementById('downloadTooltip');
+
+            if (downloadBtn) {
+                downloadBtn.disabled = false;
+            }
+            if (downloadTooltip) {
+                downloadTooltip.classList.add('hidden');
+            }
+        }
+
+        // 다운로드 버튼 비활성화 함수 (리셋 시 사용)
+        function disableDownloadButton() {
+            const downloadBtn = document.getElementById('downloadBtn');
+            const downloadTooltip = document.getElementById('downloadTooltip');
+
+            if (downloadBtn) {
+                downloadBtn.disabled = true;
+            }
+            if (downloadTooltip) {
+                downloadTooltip.classList.remove('hidden');
+            }
+        }
+
         function downloadFile() {
             if (!currentTaskId) return;
 
-            const downloadBtn = document.getElementById('downloadBtn');
-
-            // AI 분석 완료 여부 체크
+            // AI 분석이 완료되지 않았으면 무시 (버튼이 disabled라 보통은 여기 안옴)
             if (!isAnalysisCompleted) {
-                // 버튼에 "AI 분석중" 표시 및 흔들림 효과
-                const originalText = downloadBtn.textContent;
-                downloadBtn.textContent = 'AI 분석중...';
-                downloadBtn.classList.add('btn-shake');
-                downloadBtn.disabled = true;
-
-                setTimeout(() => {
-                    downloadBtn.textContent = originalText;
-                    downloadBtn.classList.remove('btn-shake');
-                    downloadBtn.disabled = false;
-                }, 1500);
-
-                // 재무분석 AI 탭으로 이동
-                showMainTab('insight');
                 return;
             }
 
@@ -5427,6 +5490,9 @@
             isIntegratedMode = false;
             isAnalysisCompleted = false;
             analysisReportText = '';
+
+            // 다운로드 버튼 비활성화 및 툴팁 표시
+            disableDownloadButton();
 
             // 복사 버튼 초기화
             const copyBtn = document.getElementById('analysisCopyBtn');
