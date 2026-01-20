@@ -656,7 +656,10 @@ Write content immediately after the colon
                     model=MODEL_RESEARCH,
                     contents=prompt,
                     config=types.GenerateContentConfig(
-                        tools=[types.Tool(google_search=types.GoogleSearch())]
+                        tools=[
+                            types.Tool(google_search=types.GoogleSearch()),
+                            types.Tool(url_context=types.UrlContext())  # URL 내용 직접 읽기
+                        ]
                     )
                 )
 
@@ -673,7 +676,10 @@ Write content immediately after the colon
                         model=MODEL_RESEARCH,
                         contents=fallback_prompt,
                         config=types.GenerateContentConfig(
-                            tools=[types.Tool(google_search=types.GoogleSearch())]
+                            tools=[
+                                types.Tool(google_search=types.GoogleSearch()),
+                                types.Tool(url_context=types.UrlContext())  # URL 내용 직접 읽기
+                            ]
                         )
                     )
 
