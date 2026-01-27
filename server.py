@@ -884,50 +884,16 @@ async def extract_financial_data(
                             print(f"  - {account}: FY2024={fy2024}")
         
         # 주석 테이블들도 preview_data에 추가 (프론트엔드에서 세부항목 표시용)
-        # 항상 Excel에서 주석 데이터 읽기 (fs_data['notes']가 없을 수 있으므로)
-        print(f"[EXTRACT] Excel에서 주석 데이터 읽기...")
+        # fs_data에서 주석 데이터 사용 (Excel은 AI 분석 후 생성됨)
+        print(f"[EXTRACT] 주석 데이터 처리...")
         import sys
         sys.stdout.flush()
-        notes = {'is_notes': [], 'bs_notes': [], 'cf_notes': []}
-        try:
-            import pandas as pd
-            xl = pd.ExcelFile(filepath)
-            # 손익계산서 관련 주석 패턴 확장
-            is_patterns = ['손익주석', '포괄손익주석', '손익계산서주석', 'IS주석', '손익', '포괄손익']
-            # 재무상태표 관련 주석 패턴 확장
-            bs_patterns = ['재무주석', '재무상태표주석', 'BS주석', '재무상태']
-            # 현금흐름표 관련 주석 패턴
-            cf_patterns = ['현금흐름주석', '현금흐름표주석', 'CF주석', '현금흐름']
-
-            for sheet in xl.sheet_names:
-                sheet_lower = sheet.lower()
-                # IS 주석 매칭 (더 유연한 패턴)
-                if any(pattern in sheet for pattern in is_patterns) or 'income' in sheet_lower or 'pl' in sheet_lower:
-                    # 재무상태표나 현금흐름표 주석은 제외
-                    if not any(pattern in sheet for pattern in bs_patterns + cf_patterns):
-                        df = pd.read_excel(filepath, sheet_name=sheet)
-                        if df is not None and not df.empty:
-                            notes['is_notes'].append({'df': df, 'name': sheet})
-                            print(f"[EXTRACT] IS 주석 발견: {sheet}")
-                # BS 주석 매칭
-                elif any(pattern in sheet for pattern in bs_patterns) or 'balance' in sheet_lower or 'bs' in sheet_lower:
-                    df = pd.read_excel(filepath, sheet_name=sheet)
-                    if df is not None and not df.empty:
-                        notes['bs_notes'].append({'df': df, 'name': sheet})
-                        print(f"[EXTRACT] BS 주석 발견: {sheet}")
-                # CF 주석 매칭
-                elif any(pattern in sheet for pattern in cf_patterns) or 'cash' in sheet_lower or 'cf' in sheet_lower:
-                    df = pd.read_excel(filepath, sheet_name=sheet)
-                    if df is not None and not df.empty:
-                        notes['cf_notes'].append({'df': df, 'name': sheet})
-                        print(f"[EXTRACT] CF 주석 발견: {sheet}")
-            print(f"[EXTRACT] Excel 주석 로드 완료: IS={len(notes['is_notes'])}개, BS={len(notes['bs_notes'])}개, CF={len(notes['cf_notes'])}개")
-            sys.stdout.flush()
-        except Exception as e:
-            print(f"[EXTRACT] Excel 주석 로드 실패: {e}")
-            import traceback
-            print(f"[EXTRACT] 상세: {traceback.format_exc()}")
-            notes = None
+        notes = fs_data.get('notes', {'is_notes': [], 'bs_notes': [], 'cf_notes': []})
+        if notes:
+            print(f"[EXTRACT] fs_data 주석 로드 완료: IS={len(notes.get('is_notes', []))}개, BS={len(notes.get('bs_notes', []))}개, CF={len(notes.get('cf_notes', []))}개")
+        else:
+            print(f"[EXTRACT] 주석 데이터 없음")
+            notes = {'is_notes': [], 'bs_notes': [], 'cf_notes': []}
         
         if notes and isinstance(notes, dict):
             # 손익계산서 주석들의 데이터를 is/cis DataFrame에 병합
@@ -1025,102 +991,74 @@ async def extract_financial_data(
                             pass
                     task['preview_data']['bs'] = merged_bs_data
 
-        # ★ Excel 파일에서 모든 데이터를 다시 읽어서 preview_data 업데이트
-        # (Excel에 저장된 데이터가 fs_data보다 더 완전함)
-        try:
-            print(f"[EXTRACT] Excel에서 preview_data 재생성...")
-            xl = pd.ExcelFile(filepath)
+        # ★ Excel 파일이 있으면 모든 데이터를 다시 읽어서 preview_data 업데이트
+        # 참고: 현재 엑셀은 AI 분석 후 생성되므로 추출 단계에서는 보통 스킵됨
+        excel_filepath = task.get('file_path')
+        if excel_filepath and os.path.exists(excel_filepath):
+            try:
+                print(f"[EXTRACT] Excel에서 preview_data 재생성...")
+                xl = pd.ExcelFile(excel_filepath)
 
-            # BS, IS, CIS, CF 시트 매핑
-            sheet_mapping = {
-                'bs': '재무상태표',
-                'is': '손익계산서',
-                'cis': '포괄손익계산서',
-                'cf': '현금흐름표'
-            }
+                # BS, IS, CIS, CF 시트 매핑
+                sheet_mapping = {
+                    'bs': '재무상태표',
+                    'is': '손익계산서',
+                    'cis': '포괄손익계산서',
+                    'cf': '현금흐름표'
+                }
 
-            for key, sheet_name in sheet_mapping.items():
-                if sheet_name in xl.sheet_names:
+                for key, sheet_name in sheet_mapping.items():
+                    if sheet_name in xl.sheet_names:
+                        try:
+                            df = pd.read_excel(excel_filepath, sheet_name=sheet_name)
+                            if df is not None and not df.empty:
+                                task['preview_data'][key] = safe_dataframe_to_json(df)
+                                print(f"[EXTRACT] preview_data[{key}] Excel에서 재생성: {len(task['preview_data'][key])}개 행")
+                        except Exception as e:
+                            print(f"[EXTRACT] {key} Excel 읽기 실패: {e}")
+
+                # VCM 포맷 데이터도 preview_data에 추가
+                if 'Frontdata' in xl.sheet_names:
+                    vcm_df = pd.read_excel(excel_filepath, sheet_name='Frontdata', engine='openpyxl')
+                    if vcm_df is not None and not vcm_df.empty:
+                        task['preview_data']['vcm'] = safe_dataframe_to_json(vcm_df)
+                        print(f"[EXTRACT] preview_data['vcm'] 생성: {len(task['preview_data']['vcm'])}개 행")
+
+                # Financials 시트에서 데이터 읽기
+                if 'Financials' in xl.sheet_names:
                     try:
-                        df = pd.read_excel(filepath, sheet_name=sheet_name)
-                        if df is not None and not df.empty:
-                            task['preview_data'][key] = safe_dataframe_to_json(df)
-                            print(f"[EXTRACT] preview_data[{key}] Excel에서 재생성: {len(task['preview_data'][key])}개 행")
+                        fin_df = pd.read_excel(excel_filepath, sheet_name='Financials', header=1, engine='openpyxl')
+                        if fin_df is not None and not fin_df.empty:
+                            task['preview_data']['vcm_display'] = safe_dataframe_to_json(fin_df)
+                            print(f"[EXTRACT] preview_data['vcm_display'] 생성: {len(task['preview_data']['vcm_display'])}개 행")
+                    except Exception as fin_err:
+                        print(f"[EXTRACT] Financials 파싱 실패: {fin_err}")
+            except Exception as e:
+                print(f"[EXTRACT] Excel preview_data 재생성 실패: {e}")
+        else:
+            print(f"[EXTRACT] Excel 파일 없음 - VCM 데이터 직접 생성 시도...")
+            # Excel 파일이 없을 때 fs_data에서 직접 VCM 데이터 생성
+            try:
+                vcm_result = create_vcm_format(fs_data, None)
+                if isinstance(vcm_result, tuple):
+                    vcm_df, display_df = vcm_result
+                else:
+                    vcm_df = vcm_result
+                    display_df = None
 
-                            # CIS 디버깅
-                            if key == 'cis':
-                                print(f"[EXTRACT] CIS Excel 컬럼: {list(df.columns)}")
-                                for row in task['preview_data']['cis']:
-                                    account = row.get('계정과목', '')
-                                    if '급여' in account and account == '급여':
-                                        fy2024 = row.get('FY2024', 'N/A')
-                                        print(f"[EXTRACT] 급여 FY2024 (Excel에서): {fy2024}")
-                                        break
-                    except Exception as e:
-                        print(f"[EXTRACT] {key} Excel 읽기 실패: {e}")
-
-            # VCM 포맷 데이터도 preview_data에 추가
-            if 'Frontdata' in xl.sheet_names:
-                vcm_df = pd.read_excel(filepath, sheet_name='Frontdata', engine='openpyxl')
                 if vcm_df is not None and not vcm_df.empty:
                     task['preview_data']['vcm'] = safe_dataframe_to_json(vcm_df)
                     print(f"[EXTRACT] preview_data['vcm'] 생성: {len(task['preview_data']['vcm'])}개 행")
 
-            # Financials(좌우 배치) 시트에서 데이터 읽기 → 원래 형식(세로 배열)으로 변환
-            if 'Financials' in xl.sheet_names:
-                try:
-                    # 좌우 배치 시트 읽기 (row 1은 섹션 헤더, row 2가 컬럼 헤더)
-                    fin_df = pd.read_excel(filepath, sheet_name='Financials', header=1, engine='openpyxl')
-                    print(f"[EXTRACT] Financials 시트 컬럼: {list(fin_df.columns)}")
+                if display_df is not None and not display_df.empty:
+                    task['preview_data']['vcm_display'] = safe_dataframe_to_json(display_df)
+                    print(f"[EXTRACT] preview_data['vcm_display'] 생성: {len(task['preview_data']['vcm_display'])}개 행")
+            except Exception as vcm_err:
+                print(f"[EXTRACT] VCM 데이터 생성 실패: {vcm_err}")
+                import traceback
+                print(f"[EXTRACT] VCM 오류 상세:\n{traceback.format_exc()}")
 
-                    # 재무상태표 (A~F열, 인덱스 0~5)
-                    bs_cols = [col for col in fin_df.columns[:6] if not str(col).startswith('Unnamed')]
-                    if bs_cols:
-                        bs_df = fin_df[bs_cols].copy()
-                        # 첫 번째 컬럼을 '항목'으로 변경
-                        bs_df.columns = ['항목'] + list(bs_df.columns[1:])
-                        bs_df = bs_df.dropna(subset=['항목'])
-                        print(f"[EXTRACT] 재무상태표: {len(bs_df)}행")
-
-                    # 손익계산서 (H~M열, 인덱스 7~12, G열은 빈 컬럼)
-                    is_cols = [col for col in fin_df.columns[7:13] if not str(col).startswith('Unnamed')]
-                    if is_cols:
-                        is_df = fin_df[is_cols].copy()
-                        # 컬럼명을 BS와 동일하게 맞춤 (FY2020.1 → FY2020 등)
-                        new_is_cols = ['항목']
-                        for col in is_df.columns[1:]:
-                            # .1, .2 등 접미사 제거
-                            col_str = str(col)
-                            if '.' in col_str and col_str.split('.')[-1].isdigit():
-                                col_str = col_str.rsplit('.', 1)[0]
-                            new_is_cols.append(col_str)
-                        is_df.columns = new_is_cols
-                        is_df = is_df.dropna(subset=['항목'])
-                        print(f"[EXTRACT] 손익계산서: {len(is_df)}행, 컬럼: {list(is_df.columns)}")
-
-                    # 세로로 합치기 (재무상태표 + 손익계산서)
-                    if bs_cols and is_cols:
-                        display_df = pd.concat([bs_df, is_df], ignore_index=True)
-                    elif bs_cols:
-                        display_df = bs_df
-                    elif is_cols:
-                        display_df = is_df
-                    else:
-                        display_df = fin_df
-
-                    if display_df is not None and not display_df.empty:
-                        task['preview_data']['vcm_display'] = safe_dataframe_to_json(display_df)
-                        print(f"[EXTRACT] preview_data['vcm_display'] 생성: {len(task['preview_data']['vcm_display'])}개 행")
-                except Exception as fin_err:
-                    print(f"[EXTRACT] Financials 파싱 실패, 원본 사용: {fin_err}")
-                    # 파싱 실패 시 원본 그대로 사용
-                    display_df = pd.read_excel(filepath, sheet_name='Financials', engine='openpyxl')
-                    if display_df is not None and not display_df.empty:
-                        task['preview_data']['vcm_display'] = safe_dataframe_to_json(display_df)
-        except Exception as e:
-            print(f"[EXTRACT] Excel preview_data 재생성 실패: {e}")
-
-        print(f"[EXTRACT] 추출 완료: {filename}")
+        print(f"[EXTRACT] 추출 완료: {corp_name}")
         
     except Exception as e:
         print(f"[EXTRACT ERROR] 추출 실패: {e}")
@@ -1444,6 +1382,7 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
         
         # 2. 당해년도 분기/반기 보고서 검색 (가장 최신 것만 사용)
         latest_periodic = None
+        periodic_filings = None
         try:
             # 분기 보고서 검색 기간: end_year 다음 연도부터 오늘까지 검색
             # 예: 2024년까지 요청 시 2025년 1월 ~ 오늘까지 검색하여 2025 3Q 등을 찾음
@@ -3386,6 +3325,9 @@ def create_vcm_format(fs_data, excel_filepath=None):
             '당기순이익': 당기순이익,
             '% of Sales (순이익)': 당기순이익_pct,  # 당기순이익률
             'EBITDA': EBITDA,
+            '  [EBITDA]영업이익': 영업이익,  # EBITDA 툴팁용
+            '  [EBITDA]감가상각비': 감가상각비,  # EBITDA 툴팁용
+            '  [EBITDA]무형자산상각비': 무형자산상각비,  # EBITDA 툴팁용
             '% of Sales (EBITDA)': EBITDA_pct,  # EBITDA 마진
         })
 
@@ -3557,6 +3499,19 @@ def create_vcm_format(fs_data, excel_filepath=None):
         add_fallback_to_section(유동부채_items, '단기차입금', ['단기차입금'])
         add_fallback_to_section(유동부채_items, '매입채무', ['매입채무'], ['장기'])
         add_fallback_to_section(유동부채_items, '미지급금', ['미지급금'], ['장기'])
+
+        # 비유동자산 fallback 항목 추가 (섹션 경계 밖 데이터 보완)
+        add_fallback_to_section(비유동자산_items, '유형자산', ['유형자산'], ['무형', '처분', '사용권'])
+        add_fallback_to_section(비유동자산_items, '장기금융상품', ['장기금융상품', '장기투자자산'])
+        add_fallback_to_section(비유동자산_items, '무형자산', ['무형자산'], ['상각', '손상'])
+        add_fallback_to_section(비유동자산_items, '기타의투자자산', ['기타의투자자산', '기타투자자산'])
+        add_fallback_to_section(비유동자산_items, '보증금', ['보증금', '임차보증금'])
+
+        # 비유동부채 fallback 항목 추가
+        add_fallback_to_section(비유동부채_items, '장기차입금', ['장기차입금'], ['유동성'])
+        add_fallback_to_section(비유동부채_items, '사채', ['사채'], ['유동성', '전환'])
+        add_fallback_to_section(비유동부채_items, '장기미지급금', ['장기미지급금'])
+        add_fallback_to_section(비유동부채_items, '임대보증금', ['임대보증금'])
 
         # 유동자산 총계 (섹션 합계 또는 총계에서)
         유동자산 = 총계.get('유동자산') or sum(item['value'] for item in 유동자산_items) or find_bs_val(['유동자산'], year, ['비유동']) or 0
@@ -4215,8 +4170,22 @@ def create_vcm_format(fs_data, excel_filepath=None):
             val = row.get(col)
             if val is not None and val != 0:
                 if item_type == 'percent':
-                    # 퍼센트는 그대로 (0.127 → "12.7%")
-                    display_row[col] = f"{val * 100:.1f}%" if isinstance(val, (int, float)) and val < 1 else val
+                    # 퍼센트는 소수점 형태를 % 형식으로 변환 (0.127 → "12.7%", 1.5 → "150.0%")
+                    print(f"[DEBUG] 퍼센트 변환: item={item_name}, col={col}, val={val}, type={type(val)}")
+                    if isinstance(val, (int, float)):
+                        # 소수점 값이면 % 형식으로 변환 (절대값이 10 이하면 소수점 형태로 간주)
+                        if abs(val) <= 10:
+                            display_row[col] = f"{val * 100:.1f}%"
+                            print(f"[DEBUG] 변환 결과: {display_row[col]}")
+                        else:
+                            # 이미 100을 곱한 값이면 그대로 % 추가
+                            display_row[col] = f"{val:.1f}%"
+                            print(f"[DEBUG] 변환 결과 (100+): {display_row[col]}")
+                    elif isinstance(val, str) and '%' in val:
+                        # 이미 % 형식 문자열이면 그대로 사용
+                        display_row[col] = val
+                    else:
+                        display_row[col] = val
                 else:
                     # 숫자는 백만원 단위로 변환하고 포맷팅
                     converted = val / unit_divisor
@@ -4581,6 +4550,10 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
 
             if display_df is not None and not display_df.empty:
                 print(f"[VCM] Financials 저장 중... ({len(display_df)}행)")
+                # 디버그: display_df의 % of Sales 값 확인
+                for idx, row in display_df.iterrows():
+                    if '% of Sales' in str(row.get('항목', '')):
+                        print(f"[DEBUG] display_df row: {dict(row)}")
 
                 # 타입 정보는 vcm_df에서 가져옴
                 item_names = display_df['항목'].tolist() if '항목' in display_df.columns else []
@@ -4610,6 +4583,11 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                 is_types = type_info[is_start_idx:]
 
                 print(f"[VCM] 재무상태표: {len(bs_rows)}행, 손익계산서: {len(is_rows)}행")
+
+                # 디버그: is_rows에서 % of Sales 확인
+                for idx, row in is_rows.iterrows():
+                    if '% of Sales' in str(row.get('항목', '')):
+                        print(f"[DEBUG] is_rows row: {dict(row)}")
 
                 # 빈 시트 생성 후 좌우 배치
                 from openpyxl import Workbook
@@ -4920,6 +4898,11 @@ async def analyze_financial_data(task_id: str):
     if task['status'] != 'completed':
         raise HTTPException(status_code=400, detail="재무제표 추출이 완료되지 않았습니다.")
 
+    # 이미 분석 중이면 중복 실행 방지
+    if task.get('analysis_status') == 'running':
+        print(f"[ANALYSIS] 이미 분석 중인 작업입니다: task_id={task_id}")
+        return {"success": True, "message": "이미 분석이 진행 중입니다.", "already_running": True}
+
     # 분석 상태 초기화
     task['analysis_status'] = 'running'
     task['analysis_progress'] = 0
@@ -5080,15 +5063,18 @@ def apply_excel_formatting(filepath: str):
         header_fill = PatternFill(start_color='131313', end_color='131313', fill_type='solid')
         header_font = Font(color='FFFFFF', bold=True)
 
-        # Financials 시트는 별도 처리 (이미 스타일 적용됨)
-        skip_header_sheets = ['Financials']
+        # Financials 시트는 별도 처리 (이미 스타일 적용됨, 문자열→숫자 변환도 건너뜀)
+        skip_sheets = ['Financials']
 
         for sheet_name in wb.sheetnames:
+            # Financials 시트는 완전히 건너뜀 (퍼센트 문자열 유지)
+            if sheet_name in skip_sheets:
+                continue
             ws = wb[sheet_name]
             sheet_converted = 0
 
             # 헤더 행(1행) 스타일 적용 (Financials 제외)
-            if sheet_name not in skip_header_sheets:
+            if sheet_name not in skip_sheets:
                 for col in range(1, ws.max_column + 1):
                     cell = ws.cell(row=1, column=col)
                     cell.fill = header_fill
@@ -5215,7 +5201,9 @@ async def download_file(task_id: str):
         # output 폴더에서 가장 최근 파일 찾기 시도
         output_dir = os.path.join(os.path.dirname(__file__), 'output')
         if os.path.exists(output_dir):
-            files = [f for f in os.listdir(output_dir) if f.endswith('.xlsx')]
+            # 0바이트 파일 제외
+            files = [f for f in os.listdir(output_dir)
+                     if f.endswith('.xlsx') and os.path.getsize(os.path.join(output_dir, f)) > 0]
             if files:
                 # 가장 최근 파일 사용
                 files.sort(key=lambda x: os.path.getmtime(os.path.join(output_dir, x)), reverse=True)
@@ -5223,7 +5211,8 @@ async def download_file(task_id: str):
                 filepath = os.path.join(output_dir, latest_file)
 
                 # 다운로드 전 포맷팅 재적용
-                apply_excel_formatting(filepath)
+                if not apply_excel_formatting(filepath):
+                    print(f"[Download] 포맷팅 실패, 원본 파일 반환: {filepath}")
 
                 return FileResponse(
                     path=filepath,
@@ -5305,7 +5294,8 @@ async def add_insight_to_excel(task_id: str, request: Request):
             # 파일명 생성
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"{corp_name}_재무제표_{timestamp}.xlsx"
-            filepath = os.path.join(OUTPUT_DIR, filename)
+            output_dir = os.path.join(os.path.dirname(__file__), 'output')
+            filepath = os.path.join(output_dir, filename)
 
             # 엑셀 파일 생성 (동기 함수를 스레드에서 실행)
             loop = asyncio.get_event_loop()

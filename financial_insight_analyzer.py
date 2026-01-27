@@ -19,6 +19,9 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
 from dotenv import load_dotenv
 
+# 주석 추출용
+from dart_financial_extractor import DartFinancialExtractor
+
 # Gemini API
 from google import genai
 from google.genai import types
@@ -33,6 +36,54 @@ client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
 MODEL_PRO = "gemini-2.5-pro"  # Pro 모델 (분석용)
 MODEL_FLASH = "gemini-2.5-flash"  # Flash 모델 (빠른 처리)
 MODEL_RESEARCH = "gemini-2.5-pro"  # 리서치 모델 (검색 + 분석)
+
+# 재시도 설정
+MAX_RETRIES = 3
+INITIAL_RETRY_DELAY = 15  # 초
+
+import time
+import re
+
+def generate_with_retry(client_obj, model: str, contents, config=None, max_retries=MAX_RETRIES):
+    """
+    429 Rate Limit 에러 시 자동 재시도하는 래퍼 함수
+    """
+    last_error = None
+
+    for attempt in range(max_retries):
+        try:
+            if config:
+                return client_obj.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=config
+                )
+            else:
+                return client_obj.models.generate_content(
+                    model=model,
+                    contents=contents
+                )
+        except Exception as e:
+            error_str = str(e)
+            last_error = e
+
+            # 429 Rate Limit 에러인지 확인
+            if '429' in error_str or 'RESOURCE_EXHAUSTED' in error_str:
+                # 에러 메시지에서 재시도 대기 시간 추출
+                retry_match = re.search(r'retry.?in.?(\d+(?:\.\d+)?)', error_str.lower())
+                if retry_match:
+                    wait_time = float(retry_match.group(1)) + 1  # 여유분 1초 추가
+                else:
+                    wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)  # 지수 백오프
+
+                print(f"[Rate Limit] 429 에러 발생. {wait_time:.1f}초 후 재시도... (시도 {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                # 다른 에러는 즉시 발생
+                raise e
+
+    # 모든 재시도 실패
+    raise last_error
 
 
 @dataclass
@@ -116,12 +167,17 @@ class FinancialInsightAnalyzer:
         print(f"{'='*60}")
 
         # 1단계: 업종 파악 (Flash + Search)
-        update(10, f'[1/5] 업종 파악 중 - {company_name}')
+        update(5, f'[1/6] 업종 파악 중 - {company_name}')
         industry_info = await self._identify_industry(company_info)
         print(f"  → 업종: {industry_info.get('industry', '파악 실패')}")
 
-        # 2단계: 이상 감지 (Pro)
-        update(20, '[2/5] 재무제표 이상 패턴 감지 중')
+        # 2단계: 재무제표 주석 추출 (DART API)
+        update(10, f'[2/6] 재무제표 주석 추출 중')
+        notes_data = await self._extract_notes(company_info)
+        print(f"  → 주석 추출: {notes_data.get('notes_count', 0)}개 섹션")
+
+        # 3단계: 이상 감지 (Pro)
+        update(20, '[3/6] 재무제표 이상 패턴 감지 중')
         anomalies = await self._detect_anomalies(financial_data, company_info, industry_info)
         print(f"  → 감지된 이상 패턴: {len(anomalies)}개")
 
@@ -138,20 +194,22 @@ class FinancialInsightAnalyzer:
                 "error": "이상 패턴을 감지하지 못했습니다. AI 분석을 다시 시도해주세요."
             }
 
-        # 3단계: 원인 추적 검색어 생성 (Pro)
-        update(30, f'[3/5] 원인 추적 검색어 생성 중 - {len(anomalies)}개 패턴')
+        # 4단계: 원인 추적 검색어 생성 (Pro)
+        update(30, f'[4/6] 원인 추적 검색어 생성 중 - {len(anomalies)}개 패턴')
         anomalies = await self._generate_search_queries(anomalies, company_info, industry_info)
 
-        # 4단계: 이상 패턴별 웹 리서치 병렬 실행 (Pro+Search)
-        update(45, f'[4/5] 웹 리서치 진행 중 - {len(anomalies)}개 병렬 분석')
-        search_results = await self._execute_parallel_research(anomalies, company_info, industry_info)
+        # 5단계: 이상 패턴별 원인 분석 (재무제표 + 주석 + 웹 리서치)
+        update(45, f'[5/6] 원인 분석 진행 중 - {len(anomalies)}개 병렬 분석')
+        search_results = await self._execute_parallel_research(
+            anomalies, company_info, industry_info, financial_data, notes_data
+        )
         print(f"  → 완료된 리서치: {len(search_results)}개")
 
-        # 5단계: 종합 보고서 생성 (Pro)
-        update(80, '[5/5] 종합 보고서 생성 중')
+        # 6단계: 종합 보고서 생성 (Pro)
+        update(80, '[6/6] 종합 보고서 생성 중')
         report = await self._generate_report(
             financial_data, company_info, industry_info,
-            anomalies, search_results
+            anomalies, search_results, notes_data
         )
 
         update(95, '보고서 작성 완료')
@@ -175,6 +233,41 @@ class FinancialInsightAnalyzer:
             ],
             "report": report
         }
+
+    async def _extract_notes(self, company_info: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        사업보고서에서 재무제표 주석 추출
+
+        Args:
+            company_info: 기업개황정보 (corp_code 필요)
+
+        Returns:
+            주석 데이터 딕셔너리
+        """
+        corp_code = company_info.get('corp_code', '')
+        if not corp_code:
+            print("  → 주석 추출 실패: corp_code 없음")
+            return {'notes': [], 'notes_text': '', 'notes_count': 0}
+
+        try:
+            # DART API로 주석 추출 (별도 스레드에서 실행)
+            loop = asyncio.get_event_loop()
+            extractor = DartFinancialExtractor()
+
+            notes_data = await loop.run_in_executor(
+                None,
+                lambda: extractor.extract_notes(corp_code)
+            )
+
+            if notes_data.get('error'):
+                print(f"  → 주석 추출 경고: {notes_data.get('error')}")
+                return {'notes': [], 'notes_text': '', 'notes_count': 0}
+
+            return notes_data
+
+        except Exception as e:
+            print(f"  → 주석 추출 실패: {e}")
+            return {'notes': [], 'notes_text': '', 'notes_count': 0, 'error': str(e)}
 
     async def _identify_industry(self, company_info: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -319,34 +412,45 @@ JSON 배열로 반환:
 - 이상 징후가 없으면 빈 배열 [] 반환
 """
 
-        try:
-            response = self.client.models.generate_content(
-                model=MODEL_PRO,
-                contents=prompt
-            )
-
-            result_text = response.text
-            # JSON 블록 추출
-            if "```json" in result_text:
-                result_text = result_text.split("```json")[1].split("```")[0]
-            elif "```" in result_text:
-                result_text = result_text.split("```")[1].split("```")[0]
-
-            anomalies_data = json.loads(result_text.strip())
-
-            return [
-                Anomaly(
-                    period=a.get('period', ''),
-                    item=a.get('item', ''),
-                    finding=a.get('finding', ''),
-                    context=a.get('context', '')
+        # 최대 3회 재시도
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = self.client.models.generate_content(
+                    model=MODEL_PRO,
+                    contents=prompt
                 )
-                for a in anomalies_data
-            ]
 
-        except Exception as e:
-            print(f"  [오류] 이상 감지 실패: {e}")
-            return []
+                result_text = response.text
+                if not result_text or not result_text.strip():
+                    raise ValueError("빈 응답 수신")
+
+                # JSON 블록 추출
+                if "```json" in result_text:
+                    result_text = result_text.split("```json")[1].split("```")[0]
+                elif "```" in result_text:
+                    result_text = result_text.split("```")[1].split("```")[0]
+
+                anomalies_data = json.loads(result_text.strip())
+
+                return [
+                    Anomaly(
+                        period=a.get('period', ''),
+                        item=a.get('item', ''),
+                        finding=a.get('finding', ''),
+                        context=a.get('context', '')
+                    )
+                    for a in anomalies_data
+                ]
+
+            except Exception as e:
+                print(f"  [오류] 이상 감지 실패 (시도 {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2)  # 재시도 전 2초 대기
+                    continue
+                return []
+
+        return []
 
     async def _generate_search_queries(
         self,
@@ -496,10 +600,14 @@ JSON 배열로 반환:
         self,
         anomaly: Anomaly,
         company_info: Dict[str, Any],
-        industry_info: Dict[str, Any]
+        industry_info: Dict[str, Any],
+        financial_data: Dict[str, Any] = None,
+        notes_data: Dict[str, Any] = None
     ) -> str:
         """
-        이상 패턴별 웹 리서치 프롬프트 생성 (생성된 검색어 사용)
+        이상 패턴별 원인 분석 프롬프트 생성
+
+        ★ 핵심: 재무제표 내부 분석 + 주석 확인 → 웹 검색으로 보완
         """
         company_name = company_info.get('corp_name', '')
         industry = industry_info.get('industry', '')
@@ -508,62 +616,192 @@ JSON 배열로 반환:
         search_queries = anomaly.search_queries or []
         search_queries_str = "\n".join([f"- {q}" for q in search_queries]) if search_queries else "- (검색어 없음)"
 
+        # ★ 재무제표 데이터 포맷팅 (원인 분석용)
+        financial_context = ""
+        if financial_data:
+            financial_context = self._format_financial_data_for_cause_analysis(financial_data, anomaly)
+
+        # ★ 주석 데이터 포맷팅
+        notes_context = ""
+        if notes_data and notes_data.get('notes_text'):
+            # 주석이 너무 길면 잘라서 포함 (최대 30000자)
+            notes_text = notes_data.get('notes_text', '')[:30000]
+            notes_context = f"""
+### 재무제표 주석 (사업보고서 원문)
+
+★★★ 주석 활용 규칙 (필수) ★★★
+1. 주석에 있는 숫자와 내용을 **있는 그대로** 인용하라
+2. **절대 추론/해석/재작성 금지** - 주석 원문 그대로 가져와라
+3. 숫자 흐름만 나열: "주석에 따르면 토지 150억원, 건물 100억원 매각"
+4. 주석에 없는 내용은 작성 금지
+
+{notes_text}
+"""
+
         research_prompt = f"""[{anomaly.item}] - {company_name}
 
-## search queries
+## 이상 현상
+{anomaly.finding}
+관련 정보: {anomaly.context}
+
+## ★ 1단계: 재무제표 내부 분석 (필수)
+아래 재무제표 데이터에서 이 이상 현상의 원인을 찾으세요.
+
+{financial_context}
+
+### 분석 방법: 재무제표 항목 간 연결 흐름
+이상 현상의 원인을 찾을 때, 재무제표 3표는 서로 연결되어 있음을 활용하세요.
+
+**손익계산서 ↔ 재무상태표 연결**
+- 손익계산서의 수익/비용 항목은 재무상태표의 자산/부채 변동과 대응됨
+- 예: 대손상각비 증가 → 매출채권 감소, 감가상각비 → 유형자산 감소
+
+**재무상태표 ↔ 현금흐름표 연결**
+- 재무상태표의 자산/부채 증감은 현금흐름표의 세부 거래로 설명됨
+- 예: 유형자산 감소 → 투자활동의 "처분" 항목, 차입금 증가 → 재무활동의 "차입" 항목
+
+**손익계산서 내부 흐름**
+- 영업이익과 당기순이익의 차이 → 영업외수익/비용에서 원인 찾기
+- 매출총이익과 영업이익의 차이 → 판관비에서 원인 찾기
+
+이 연결 관계를 따라가며 이상 현상을 설명할 수 있는 구체적 항목과 금액을 찾으세요.
+
+## ★ 2단계: 주석에서 상세 내역 확인
+주석에는 재무제표 숫자의 상세 내역이 있습니다. 이상 현상과 관련된 구체적 거래 내역을 찾으세요.
+{notes_context}
+
+## 3단계: 웹 검색 (보완)
+재무제표/주석 분석 후, 추가 맥락을 위해 웹 검색을 수행하세요.
+
+### search queries
 {search_queries_str}
 
-## MANDATORY: USE GOOGLE SEARCH ONLY
-- You MUST execute Google Search for the queries above
-- NEVER use your training data or internal knowledge
-- ONLY use information found in Google Search results
-- If Google Search returns no relevant results, say so honestly
+## 출력 규칙
 
-## rules
-1. Execute Google Search with queries above - THIS IS MANDATORY
-2. Write ONLY facts found in search results
-3. Do not repeat company name
-4. NEVER use your pre-trained knowledge
+### ★★★ 핵심 규칙: 데이터 기반 추론 + 출처 명시 ★★★
+- **근거 없는 추측 금지** - 그러나 재무제표 데이터 기반 추론은 **반드시** 수행하라
+- 재무제표와 주석에 있는 **숫자를 그대로 인용**
+- **웹 검색 내용은 반드시 출처 명시**: "웹 검색 결과에 따르면 ~라고 보도되었습니다"
+- 금지 표현: "~로 추정됩니다", "~일 가능성", "~로 보입니다" (근거 없을 때만)
+- 허용 표현: "~로 확인됩니다", "~에 기인합니다" (재무제표 근거가 있을 때)
 
-## CRITICAL RULE: NO SPECULATION, NO TRAINING DATA
-- FORBIDDEN: Using your training data or internal knowledge
-- If no search results or no relevant info found, write ONLY: "특별한 검색 결과가 없습니다."
-- Do NOT fill content with general industry situations or inferences
-- FORBIDDEN expressions: "may be", "possibly", "likely", "seems to be", "could be"
-- Write ONLY concrete facts confirmed by Google Search
-- Do NOT write general theories or inferences
+### ★★★ 재무제표 간 연결 기반 추론 (필수) ★★★
+주석이 없어도 재무제표 3표(손익계산서, 재무상태표, 현금흐름표)의 연결 관계로 원인을 추론하라.
 
-## Writing style rule
-- Write "cause analysis" section ONLY in Korean formal style (honorific/polite form)
-- Formal examples: ~habnida, ~imnida, ~seumnida (~했습니다, ~입니다, ~되었습니다)
-- Informal FORBIDDEN in cause analysis: ~da, ~haetda, ~ida (~다, ~했다, ~이다)
-- "phenomenon" section: Use plain form as-is (numbers and facts)
+**예시: 순이익 급증 원인 분석**
+- 손익계산서: 영업외수익 '유형자산처분이익' 248억원 발생
+- 재무상태표: 유형자산 전년 대비 200억원 감소
+- 현금흐름표: 투자활동에 '토지 처분', '건물 처분' 기재
+→ **추론**: "유형자산처분이익 248억원 발생, 재무상태표 유형자산 감소 및 현금흐름표 투자활동 처분내역과 일치하여 부동산 처분에 따른 순이익 증가로 확인됩니다"
 
-## Output format (MUST follow exactly) - USE KOREAN LABELS
+이처럼 재무제표 간 숫자의 **흐름이 일치**하면 그것은 추측이 아니라 **확인**이다.
+
+### 원인 분석 작성 방법
+**3가지 소스(주석, 웹검색, 재무제표)를 모두 활용하여 분석하라.**
+
+**★★★ 출처 표기 금지 ★★★**
+다음과 같은 출처 표기 문구를 사용하지 마라:
+- ❌ "재무제표 분석 결과,", "손익계산서에 따르면", "현금흐름표상"
+- ❌ "주석에 따르면", "주석 X번에 따르면"
+- ❌ "웹 검색 결과", "언론 보도에 따르면"
+
+**출력 예시 (출처 표기 없이 바로 내용):**
+"손익계산서 유형자산처분이익 248억원이 발생했으며, 재무상태표 유형자산이 감소하고 현금흐름표에 토지/건물 처분이 기록되어 부동산 처분에 따른 순이익 증가로 확인됩니다."
+
+**웹 검색 결과 없으면 언급하지 마라** - 웹 검색에 대해 아무 말도 하지 마라.
+
+**모두 없는 경우에만**: "특별한 내용을 찾지 못했습니다."
+
+### 문체 규칙
+- 한국어 경어체 (~했습니다, ~입니다, ~되었습니다)
+- 숫자와 항목명 중심으로 간결하게 기술
+- 해석/평가/의견 절대 금지
+
+### ★★★ 숫자 단위 규칙 (필수) ★★★
+원단위 숫자를 그대로 쓰지 말고, 가독성 있게 변환하라:
+- 1억원 이상: **X.X억원** (예: 133,721,400원 → 133.7억원, 100,606,100원 → 100.6억원)
+- 1천만원~1억원: **X천만원** (예: 60,807,908원 → 6천만원, 15,296,394원 → 1.5천만원)
+- 1천만원 미만: **X백만원** 또는 그대로 (예: 3,637,305원 → 364만원)
+절대 60,807,908원처럼 원단위 숫자를 그대로 쓰지 마라.
+
+## 출력 형식 (반드시 준수)
 
 **현상**: {anomaly.finding}
-**원인 분석**: 특별한 검색 결과가 없습니다.
+**원인 분석**: [재무제표 데이터 기반 사실 및 추론]
 
-Write content immediately after the colon
-- NO line break. Text starts right after colon
-- NO bullet points
-- If Google Search results exist with relevant info: Write concrete facts in Korean formal style
-- If NO relevant search results: Write ONLY "특별한 검색 결과가 없습니다." (DO NOT use training data)"""
+- 콜론 바로 뒤에 내용 작성 (줄바꿈 금지)
+- 불릿 포인트 금지
+- 재무제표/주석의 숫자를 그대로 인용"""
 
         return research_prompt
+
+    def _format_financial_data_for_cause_analysis(
+        self,
+        financial_data: Dict[str, Any],
+        anomaly: Anomaly
+    ) -> str:
+        """
+        원인 분석을 위한 재무제표 데이터 포맷팅
+        이상 패턴과 관련된 항목을 중심으로 추출
+        """
+        result = []
+
+        # 이상 항목에 따라 관련 섹션 강조
+        anomaly_item = anomaly.item.lower() if anomaly.item else ""
+
+        def format_table(data, name: str, max_rows: int = 50) -> None:
+            """테이블 데이터를 문자열로 변환"""
+            if data is None:
+                return
+
+            if hasattr(data, 'to_string'):
+                result.append(f"\n### {name}")
+                result.append(data.to_string())
+            elif isinstance(data, list) and len(data) > 0:
+                result.append(f"\n### {name}")
+                if isinstance(data[0], dict):
+                    headers = list(data[0].keys())
+                    result.append(" | ".join(str(h) for h in headers))
+                    result.append("-" * 80)
+                    for row in data[:max_rows]:
+                        values = [str(row.get(h, '')) for h in headers]
+                        result.append(" | ".join(values))
+
+        # 손익계산서 (영업외수익/비용 포함)
+        is_data = financial_data.get('is') if financial_data.get('is') is not None else financial_data.get('cis')
+        if is_data is not None:
+            format_table(is_data, '손익계산서 (영업외수익/비용 항목 주목)')
+
+        # 재무상태표
+        bs_data = financial_data.get('bs')
+        if bs_data is not None:
+            format_table(bs_data, '재무상태표 (자산/부채 변동 주목)')
+
+        # 현금흐름표 (투자/재무활동 포함)
+        cf_data = financial_data.get('cf')
+        if cf_data is not None:
+            format_table(cf_data, '현금흐름표 (투자활동/재무활동 세부항목 주목)')
+
+        if not result:
+            return "(재무제표 데이터 없음)"
+
+        return "\n".join(result)
 
     async def _execute_parallel_research(
         self,
         anomalies: List[Anomaly],
         company_info: Dict[str, Any],
-        industry_info: Dict[str, Any]
+        industry_info: Dict[str, Any],
+        financial_data: Dict[str, Any] = None,
+        notes_data: Dict[str, Any] = None
     ) -> List[SearchResult]:
         """
-        이상 패턴별 웹 리서치 병렬 실행
+        이상 패턴별 원인 분석 병렬 실행
 
         각 이상 패턴에 대해:
-        1. 템플릿 기반 리서치 프롬프트 구성
-        2. Pro + Search로 실제 웹 리서치 수행
+        1. ★ 재무제표 내부 데이터 분석 (1차 원인 추적)
+        2. ★ 재무제표 주석에서 상세 내역 확인 (2차)
+        3. 웹 리서치로 추가 맥락 확보 (3차 보완)
 
         모든 이상 패턴은 병렬로 처리됨
         """
@@ -613,11 +851,12 @@ Write content immediately after the colon
 3. Do not repeat company name
 4. NEVER use your pre-trained knowledge
 
-## CRITICAL RULE: NO SPECULATION, NO TRAINING DATA
+## CRITICAL RULE: DATA-BASED INFERENCE ONLY
 - FORBIDDEN: Using your training data or internal knowledge
-- If no search results found, write ONLY: "특별한 검색 결과가 없습니다."
-- FORBIDDEN: general theories, inferences, "may be", "possibly", "likely"
-- Write ONLY concrete facts confirmed by Google Search
+- If no search results AND no financial data connections found, write ONLY: "보고서와 웹 검색에서 특별한 내용을 찾지 못했습니다."
+- FORBIDDEN: general theories, "may be", "possibly", "likely" without data basis
+- ALLOWED: Data-based inference when financial statements show correlated changes (e.g., gain on disposal in IS + asset decrease in BS + disposal in CF → real estate sale)
+- Write concrete facts confirmed by Google Search OR derived from financial statement connections
 
 ## Writing style rule
 - "cause analysis" section ONLY: Use Korean formal style (honorific)
@@ -627,19 +866,19 @@ Write content immediately after the colon
 ## Output format (MUST follow exactly) - USE KOREAN LABELS
 
 **현상**: {anomaly.finding}
-**원인 분석**: 특별한 검색 결과가 없습니다.
+**원인 분석**: 보고서와 웹 검색에서 특별한 내용을 찾지 못했습니다.
 
 Write content immediately after the colon
 - NO line break! Text starts right after colon
 - NO bullet points!
-- If Google Search results exist: Replace default text with found facts (in Korean formal style)
-- If NO relevant search results: Keep default text (DO NOT use training data)"""
+- If financial statement data connections OR search results exist: Replace default text with found facts (in Korean formal style)
+- If NO relevant data: Keep default text (DO NOT use training data)"""
 
         def research_one_sync(anomaly: Anomaly) -> SearchResult:
-            """동기 함수로 API 호출 (스레드에서 실행) - Fallback 로직 포함"""
-            # 1. 리서치 프롬프트 구성
-            print(f"    [리서치 시작] {anomaly.period} {anomaly.item}")
-            prompt = self._build_research_prompt(anomaly, company_info, industry_info)
+            """동기 함수로 API 호출 (스레드에서 실행) - 재무제표 내부 분석 + 웹 검색"""
+            # 1. 원인 분석 프롬프트 구성 (재무제표 + 주석 데이터 포함)
+            print(f"    [원인 분석 시작] {anomaly.period} {anomaly.item}")
+            prompt = self._build_research_prompt(anomaly, company_info, industry_info, financial_data, notes_data)
 
             # 더미 SearchTask 생성 (기존 구조 호환용)
             task = SearchTask(
@@ -656,10 +895,7 @@ Write content immediately after the colon
                     model=MODEL_RESEARCH,
                     contents=prompt,
                     config=types.GenerateContentConfig(
-                        tools=[
-                            types.Tool(google_search=types.GoogleSearch()),
-                            types.Tool(url_context=types.UrlContext())  # URL 내용 직접 읽기
-                        ]
+                        tools=[types.Tool(google_search=types.GoogleSearch())]
                     )
                 )
 
@@ -667,33 +903,9 @@ Write content immediately after the colon
                 sources = extract_sources(response)
                 result_text = response.text if response.text else "결과 없음"
 
-                # ★ Fallback 로직: 소스가 없으면 대체 검색어로 재시도
+                # 웹 소스 없어도 1차 응답(주석/재무제표 기반 분석) 유지
                 if not sources:
-                    print(f"    [Fallback 시작] {anomaly.period} {anomaly.item} - 소스 없음, 대체 검색어로 재시도")
-
-                    fallback_prompt = build_fallback_prompt(anomaly)
-                    fallback_response = self.client.models.generate_content(
-                        model=MODEL_RESEARCH,
-                        contents=fallback_prompt,
-                        config=types.GenerateContentConfig(
-                            tools=[
-                                types.Tool(google_search=types.GoogleSearch()),
-                                types.Tool(url_context=types.UrlContext())  # URL 내용 직접 읽기
-                            ]
-                        )
-                    )
-
-                    fallback_sources = extract_sources(fallback_response)
-                    fallback_text = fallback_response.text if fallback_response.text else ""
-
-                    if fallback_sources:
-                        print(f"    [Fallback 성공] {anomaly.period} {anomaly.item} - {len(fallback_sources)}개 소스 발견")
-                        sources = fallback_sources
-                        result_text = fallback_text
-                    else:
-                        print(f"    [Fallback 실패] {anomaly.period} {anomaly.item} - 대체 검색도 소스 없음")
-                        # ★ 소스 없으면 LLM 응답 무시하고 기본값으로 강제 대체
-                        result_text = f"**현상**: {anomaly.finding}\n**원인 분석**: 특별한 검색 결과가 없습니다."
+                    print(f"    [웹 소스 없음] {anomaly.period} {anomaly.item} - 재무제표/주석 기반 분석 유지")
 
                 print(f"    [웹 리서치 완료] {anomaly.period} {anomaly.item}")
                 print(f"    ┌─────────────────────────────────────────────────────────")
@@ -736,7 +948,8 @@ Write content immediately after the colon
         company_info: Dict[str, Any],
         industry_info: Dict[str, Any],
         anomalies: List[Anomaly],
-        search_results: List[SearchResult]
+        search_results: List[SearchResult],
+        notes_data: Dict[str, Any] = None
     ) -> str:
         """
         종합 보고서 생성 (Pro 모델)
@@ -753,7 +966,7 @@ Write content immediately after the colon
         combined_findings = ""
         for i, a in enumerate(anomalies, 1):
             key = (a.period, a.item)
-            research = search_map.get(key, "**현상**: " + a.finding + "\n\n**원인 분석**: 특별한 검색 결과가 없습니다.")
+            research = search_map.get(key, "**현상**: " + a.finding + "\n\n**원인 분석**: 보고서와 웹 검색에서 특별한 내용을 찾지 못했습니다.")
             period_display = format_period(a.period)
             combined_findings += f"""
 ### {i}. [{period_display}] {a.item}
@@ -766,6 +979,22 @@ Write content immediately after the colon
 - 경쟁사: {', '.join(industry_info.get('competitors', [])[:3])}
 - 거시요인: {', '.join(industry_info.get('macro_factors', [])[:3])}"""
 
+        # 주석 요약 (있으면 포함)
+        notes_summary = ""
+        if notes_data and notes_data.get('notes_text'):
+            notes_text = notes_data.get('notes_text', '')[:15000]  # 최대 15000자
+            notes_summary = f"""
+## 재무제표 주석 원문
+
+★★★ 주석 정리 규칙 (필수) ★★★
+1. **있는 그대로 정리만** - 추론/해석/의견 절대 금지
+2. **숫자를 그대로 인용** - "토지 150억원, 건물 100억원" 식으로
+3. **항목별로 나열만** - 특수관계자, 우발채무, 담보, 자산처분 등
+4. 주석에 없는 내용은 작성 금지
+
+{notes_text}
+"""
+
         prompt = f"""[{company_name}] 재무 이상 패턴 정리
 
 ## 회사/업종 정보
@@ -773,11 +1002,24 @@ Write content immediately after the colon
 
 ## 이상 패턴 및 조사 결과
 {combined_findings}
-
-## 작성 규칙 (★필수★)
+{notes_summary}
+## 작성 규칙 (★★★ 필수 ★★★)
 1. **정리만 하라** - 새로운 해석/추론/재작성 절대 금지
 2. 위 데이터의 **현상**, **원인 분석**을 그대로 복사
 3. 당신의 역할은 포맷 정리뿐. 내용 수정/추가 금지
+4. **주석은 숫자를 그대로 나열** - 추론/해석 절대 금지
+5. 주석에 없는 내용 작성 금지
+6. **출처 표기 문구 제거** - "재무제표 분석 결과,", "주석에 따르면", "웹 검색 결과" 등의 출처 표기 문구는 모두 삭제하라
+7. 금지 표현: "~로 분석됩니다", "~로 추정됩니다"
+8. **웹 검색 결과 없으면 언급 금지** - 웹 검색에 대해 아무 말도 하지 마라
+9. **주석 요약 섹션 필수** - "## 주석 요약" 섹션은 반드시 포함하라. 주석 데이터가 있으면 해당 내용을 정리하고, 없으면 "주석 데이터가 없습니다"라고 작성
+
+## ★★★ 숫자 단위 규칙 (필수) ★★★
+원단위 숫자를 그대로 쓰지 말고, 가독성 있게 변환하라:
+- 1억원 이상: **X.X억원** (예: 133,721,400원 → 133.7억원)
+- 1천만원~1억원: **X천만원** (예: 60,807,908원 → 6천만원)
+- 1천만원 미만: **X백만원** 또는 그대로 (예: 3,637,305원 → 364만원)
+절대 60,807,908원처럼 원단위 숫자를 그대로 쓰지 마라.
 
 ## 출력 형식
 
@@ -795,6 +1037,21 @@ Write content immediately after the colon
 - **원인 분석**: (위 **원인 분석** 그대로 복사)
 
 (모든 이상 패턴 반복. 재작성 금지, 복사만)
+
+## 주석 요약
+(주석 원문에서 숫자만 그대로 나열. 추론/해석 금지. 각 항목은 ###로 구분)
+
+### 1. 특수관계자 거래
+(있으면 내용 작성, 없으면 이 항목 전체 생략)
+
+### 2. 우발채무/소송
+(있으면 내용 작성, 없으면 이 항목 전체 생략)
+
+### 3. 담보/지급보증
+(있으면 내용 작성, 없으면 이 항목 전체 생략)
+
+### 4. 자산 취득/처분
+(있으면 내용 작성, 없으면 이 항목 전체 생략)
 
 ---"""
 
@@ -839,7 +1096,7 @@ Write content immediately after the colon
         format_table(financial_data.get('bs'), '재무상태표', max_rows=100)
 
         # 손익계산서 (IS 또는 CIS) - 전체
-        is_data = financial_data.get('is') or financial_data.get('cis')
+        is_data = financial_data.get('is') if financial_data.get('is') is not None else financial_data.get('cis')
         format_table(is_data, '손익계산서', max_rows=100)
 
         # 현금흐름표 (CF) - 전체

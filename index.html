@@ -2209,6 +2209,7 @@
         let statusCheckInterval = null;  // 상태 확인 인터벌
         let previewData = null;  // 미리보기 데이터
         let isIntegratedMode = false;  // 통합추출 모드 (AI 분석 자동 실행)
+        let isExtractionComplete = false;  // 추출 완료 여부 (중복 호출 방지)
         let isAnalysisCompleted = false;  // AI 분석 완료 여부
 
         // ============================================================
@@ -3138,6 +3139,10 @@
                 return;
             }
 
+            // 상태 플래그 초기화
+            isExtractionComplete = false;
+            isAnalysisStarting = false;
+
             // 통합추출 모드 설정
             isIntegratedMode = integrated;
             isAnalysisCompleted = false;
@@ -3268,6 +3273,13 @@
         // 완료 및 다운로드
         // ============================================================
         function showComplete() {
+            // 중복 호출 방지
+            if (isExtractionComplete) {
+                console.log('[Extract] showComplete 중복 호출 무시');
+                return;
+            }
+            isExtractionComplete = true;
+
             document.getElementById('extractingSection').classList.remove('show');
             document.getElementById('completeSection').classList.add('show');
 
@@ -4277,9 +4289,15 @@
 
                         // EBITDA 특별 처리: 영업이익 + 감가상각비 + 무형자산상각비
                         if (parentName === 'EBITDA') {
-                            const 영업이익Row = vcmDisplay.find(r => r['항목'] === '영업이익');
-                            const 감가상각비Row = vcmMeta.find(r => r['항목'] && r['항목'].includes('감가상각비') && !r['항목'].includes('무형'));
-                            const 무형자산상각비Row = vcmMeta.find(r => r['항목'] && r['항목'].includes('무형자산상각비'));
+                            // 먼저 [EBITDA] 접두사 항목에서 찾기 (새 방식)
+                            const ebitda영업이익Row = vcmMeta.find(r => r['항목'] && r['항목'].includes('[EBITDA]영업이익'));
+                            const ebitda감가상각비Row = vcmMeta.find(r => r['항목'] && r['항목'].includes('[EBITDA]감가상각비'));
+                            const ebitda무형자산상각비Row = vcmMeta.find(r => r['항목'] && r['항목'].includes('[EBITDA]무형자산상각비'));
+
+                            // fallback: 기존 방식
+                            const 영업이익Row = ebitda영업이익Row || vcmDisplay.find(r => r['항목'] === '영업이익');
+                            const 감가상각비Row = ebitda감가상각비Row || vcmMeta.find(r => r['항목'] && r['항목'].includes('감가상각비') && !r['항목'].includes('무형') && !r['항목'].includes('[EBITDA]'));
+                            const 무형자산상각비Row = ebitda무형자산상각비Row || vcmMeta.find(r => r['항목'] && r['항목'].includes('무형자산상각비') && !r['항목'].includes('[EBITDA]'));
 
                             const 영업이익 = 영업이익Row ? 영업이익Row[y] : 0;
                             const 감가상각비 = 감가상각비Row ? 감가상각비Row[y] : 0;
@@ -5070,10 +5088,14 @@
                     // 백엔드 VCM 값 사용 (단위 변환)
                     ebitda = parseValue(ebitdaRow[y]);
 
-                    // 툴팁용 세부 데이터
-                    const 영업이익 = calcValue('operatingIncome', y) || 0;
-                    const 감가상각비 = findValue(isData, ['감가상각비'], y, ['무형']) || 0;
-                    const 무형자산상각비 = findValue(isData, ['무형자산상각비'], y) || 0;
+                    // 툴팁용 세부 데이터 - VCM [EBITDA] 항목 먼저 확인
+                    const ebitda영업이익Row = vcmData.find(r => r['항목'] && r['항목'].includes('[EBITDA]영업이익'));
+                    const ebitda감가상각비Row = vcmData.find(r => r['항목'] && r['항목'].includes('[EBITDA]감가상각비'));
+                    const ebitda무형자산상각비Row = vcmData.find(r => r['항목'] && r['항목'].includes('[EBITDA]무형자산상각비'));
+
+                    const 영업이익 = ebitda영업이익Row ? parseValue(ebitda영업이익Row[y]) : (calcValue('operatingIncome', y) || 0);
+                    const 감가상각비 = ebitda감가상각비Row ? parseValue(ebitda감가상각비Row[y]) : (findValue(isData, ['감가상각비'], y, ['무형']) || 0);
+                    const 무형자산상각비 = ebitda무형자산상각비Row ? parseValue(ebitda무형자산상각비Row[y]) : (findValue(isData, ['무형자산상각비'], y) || 0);
 
                     tooltip = `[${y} 계산식]\n영업이익: ${fmt(영업이익)}\n`;
                     if (감가상각비) tooltip += `+ 감가상각비: ${fmt(감가상각비)}\n`;
@@ -5125,9 +5147,17 @@
         // 재무분석 AI 분석
         // ============================================================
         let analysisCheckInterval = null;
+        let isAnalysisStarting = false;  // 중복 분석 시작 방지 플래그
 
         async function startAnalysis() {
             if (!currentTaskId) return;
+
+            // 중복 호출 방지
+            if (isAnalysisStarting) {
+                console.log('[Analysis] 이미 분석 시작 중 - 중복 호출 무시');
+                return;
+            }
+            isAnalysisStarting = true;
 
             // 시작 버튼 숨기고 진행 표시
             document.getElementById('analysisStartContainer').style.display = 'none';
@@ -5243,6 +5273,9 @@
         let analysisReportText = '';  // 복사용 원본 텍스트 저장
 
         function showAnalysisResult(result) {
+            // 중복 방지 플래그 리셋
+            isAnalysisStarting = false;
+
             // 분석 실패 또는 이상 패턴 없음 체크
             if (!result || !result.report || result.no_anomalies || result.success === false) {
                 const errorMsg = result?.error || '이상 패턴을 감지하지 못했습니다. 다시 시도해주세요.';
@@ -5353,6 +5386,9 @@
         }
 
         function showAnalysisError(message) {
+            // 중복 방지 플래그 리셋
+            isAnalysisStarting = false;
+
             const statusEl = document.getElementById('analysisStatus');
             statusEl.textContent = '실패';
             statusEl.style.display = '';
@@ -5449,6 +5485,10 @@
         function resetAll() {
             stopStatusCheck();
             stopAnalysisStatusCheck();
+
+            // 상태 플래그 초기화
+            isExtractionComplete = false;
+            isAnalysisStarting = false;
 
             // 작업 삭제
             if (currentTaskId) {
