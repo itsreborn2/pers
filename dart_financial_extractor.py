@@ -189,11 +189,209 @@ class DartFinancialExtractor:
                     result['cf'] = None
             
             return result
-            
+
         except Exception as e:
             print(f"재무제표 추출 실패: {e}")
+            # 비상장사: 감사보고서에서 재무제표 추출 시도
+            print(f"  → 감사보고서에서 재무제표 추출 시도...")
+            try:
+                audit_result = self.extract_financial_statements_from_audit_report(
+                    corp_code=corp_code,
+                    start_date=start_date,
+                    end_date=end_date
+                )
+                if audit_result:
+                    return audit_result
+            except Exception as e2:
+                print(f"  → 감사보고서 재무제표 추출도 실패: {e2}")
             return {}
-    
+
+    def extract_financial_statements_from_audit_report(
+        self,
+        corp_code: str,
+        start_date: str = '20200101',
+        end_date: Optional[str] = None
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        비상장사용: 감사보고서에서 재무제표 추출 (HTML 테이블 파싱)
+
+        Args:
+            corp_code: DART 고유번호 (8자리)
+            start_date: 검색 시작일 (YYYYMMDD)
+            end_date: 검색 종료일 (YYYYMMDD)
+
+        Returns:
+            재무제표 딕셔너리 {'bs': DataFrame, 'is': DataFrame, 'cf': DataFrame}
+        """
+        from bs4 import BeautifulSoup
+        from io import StringIO
+        import re
+
+        if end_date is None:
+            end_date = datetime.now().strftime('%Y%m%d')
+
+        try:
+            corp = self.corp_list.find_by_corp_code(corp_code)
+            if not corp:
+                return {}
+
+            # 감사보고서 검색
+            reports = corp.search_filings(
+                bgn_de=start_date,
+                end_de=end_date,
+                pblntf_ty='F'  # 감사보고서
+            )
+
+            if not reports or len(reports) == 0:
+                print(f"  → 감사보고서를 찾을 수 없습니다: {corp_code}")
+                return {}
+
+            result = {'bs': None, 'is': None, 'cis': None, 'cf': None}
+            all_bs_data = []
+            all_is_data = []
+            all_cf_data = []
+
+            # 여러 연도의 감사보고서에서 데이터 수집
+            for report in reports[:5]:  # 최근 5개 연도
+                try:
+                    pages = report.extract_pages()
+
+                    # 페이지별로 재무제표 찾기
+                    for page in pages:
+                        title = getattr(page, 'title', '') or ''
+
+                        if '재무상태표' in title or '재 무 상 태 표' in title:
+                            df = self._parse_audit_report_table(page.html, 'bs')
+                            if df is not None and not df.empty:
+                                # 연도 정보 추가
+                                year = report.rcept_dt[:4] if hasattr(report, 'rcept_dt') else ''
+                                df['report_year'] = year
+                                all_bs_data.append(df)
+
+                        elif '손익계산서' in title or '손 익 계 산 서' in title:
+                            df = self._parse_audit_report_table(page.html, 'is')
+                            if df is not None and not df.empty:
+                                year = report.rcept_dt[:4] if hasattr(report, 'rcept_dt') else ''
+                                df['report_year'] = year
+                                all_is_data.append(df)
+
+                        elif '현금흐름표' in title or '현 금 흐 름 표' in title:
+                            df = self._parse_audit_report_table(page.html, 'cf')
+                            if df is not None and not df.empty:
+                                year = report.rcept_dt[:4] if hasattr(report, 'rcept_dt') else ''
+                                df['report_year'] = year
+                                all_cf_data.append(df)
+
+                except Exception as e:
+                    print(f"  → 보고서 파싱 오류: {e}")
+                    continue
+
+            # 데이터 병합
+            if all_bs_data:
+                result['bs'] = pd.concat(all_bs_data, ignore_index=True)
+                print(f"  → 재무상태표: {len(result['bs'])}행")
+            if all_is_data:
+                result['is'] = pd.concat(all_is_data, ignore_index=True)
+                print(f"  → 손익계산서: {len(result['is'])}행")
+            if all_cf_data:
+                result['cf'] = pd.concat(all_cf_data, ignore_index=True)
+                print(f"  → 현금흐름표: {len(result['cf'])}행")
+
+            return result
+
+        except Exception as e:
+            print(f"감사보고서 재무제표 추출 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+
+    def _parse_audit_report_table(self, html: str, fs_type: str) -> Optional[pd.DataFrame]:
+        """
+        감사보고서 HTML 테이블을 DataFrame으로 파싱
+
+        Args:
+            html: HTML 문자열
+            fs_type: 재무제표 유형 ('bs', 'is', 'cf')
+
+        Returns:
+            파싱된 DataFrame
+        """
+        from bs4 import BeautifulSoup
+        from io import StringIO
+        import re
+
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            tables = soup.find_all('table')
+
+            # 가장 큰 테이블 찾기 (메인 재무제표 테이블)
+            main_table = None
+            max_rows = 0
+
+            for table in tables:
+                dfs = pd.read_html(StringIO(str(table)))
+                if dfs and len(dfs[0]) > max_rows:
+                    max_rows = len(dfs[0])
+                    main_table = dfs[0]
+
+            if main_table is None or main_table.empty:
+                return None
+
+            df = main_table
+
+            # 컬럼명 정리
+            # 첫 번째 컬럼을 'label_ko'로
+            df.columns = ['label_ko'] + [f'col_{i}' for i in range(1, len(df.columns))]
+
+            # '과목', '과 목' 등 헤더 행 제거
+            if df['label_ko'].iloc[0] in ['과목', '과 목', '구분', '구 분']:
+                df = df.iloc[1:]
+
+            # NaN만 있는 행 제거
+            df = df.dropna(how='all')
+
+            # label_ko가 NaN인 행 제거
+            df = df[df['label_ko'].notna()]
+
+            # 숫자 컬럼 정리 (쉼표, 괄호 처리)
+            for col in df.columns[1:]:
+                df[col] = df[col].apply(self._clean_number)
+
+            df = df.reset_index(drop=True)
+
+            return df
+
+        except Exception as e:
+            print(f"  → 테이블 파싱 오류: {e}")
+            return None
+
+    def _clean_number(self, value):
+        """숫자 값 정리 (쉼표, 괄호 처리)"""
+        import re
+
+        if pd.isna(value):
+            return None
+
+        value_str = str(value).strip()
+
+        if value_str in ['-', '', 'NaN', 'nan']:
+            return 0
+
+        # 괄호 = 음수
+        is_negative = '(' in value_str and ')' in value_str
+
+        # 숫자만 추출
+        cleaned = re.sub(r'[^\d.]', '', value_str)
+
+        if not cleaned:
+            return None
+
+        try:
+            num = float(cleaned)
+            return -num if is_negative else num
+        except:
+            return None
+
     def extract_financial_summary(
         self,
         corp_code: str,
@@ -374,6 +572,152 @@ class DartFinancialExtractor:
                     df.to_excel(writer, sheet_name=name, index=False)
         
         print(f"저장 완료: {filepath}")
+
+    def extract_notes(
+        self,
+        corp_code: str,
+        year: int = None,
+        report_type: str = 'annual'
+    ) -> Dict[str, Any]:
+        """
+        사업보고서에서 재무제표 주석 추출
+
+        Args:
+            corp_code: DART 고유번호 (8자리)
+            year: 대상 연도 (None이면 최근 연도)
+            report_type: 보고서 유형 ('annual': 사업보고서)
+
+        Returns:
+            {
+                'year': 연도,
+                'report_name': 보고서명,
+                'notes': [주석 섹션 리스트],
+                'notes_text': 주석 전체 텍스트
+            }
+        """
+        import re
+        from bs4 import BeautifulSoup
+
+        try:
+            # 기업 검색
+            corp = self.corp_list.find_by_corp_code(corp_code)
+            if not corp:
+                return {'error': f'기업을 찾을 수 없습니다: {corp_code}'}
+
+            # 사업보고서 검색 (pblntf_detail_ty='a001' = 사업보고서)
+            if year:
+                bgn_de = f'{year}0101'
+                end_de = f'{year}1231'
+            else:
+                # 최근 2년 검색
+                from datetime import datetime
+                current_year = datetime.now().year
+                bgn_de = f'{current_year - 2}0101'
+                end_de = datetime.now().strftime('%Y%m%d')
+
+            # 사업보고서 검색 시도
+            reports = None
+            report_source = '사업보고서'
+            try:
+                reports = corp.search_filings(
+                    bgn_de=bgn_de,
+                    end_de=end_de,
+                    pblntf_detail_ty='a001'  # 사업보고서
+                )
+            except Exception as e:
+                print(f"  → 사업보고서 검색 실패: {e}")
+                reports = None
+
+            # 사업보고서가 없으면 감사보고서에서 시도 (비상장사)
+            if not reports or len(reports) == 0:
+                print(f"  → 사업보고서 없음, 감사보고서에서 시도...")
+                try:
+                    reports = corp.search_filings(
+                        bgn_de=bgn_de,
+                        end_de=end_de,
+                        pblntf_ty='F'  # 감사보고서
+                    )
+                    report_source = '감사보고서'
+                except Exception as e:
+                    print(f"  → 감사보고서 검색도 실패: {e}")
+                    reports = None
+
+            if not reports or len(reports) == 0:
+                return {'error': f'사업보고서/감사보고서를 찾을 수 없습니다: {corp_code}, {year}'}
+
+            # 가장 최근 사업보고서 선택
+            report = reports[0]
+
+            # 모든 페이지 추출
+            all_pages = report.extract_pages()
+
+            # 주석 관련 페이지 필터링
+            notes_keywords = ['주석', '재무제표에 대한 주석', '연결재무제표주석', '별도재무제표주석']
+            pages = []
+            for page in all_pages:
+                page_title = getattr(page, 'title', '') or ''
+                if any(keyword in page_title for keyword in notes_keywords):
+                    pages.append(page)
+
+            notes_sections = []
+            notes_text_parts = []
+
+            for page in pages:
+                try:
+                    # HTML을 텍스트로 변환
+                    if hasattr(page, 'html'):
+                        soup = BeautifulSoup(page.html, 'html.parser')
+
+                        # 테이블 내용 추출 (주석에 많은 수치 정보가 테이블에 있음)
+                        text = soup.get_text(separator='\n', strip=True)
+
+                        # 불필요한 공백 제거
+                        text = re.sub(r'\n{3,}', '\n\n', text)
+
+                        if text.strip():
+                            section_title = page.title if hasattr(page, 'title') else '주석'
+                            notes_sections.append({
+                                'title': section_title,
+                                'content': text[:50000]  # 최대 50000자로 제한
+                            })
+                            notes_text_parts.append(f"### {section_title}\n{text[:50000]}")
+
+                    elif hasattr(page, 'text'):
+                        text = page.text
+                        if text.strip():
+                            section_title = page.title if hasattr(page, 'title') else '주석'
+                            notes_sections.append({
+                                'title': section_title,
+                                'content': text[:50000]
+                            })
+                            notes_text_parts.append(f"### {section_title}\n{text[:50000]}")
+
+                except Exception as e:
+                    print(f"  주석 페이지 파싱 오류: {e}")
+                    continue
+
+            # 연도 추출
+            report_year = year
+            if not report_year and hasattr(report, 'rcept_dt'):
+                report_year = int(report.rcept_dt[:4])
+
+            result = {
+                'year': report_year,
+                'report_name': report.report_nm if hasattr(report, 'report_nm') else report_source,
+                'report_source': report_source,
+                'notes': notes_sections,
+                'notes_text': '\n\n'.join(notes_text_parts) if notes_text_parts else '주석 내용을 찾을 수 없습니다.',
+                'notes_count': len(notes_sections)
+            }
+
+            print(f"  → 주석 추출 완료: {len(notes_sections)}개 섹션 ({report_source})")
+            return result
+
+        except Exception as e:
+            print(f"주석 추출 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'error': str(e), 'notes': [], 'notes_text': ''}
 
 
 def main():

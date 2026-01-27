@@ -165,18 +165,17 @@
             opacity: 0.7;
         }
 
-        /* 다운로드 버튼 툴팁 */
-        .download-btn-wrapper {
+        /* 공통 호버 툴팁 */
+        .hover-tooltip-wrapper {
             position: relative;
             display: inline-block;
         }
 
-        .download-tooltip {
+        .hover-tooltip {
             visibility: hidden;
             opacity: 0;
             position: absolute;
             bottom: calc(100% + 10px);
-            right: 0;
             background: #333;
             color: white;
             padding: 10px 14px;
@@ -188,23 +187,57 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
 
-        .download-tooltip::after {
+        .hover-tooltip::after {
             content: '';
             position: absolute;
             top: 100%;
-            right: 20px;
             border-width: 8px;
             border-style: solid;
             border-color: #333 transparent transparent transparent;
         }
 
-        .download-btn-wrapper:hover .download-tooltip:not(.hidden) {
+        .hover-tooltip-wrapper:hover .hover-tooltip:not(.hidden) {
             visibility: visible;
             opacity: 1;
         }
 
-        .download-tooltip.hidden {
+        .hover-tooltip.hidden {
             display: none;
+        }
+
+        /* 다운로드 버튼 툴팁 위치 */
+        .download-btn-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .download-btn-wrapper .hover-tooltip {
+            right: 0;
+        }
+
+        .download-btn-wrapper .hover-tooltip::after {
+            right: 20px;
+        }
+
+        .download-btn-wrapper:hover .hover-tooltip:not(.hidden) {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* 분석 탭 버튼 툴팁 위치 */
+        .insight-tab-wrapper .hover-tooltip {
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .insight-tab-wrapper .hover-tooltip::after {
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .insight-tab-wrapper:hover .hover-tooltip:not(.hidden) {
+            visibility: visible;
+            opacity: 1;
         }
 
         .btn-ai {
@@ -352,8 +385,8 @@
         .analysis-result h3 {
             font-size: 1rem;
             color: var(--primary-dark);
-            margin-top: 16px;
-            margin-bottom: 8px;
+            margin-top: 28px;
+            margin-bottom: 6px;
         }
 
         .analysis-result ul, .analysis-result ol {
@@ -363,13 +396,21 @@
         }
 
         .analysis-result li {
-            margin-bottom: 8px;
+            margin-bottom: 4px;
             padding-left: 0;
             text-indent: 0;
         }
 
+        .analysis-result p {
+            margin: 4px 0;
+        }
+
         .analysis-result strong {
             color: var(--primary);
+        }
+
+        .analysis-result hr {
+            display: none;
         }
 
         .btn:disabled {
@@ -1975,11 +2016,14 @@
             <div class="main-tabs-container">
                 <div class="main-tabs">
                     <button class="main-tab active" data-main-tab="financial" onclick="showMainTab('financial')">재무정보</button>
-                    <button class="main-tab" data-main-tab="insight" id="insightTabBtn" onclick="showMainTab('insight')">재무분석 AI</button>
+                    <span class="hover-tooltip-wrapper insight-tab-wrapper">
+                        <button class="main-tab" data-main-tab="insight" id="insightTabBtn" onclick="showMainTab('insight')">재무분석 AI</button>
+                        <div class="hover-tooltip hidden" id="insightTooltip">분석 작업은 약 1~3분 정도 소요됩니다.</div>
+                    </span>
                 </div>
                 <div class="download-btn-wrapper" id="downloadBtnWrapper">
                     <button class="btn btn-success" id="downloadBtn" onclick="downloadFile()" disabled>엑셀 다운로드</button>
-                    <div class="download-tooltip" id="downloadTooltip">재무분석 AI 작업이 완료되면 다운로드가 가능합니다.</div>
+                    <div class="hover-tooltip" id="downloadTooltip">재무분석 AI 작업이 완료되면 다운로드가 가능합니다.</div>
                 </div>
             </div>
 
@@ -1989,6 +2033,7 @@
                     <div class="analysis-header">
                         <span class="analysis-status" id="analysisStatus"></span>
                         <button class="btn btn-copy" id="analysisCopyBtn" onclick="copyAnalysisResult()" style="display: none;">복사</button>
+                        <button class="btn btn-copy" id="analysisOriginalBtn" onclick="toggleOriginalReport()" style="display: none;">원본보기</button>
                     </div>
                     <!-- AI 분석 시작 버튼 (재무제표만 추출 시 표시) -->
                     <div class="analysis-start-container" id="analysisStartContainer" style="display: none;">
@@ -5172,6 +5217,7 @@
             insightTabBtn.textContent = '재무분석중...(0%)';
             insightTabBtn.classList.add('analyzing');
             insightTabBtn.classList.remove('completed');
+            document.getElementById('insightTooltip').classList.remove('hidden');
 
             // 복사 버튼 숨김
             document.getElementById('analysisCopyBtn').style.display = 'none';
@@ -5210,6 +5256,11 @@
                 const messageEl = document.getElementById('analysisMessage');
                 messageEl.textContent = error.message;
                 messageEl.classList.remove('loading');
+                // 탭 버튼 상태 원복
+                const insightTabBtn = document.getElementById('insightTabBtn');
+                insightTabBtn.textContent = '재무분석 AI';
+                insightTabBtn.classList.remove('analyzing');
+                document.getElementById('insightTooltip').classList.add('hidden');
                 // 실패 시 다시 시작 버튼 표시
                 document.getElementById('analysisStartContainer').style.display = 'block';
                 document.getElementById('analysisProgress').style.display = 'none';
@@ -5270,7 +5321,10 @@
             }
         }
 
-        let analysisReportText = '';  // 복사용 원본 텍스트 저장
+        let analysisReportText = '';           // 현재 표시 중인 보고서 텍스트 (복사용)
+        let analysisOriginalReportText = '';   // 원본 보고서 텍스트
+        let analysisSummaryReportText = '';    // 요약본 보고서 텍스트
+        let isShowingOriginal = false;         // 현재 원본 표시 중 여부
 
         function showAnalysisResult(result) {
             // 중복 방지 플래그 리셋
@@ -5290,6 +5344,12 @@
             const copyBtn = document.getElementById('analysisCopyBtn');
             copyBtn.style.display = 'inline-block';
 
+            // 원본보기 버튼 표시 (요약본이 있을 때만)
+            const originalBtn = document.getElementById('analysisOriginalBtn');
+            if (result.summary_report) {
+                originalBtn.style.display = 'inline-block';
+            }
+
             // 로딩 애니메이션 제거
             document.getElementById('analysisMessage').classList.remove('loading');
             document.getElementById('analysisProgress').style.display = 'none';
@@ -5298,13 +5358,17 @@
             const resultEl = document.getElementById('analysisResult');
             resultEl.style.display = 'block';
 
-            // 원본 텍스트 저장 (복사용)
-            analysisReportText = result.report;
-            // 마크다운을 HTML로 변환 (간단한 변환)
-            resultEl.innerHTML = markdownToHtml(result.report);
+            // 원본/요약 텍스트 저장
+            analysisOriginalReportText = result.report;
+            analysisSummaryReportText = result.summary_report || result.report;
+            isShowingOriginal = false;
 
-            // 엑셀에 재무분석 AI 탭 추가
-            addInsightToExcel(result.report);
+            // 기본: 요약본 표시
+            analysisReportText = analysisSummaryReportText;
+            resultEl.innerHTML = markdownToHtml(analysisSummaryReportText);
+
+            // 엑셀에 재무분석 AI 탭 추가 (원본 + 요약 모두)
+            addInsightToExcel(result.report, result.summary_report);
 
             isAnalysisCompleted = true;
 
@@ -5316,6 +5380,7 @@
             insightTabBtn.textContent = '재무분석 AI';
             insightTabBtn.classList.remove('analyzing');
             insightTabBtn.classList.add('completed');
+            document.getElementById('insightTooltip').classList.add('hidden');
 
             // 최신 대표자/주소 정보가 있으면 기업개황정보 업데이트
             if (result.current_ceo || result.current_address) {
@@ -5367,21 +5432,40 @@
             }
         }
 
-        async function addInsightToExcel(report) {
+        async function addInsightToExcel(report, summaryReport) {
             if (!currentTaskId) return;
 
             try {
                 const response = await fetch(`/api/add-insight/${currentTaskId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ report: report })
+                    body: JSON.stringify({ report: report, summary_report: summaryReport || '' })
                 });
 
                 if (response.ok) {
-                    console.log('재무분석 AI가 엑셀에 추가되었습니다.');
+                    console.log('재무분석 AI(원본+요약)가 엑셀에 추가되었습니다.');
                 }
             } catch (error) {
                 console.error('엑셀에 인사이트 추가 실패:', error);
+            }
+        }
+
+        function toggleOriginalReport() {
+            const resultEl = document.getElementById('analysisResult');
+            const btn = document.getElementById('analysisOriginalBtn');
+
+            if (isShowingOriginal) {
+                // 요약본으로 전환
+                resultEl.innerHTML = markdownToHtml(analysisSummaryReportText);
+                analysisReportText = analysisSummaryReportText;
+                btn.textContent = '원본보기';
+                isShowingOriginal = false;
+            } else {
+                // 원본으로 전환
+                resultEl.innerHTML = markdownToHtml(analysisOriginalReportText);
+                analysisReportText = analysisOriginalReportText;
+                btn.textContent = '요약보기';
+                isShowingOriginal = true;
             }
         }
 
@@ -5393,6 +5477,12 @@
             statusEl.textContent = '실패';
             statusEl.style.display = '';
             statusEl.className = 'analysis-status failed';
+
+            // 탭 버튼 상태 원복
+            const insightTabBtn = document.getElementById('insightTabBtn');
+            insightTabBtn.textContent = '재무분석 AI';
+            insightTabBtn.classList.remove('analyzing');
+            document.getElementById('insightTooltip').classList.add('hidden');
 
             // 복사 버튼 숨김
             document.getElementById('analysisCopyBtn').style.display = 'none';

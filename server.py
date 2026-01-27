@@ -5273,6 +5273,7 @@ async def add_insight_to_excel(task_id: str, request: Request):
     try:
         data = await request.json()
         report = data.get('report', '')
+        summary_report = data.get('summary_report', '')
 
         if not report:
             raise HTTPException(status_code=400, detail="보고서 내용이 없습니다.")
@@ -5309,25 +5310,11 @@ async def add_insight_to_excel(task_id: str, request: Request):
             task['filename'] = filename
             print(f"[ADD-INSIGHT] 엑셀 파일 생성 완료: {filepath}")
 
-        # 엑셀 파일에 재무분석 AI 시트 추가
+        # 엑셀 파일에 재무분석 AI 시트 추가 (요약 + 원본)
         from openpyxl import load_workbook
         from openpyxl.styles import Font, Alignment, PatternFill
 
         wb = load_workbook(filepath)
-
-        # 기존 재무분석 AI 시트가 있으면 삭제
-        if '재무분석 AI' in wb.sheetnames:
-            del wb['재무분석 AI']
-
-        # 새 시트 생성 (Financials 다음에 위치)
-        insight_sheet = wb.create_sheet('재무분석 AI')
-
-        # Financials 다음으로 이동 (기업개황 → Financials → 재무분석 AI → ... → Frontdata)
-        if 'Financials' in wb.sheetnames:
-            target_idx = wb.sheetnames.index('Financials') + 1
-            current_idx = wb.sheetnames.index('재무분석 AI')
-            if current_idx != target_idx:
-                wb.move_sheet('재무분석 AI', offset=target_idx - current_idx)
 
         # 스타일 정의
         title_font = Font(name='맑은 고딕', size=14, bold=True, color='1F4E79')
@@ -5338,7 +5325,6 @@ async def add_insight_to_excel(task_id: str, request: Request):
         # 마크다운 및 HTML 포맷팅 제거 함수
         def strip_markdown(text):
             import re
-            # HTML 태그 제거 (strong, em, li, ul, ol, p, br, h1-h6 등)
             text = re.sub(r'<strong>(.+?)</strong>', r'\1', text)
             text = re.sub(r'<em>(.+?)</em>', r'\1', text)
             text = re.sub(r'<li>', '', text)
@@ -5347,54 +5333,76 @@ async def add_insight_to_excel(task_id: str, request: Request):
             text = re.sub(r'<p>|</p>', '', text)
             text = re.sub(r'<br\s*/?>', '', text)
             text = re.sub(r'<h[1-6]>|</h[1-6]>', '', text)
-            # **bold** 제거 - 더 강력한 패턴 (한글, 특수문자 포함)
             text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
-            # __bold__ 제거
             text = re.sub(r'__(.+?)__', r'\1', text)
-            # *italic* 제거 (단독 별표만)
             text = re.sub(r'(?<!\*)\*([^*\n]+)\*(?!\*)', r'\1', text)
-            # _italic_ 제거 (단독 밑줄만)
             text = re.sub(r'(?<!_)_([^_\n]+)_(?!_)', r'\1', text)
-            # 리스트 기호 제거 (- 또는 * 로 시작하는 줄)
             text = re.sub(r'^[-*]\s+', '', text)
-            # 번호 리스트 제거 (1. 2. 등)
             text = re.sub(r'^\d+\.\s+', '', text)
             return text
 
-        # 마크다운 텍스트를 줄별로 분리하여 엑셀에 작성
-        lines = report.split('\n')
-        row = 1
+        def write_report_to_sheet(wb, sheet_name, report_text):
+            """보고서를 엑셀 시트에 작성하는 헬퍼 함수"""
+            # 기존 시트가 있으면 삭제
+            if sheet_name in wb.sheetnames:
+                del wb[sheet_name]
 
-        for line in lines:
-            # 마크다운 포맷팅 제거
-            clean_line = strip_markdown(line.strip())
-            cell = insight_sheet.cell(row=row, column=1, value=clean_line)
+            sheet = wb.create_sheet(sheet_name)
 
-            # 스타일 적용
-            if line.startswith('# '):
-                cell.value = strip_markdown(line[2:].strip())
-                cell.font = title_font
-            elif line.startswith('## '):
-                cell.value = strip_markdown(line[3:].strip())
-                cell.font = header_font
-            elif line.startswith('### '):
-                cell.value = strip_markdown(line[4:].strip())
-                cell.font = subheader_font
-            elif line.startswith('- **') or line.startswith('* **'):
-                cell.font = normal_font
-            else:
-                cell.font = normal_font
+            lines = report_text.split('\n')
+            row = 1
+            for line in lines:
+                clean_line = strip_markdown(line.strip())
+                cell = sheet.cell(row=row, column=1, value=clean_line)
 
-            cell.alignment = Alignment(wrap_text=True, vertical='top')
-            row += 1
+                if line.startswith('# '):
+                    cell.value = strip_markdown(line[2:].strip())
+                    cell.font = title_font
+                elif line.startswith('## '):
+                    cell.value = strip_markdown(line[3:].strip())
+                    cell.font = header_font
+                elif line.startswith('### '):
+                    cell.value = strip_markdown(line[4:].strip())
+                    cell.font = subheader_font
+                else:
+                    cell.font = normal_font
 
-        # 열 너비 설정
-        insight_sheet.column_dimensions['A'].width = 100
+                cell.alignment = Alignment(wrap_text=True, vertical='top')
+                row += 1
+
+            sheet.column_dimensions['A'].width = 100
+            return sheet
+
+        # 기존 '재무분석 AI' 시트도 삭제 (이전 버전 호환)
+        if '재무분석 AI' in wb.sheetnames:
+            del wb['재무분석 AI']
+
+        # 요약본 시트 작성
+        if summary_report:
+            write_report_to_sheet(wb, '재무분석AI(요약)', summary_report)
+        # 원본 시트 작성
+        write_report_to_sheet(wb, '재무분석AI(원본)', report)
+
+        # 시트 순서 정리: Financials → 재무분석AI(요약) → 재무분석AI(원본) → ...
+        if 'Financials' in wb.sheetnames:
+            financials_idx = wb.sheetnames.index('Financials')
+
+            if summary_report and '재무분석AI(요약)' in wb.sheetnames:
+                summary_idx = wb.sheetnames.index('재무분석AI(요약)')
+                target = financials_idx + 1
+                if summary_idx != target:
+                    wb.move_sheet('재무분석AI(요약)', offset=target - summary_idx)
+
+            if '재무분석AI(원본)' in wb.sheetnames:
+                original_idx = wb.sheetnames.index('재무분석AI(원본)')
+                target = wb.sheetnames.index('재무분석AI(요약)') + 1 if summary_report and '재무분석AI(요약)' in wb.sheetnames else financials_idx + 1
+                if original_idx != target:
+                    wb.move_sheet('재무분석AI(원본)', offset=target - original_idx)
 
         wb.save(filepath)
         wb.close()
 
-        return {"success": True, "message": "재무분석 AI가 엑셀에 추가되었습니다."}
+        return {"success": True, "message": "재무분석 AI(원본+요약)가 엑셀에 추가되었습니다."}
 
     except Exception as e:
         print(f"[오류] 재무분석 AI 엑셀 추가 실패: {e}")
