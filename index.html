@@ -1063,7 +1063,7 @@
         }
         
         .vcm-table .highlight-row {
-            color: #dc2626;
+            color: #991b1b;
             font-weight: 600;
             background: #fef2f2;
         }
@@ -2316,6 +2316,7 @@
                 const response = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
                     body: JSON.stringify({ email, password })
                 });
 
@@ -2326,9 +2327,8 @@
                     return;
                 }
 
-                // 성공
-                currentUser = data.user;
-                updateUserUI();
+                // 성공 - 전체 사용자 정보(토큰 포함) 가져오기
+                await checkAuth();
                 closeAuthModal();
 
                 // 입력 필드 초기화
@@ -2408,7 +2408,10 @@
         // 로그아웃
         async function logout() {
             try {
-                await fetch('/api/auth/logout', { method: 'POST' });
+                await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                });
             } catch (err) {
                 console.error('Logout error:', err);
             }
@@ -2566,7 +2569,9 @@
         // 현재 로그인 상태 확인
         async function checkAuth() {
             try {
-                const response = await fetch('/api/auth/me');
+                const response = await fetch('/api/auth/me', {
+                    credentials: 'same-origin'
+                });
                 const data = await response.json();
 
                 if (data.logged_in) {
@@ -3115,12 +3120,8 @@
                         let originalCeo = valueCell.textContent.replace(/\(최신정보 업데이트 전\)/g, '').trim();
                         originalCeo = originalCeo.split('→')[0].trim();
 
-                        // 원본과 최신이 같으면 확인됨 표시, 다르면 최신 정보만 표시
-                        if (originalCeo === currentCeo) {
-                            valueCell.innerHTML = `${currentCeo} <span style="background: #10b981; color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">최신정보 확인됨</span>`;
-                        } else {
-                            valueCell.innerHTML = `${currentCeo} <span style="background: var(--accent); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">최신정보</span>`;
-                        }
+                        // 원본과 최신 상관없이 동일하게 최신정보 표시
+                        valueCell.innerHTML = `${currentCeo} <span style="background: var(--accent); color: white; font-size: 0.7rem; padding: 3px 6px; border-radius: 4px; margin-left: 8px; display: inline-flex; align-items: center; line-height: 1;">최신정보</span>`;
                     }
                 }
 
@@ -3135,12 +3136,8 @@
                             originalAddress = originalAddress.split('(현재주소:')[0].trim();
                         }
 
-                        // 원본과 최신이 같으면 확인됨 표시, 다르면 변경 표시
-                        if (originalAddress === currentAddress) {
-                            valueCell.innerHTML = `${currentAddress} <span style="background: #10b981; color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">최신정보 확인됨</span>`;
-                        } else {
-                            valueCell.innerHTML = `${currentAddress} <span style="background: var(--accent); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">최신정보</span>`;
-                        }
+                        // 원본과 최신 상관없이 동일하게 최신정보 표시
+                        valueCell.innerHTML = `${currentAddress} <span style="background: var(--accent); color: white; font-size: 0.7rem; padding: 3px 6px; border-radius: 4px; margin-left: 8px; display: inline-flex; align-items: center; line-height: 1;">최신정보</span>`;
                     }
                 }
             }
@@ -4199,15 +4196,15 @@
                         return rParent === parentTrimmed;
                     });
                     return children.map(c => {
-                        // vcmDisplay에서 먼저 찾고, 없으면 vcmMeta에서 찾기
-                        const displayRow = vcmDisplay.find(d => d['항목'] === c['항목']);
-                        const val = displayRow ? displayRow[year] : c[year];
+                        // 항목명 trim해서 비교
+                        const itemName = (c['항목'] || '').trim();
+                        // vcmMeta에서만 가져옴 (원 단위) - 툴팁 생성 시 백만원 변환
+                        const val = c[year];
                         return {
-                            // 들여쓰기와 접미사 제거
-                            name: c['항목'].trim().replace(' [NWC]', '').replace(' [NetDebt]', ''),
+                            name: itemName.replace(' [NWC]', '').replace(' [NetDebt]', ''),
                             value: val
                         };
-                    }).filter(c => c.value !== null && c.value !== undefined && c.value !== '');
+                    }).filter(c => c.value !== null && c.value !== undefined && c.value !== '' && c.value !== 0);
                 }
 
                 // 타입별 CSS 클래스
@@ -4267,38 +4264,50 @@
                             const children = getChildItems(parentName, y);
                             if (children.length > 0) {
                                 hasChildren = true;
-                                // 중복 값 필터링: 같은 값을 가진 항목 중 가장 구체적인 이름만 유지
-                                const uniqueChildren = [];
-                                const seenValues = new Map(); // value -> item
+                                // 중복 항목명 필터링: 같은 이름의 항목은 하나만 유지 (값이 같아도 다른 이름이면 모두 표시)
+                                const seenNames = new Map(); // name -> item
                                 for (const c of children) {
-                                    const valKey = String(c.value);
-                                    if (seenValues.has(valKey)) {
-                                        // 같은 값이 이미 있으면, 더 구체적인 이름(더 긴 이름)을 유지
-                                        const existing = seenValues.get(valKey);
-                                        if (c.name.length > existing.name.length) {
-                                            seenValues.set(valKey, c);
-                                        }
-                                    } else {
-                                        seenValues.set(valKey, c);
+                                    const nameKey = c.name;
+                                    if (!seenNames.has(nameKey)) {
+                                        seenNames.set(nameKey, c);
                                     }
                                 }
-                                const filteredChildren = Array.from(seenValues.values());
+                                const filteredChildren = Array.from(seenNames.values());
+                                let childSum = 0;
                                 const childLines = filteredChildren.map(c => {
-                                    const fmtVal = typeof c.value === 'number' ? c.value.toLocaleString('ko-KR') : c.value;
+                                    let rawVal = typeof c.value === 'number' ? c.value : parseFloat(String(c.value).replace(/,/g, ''));
+                                    // Frontdata는 항상 원 단위 - 백만원으로 변환
+                                    let fmtVal;
+                                    if (!isNaN(rawVal)) {
+                                        const millions = Math.round(rawVal / 1000000);
+                                        childSum += millions;
+                                        // 백만원 미만(0으로 반올림)이면 원 단위 괄호 표시
+                                        if (millions === 0 && rawVal > 0) {
+                                            fmtVal = `(${Math.round(rawVal).toLocaleString('ko-KR')}원)`;
+                                        } else {
+                                            fmtVal = millions.toLocaleString('ko-KR');
+                                        }
+                                    } else {
+                                        fmtVal = c.value;
+                                    }
                                     return `${c.name}: ${fmtVal}`;
                                 });
-                                tooltip = `[${y} 세부내역]\n${childLines.join('\n')}\n─────────\n합계: ${typeof val === 'number' ? val.toLocaleString('ko-KR') : val}`;
+                                const displayTotal = (val === null || val === undefined || val === '') ? childSum : val;
+                                tooltip = `[${y} 세부내역]\n${childLines.join('\n')}\n─────────\n합계: ${typeof displayTotal === 'number' ? Math.round(displayTotal).toLocaleString('ko-KR') : displayTotal}`;
                             }
                         }
 
-                        // 숫자인 경우 천 단위 콤마 추가
+                        // 숫자인 경우 천 단위 콤마 추가 + 음수는 빨간색
                         let displayVal = val;
+                        let isNegative = false;
                         if (typeof val === 'number' && !isNaN(val)) {
+                            isNegative = val < 0;
                             displayVal = val.toLocaleString('ko-KR');
                         } else if (val === null || val === undefined) {
                             displayVal = '';
                         }
-                        bsTableHtml += `<td class="${hasChildren ? 'calc-cell' : ''}" title="${tooltip}">${displayVal}</td>`;
+                        const negativeStyle = isNegative ? 'color: #dc2626;' : '';
+                        bsTableHtml += `<td class="${hasChildren ? 'calc-cell' : ''}" title="${tooltip}" style="${negativeStyle}">${displayVal}</td>`;
                     });
                     bsTableHtml += '</tr>';
                 }
@@ -4344,14 +4353,25 @@
                             const 감가상각비Row = ebitda감가상각비Row || vcmMeta.find(r => r['항목'] && r['항목'].includes('감가상각비') && !r['항목'].includes('무형') && !r['항목'].includes('[EBITDA]'));
                             const 무형자산상각비Row = ebitda무형자산상각비Row || vcmMeta.find(r => r['항목'] && r['항목'].includes('무형자산상각비') && !r['항목'].includes('[EBITDA]'));
 
-                            const 영업이익 = 영업이익Row ? 영업이익Row[y] : 0;
-                            const 감가상각비 = 감가상각비Row ? 감가상각비Row[y] : 0;
-                            const 무형자산상각비 = 무형자산상각비Row ? 무형자산상각비Row[y] : 0;
+                            // 값 추출 및 백만원 변환 (소액은 원 단위 괄호 표시)
+                            const toMillionsWithFormat = (v) => {
+                                if (v === null || v === undefined) return { num: 0, fmt: '0' };
+                                let raw = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, ''));
+                                if (isNaN(raw)) return { num: 0, fmt: '0' };
+                                const millions = Math.round(raw / 1000000);
+                                // 백만원 미만이면 원 단위 괄호 표시
+                                if (millions === 0 && raw > 0) {
+                                    return { num: 0, fmt: `(${Math.round(raw).toLocaleString('ko-KR')}원)` };
+                                }
+                                return { num: millions, fmt: millions.toLocaleString('ko-KR') };
+                            };
+                            const 영업이익 = toMillionsWithFormat(영업이익Row ? 영업이익Row[y] : 0);
+                            const 감가상각비 = toMillionsWithFormat(감가상각비Row ? 감가상각비Row[y] : 0);
+                            const 무형자산상각비 = toMillionsWithFormat(무형자산상각비Row ? 무형자산상각비Row[y] : 0);
 
-                            if (영업이익 || 감가상각비 || 무형자산상각비) {
+                            if (영업이익.num || 감가상각비.num || 무형자산상각비.num || 영업이익.fmt.includes('원') || 감가상각비.fmt.includes('원') || 무형자산상각비.fmt.includes('원')) {
                                 hasChildren = true;
-                                const fmt = (v) => typeof v === 'number' ? v.toLocaleString('ko-KR') : (v || 0);
-                                tooltip = `[${y} 계산식]\n영업이익: ${fmt(영업이익)}\n+ 감가상각비: ${fmt(감가상각비)}\n+ 무형자산상각비: ${fmt(무형자산상각비)}\n─────────\n= EBITDA: ${typeof val === 'number' ? val.toLocaleString('ko-KR') : val}`;
+                                tooltip = `[${y} 계산식]\n영업이익: ${영업이익.fmt}\n+ 감가상각비: ${감가상각비.fmt}\n+ 무형자산상각비: ${무형자산상각비.fmt}\n─────────\n= EBITDA: ${typeof val === 'number' ? Math.round(val).toLocaleString('ko-KR') : val}`;
                             }
                         } else {
                             // IS 대분류는 툴팁 불필요 (이미 하위 항목이 테이블에 표시됨)
@@ -4363,35 +4383,38 @@
                                 const children = getChildItems(parentName, y);
                                 if (children.length > 0) {
                                     hasChildren = true;
-                                    // 중복 값 필터링: 같은 값을 가진 항목 중 가장 구체적인 이름만 유지
-                                    const seenValues = new Map();
+                                    // 중복 항목명 필터링: 같은 이름의 항목은 하나만 유지 (값이 같아도 다른 이름이면 모두 표시)
+                                    const seenNames = new Map();
                                     for (const c of children) {
-                                        const valKey = String(c.value);
-                                        if (seenValues.has(valKey)) {
-                                            const existing = seenValues.get(valKey);
-                                            if (c.name.length > existing.name.length) {
-                                                seenValues.set(valKey, c);
-                                            }
-                                        } else {
-                                            seenValues.set(valKey, c);
+                                        const nameKey = c.name;
+                                        if (!seenNames.has(nameKey)) {
+                                            seenNames.set(nameKey, c);
                                         }
                                     }
-                                    const filteredChildren = Array.from(seenValues.values());
-                                    // 자녀 값 합계 계산 (원 단위 → 백만원 변환 필요 여부 확인)
+                                    const filteredChildren = Array.from(seenNames.values());
+                                    // 자녀 값 합계 계산 (원 단위 → 백만원 변환)
                                     let childSum = 0;
                                     const childLines = filteredChildren.map(c => {
-                                        let numVal = typeof c.value === 'number' ? c.value : parseFloat(String(c.value).replace(/,/g, ''));
-                                        // 값이 100만 이상이면 원 단위로 간주하고 백만원으로 변환
-                                        if (!isNaN(numVal) && Math.abs(numVal) >= 1000000) {
-                                            numVal = numVal / 1000000;
+                                        let rawVal = typeof c.value === 'number' ? c.value : parseFloat(String(c.value).replace(/,/g, ''));
+                                        // Frontdata는 항상 원 단위 - 백만원으로 변환
+                                        let fmtVal;
+                                        if (!isNaN(rawVal)) {
+                                            const millions = Math.round(rawVal / 1000000);
+                                            childSum += millions;
+                                            // 백만원 미만(0으로 반올림)이면 원 단위 괄호 표시
+                                            if (millions === 0 && rawVal > 0) {
+                                                fmtVal = `(${Math.round(rawVal).toLocaleString('ko-KR')}원)`;
+                                            } else {
+                                                fmtVal = millions.toLocaleString('ko-KR');
+                                            }
+                                        } else {
+                                            fmtVal = c.value;
                                         }
-                                        childSum += isNaN(numVal) ? 0 : numVal;
-                                        const fmtVal = !isNaN(numVal) ? numVal.toLocaleString('ko-KR', {maximumFractionDigits: 1}) : c.value;
                                         return `${c.name}: ${fmtVal}`;
                                     });
                                     // 부모 값이 없으면 자녀 합계로 대체
                                     const displayTotal = (val === null || val === undefined || val === '') ? childSum : val;
-                                    tooltip = `[${y} 세부내역]\n${childLines.join('\n')}\n─────────\n합계: ${typeof displayTotal === 'number' ? displayTotal.toLocaleString('ko-KR', {maximumFractionDigits: 1}) : displayTotal}`;
+                                    tooltip = `[${y} 세부내역]\n${childLines.join('\n')}\n─────────\n합계: ${typeof displayTotal === 'number' ? Math.round(displayTotal).toLocaleString('ko-KR') : displayTotal}`;
                                     // 부모 값이 없을 때 자녀 합계를 val에 할당
                                     if (val === null || val === undefined || val === '') {
                                         val = childSum > 0 ? childSum : val;
@@ -4400,14 +4423,17 @@
                             }
                         }
 
-                        // 숫자인 경우 천 단위 콤마 추가
+                        // 숫자인 경우 천 단위 콤마 추가 + 음수는 빨간색
                         let displayVal = val;
+                        let isNegative = false;
                         if (typeof val === 'number' && !isNaN(val)) {
+                            isNegative = val < 0;
                             displayVal = val.toLocaleString('ko-KR');
                         } else if (val === null || val === undefined || val === '') {
                             displayVal = '';
                         }
-                        isTableHtml += `<td class="${hasChildren ? 'calc-cell' : ''}" title="${tooltip}">${displayVal}</td>`;
+                        const negativeStyle = isNegative ? 'color: #dc2626;' : '';
+                        isTableHtml += `<td class="${hasChildren ? 'calc-cell' : ''}" title="${tooltip}" style="${negativeStyle}">${displayVal}</td>`;
                     });
                     isTableHtml += '</tr>';
                 }
@@ -4425,7 +4451,6 @@
                             ${isTableHtml}
                         </div>
                     </div>
-                    <p class="preview-info">* Source: 전자공시시스템 (DART)</p>
                 `;
             }
 
@@ -4649,7 +4674,9 @@
                     if (nwcBreakdown.length > 0) {
                         tooltip = `[${y} 계산식]\n`;
                         nwcBreakdown.forEach(b => {
-                            tooltip += `${b.name.replace(' [NWC]', '')}: ${fmt(b.value)}\n`;
+                            // 원 단위 → 백만원 변환
+                            const valInMillions = Math.round(b.value / 1000000);
+                            tooltip += `${b.name.replace(' [NWC]', '')}: ${valInMillions.toLocaleString('ko-KR')}\n`;
                         });
                         tooltip += `= NWC: ${fmt(nwc)}`;
                     } else {
@@ -4690,12 +4717,14 @@
 
                         netDebtBreakdown.forEach(b => {
                             const name = b.name.replace(' [NetDebt]', '');
+                            // 원 단위 → 백만원 변환
+                            const valInMillions = Math.round(b.value / 1000000);
                             if (b.value > 0) {
-                                tooltip += `+ ${name}: ${fmt(b.value)}\n`;
-                                총차입금 += b.value;
+                                tooltip += `+ ${name}: ${valInMillions.toLocaleString('ko-KR')}\n`;
+                                총차입금 += valInMillions;
                             } else if (b.value < 0) {
-                                tooltip += `- ${name}: ${fmt(Math.abs(b.value))}\n`;
-                                총현금성자산 += Math.abs(b.value);
+                                tooltip += `- ${name}: ${Math.abs(valInMillions).toLocaleString('ko-KR')}\n`;
+                                총현금성자산 += Math.abs(valInMillions);
                             }
                         });
                         tooltip += `= Net Debt: ${fmt(netDebt)}`;
@@ -5184,7 +5213,6 @@
                         ${isTableHtml}
                     </div>
                 </div>
-                <p class="preview-info">* Source: 전자공시시스템 (DART)</p>
             `;
         }
 

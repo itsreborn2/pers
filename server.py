@@ -696,10 +696,13 @@ async def extract_financial_data(
         # 종료 연도 설정
         if end_year is None:
             end_year = datetime.now().year
-        
+
         start_date = f"{start_year}0101"
-        end_date = f"{end_year}1231"
-        print(f"[EXTRACT] 기간: {start_date} ~ {end_date}")
+        # end_year의 사업보고서는 다음 해 초(3~4월)에 제출되므로
+        # 해당 연도 사업보고서를 포함하려면 검색 범위를 +1년 확장
+        search_end_year = end_year + 1
+        end_date = f"{search_end_year}1231"
+        print(f"[EXTRACT] 기간: {start_date} ~ {end_date} (요청: ~FY{end_year}, 검색: ~{search_end_year})")
         
         # 취소 확인
         if task['cancelled']:
@@ -839,20 +842,39 @@ async def extract_financial_data(
             fs_data['is'] = fs_data['cis']
             print(f"[EXTRACT] IS 데이터 없음, CIS를 IS로 사용")
         elif not is_empty and cis_valid:
-            # IS와 CIS 모두 있으면 병합 (중복 제거)
+            # IS와 CIS 모두 있으면 병합 (중복 제거, 계정과목 기반)
             try:
                 import pandas as pd
-                # 컬럼 구조가 같은지 확인 후 병합
-                is_accounts = set(is_df.index) if hasattr(is_df, 'index') else set()
-                cis_accounts = set(cis_df.index) if hasattr(cis_df, 'index') else set()
-                # CIS에만 있는 계정과목 추가
-                unique_cis = cis_accounts - is_accounts
-                if unique_cis:
-                    cis_unique_df = cis_df.loc[list(unique_cis)]
-                    fs_data['is'] = pd.concat([is_df, cis_unique_df], axis=0)
-                    print(f"[EXTRACT] IS와 CIS 병합: CIS에서 {len(unique_cis)}개 계정과목 추가")
+                # 계정과목 기반 비교 (인덱스 기반은 XBRL RangeIndex에서 오작동)
+                acc_col_name = '계정과목'
+                if acc_col_name in is_df.columns and acc_col_name in cis_df.columns:
+                    is_acc_set = set(is_df[acc_col_name].astype(str).tolist())
+                    cis_unique_rows = cis_df[~cis_df[acc_col_name].astype(str).isin(is_acc_set)]
+                    # OCI(기타포괄손익) 항목은 IS에 병합하지 않음
+                    oci_keywords = ['기타포괄', '확정급여제도의 재측정', '보험수리', '해외사업환산', '파생상품평가', '재분류조정', '법인세효과']
+                    if not cis_unique_rows.empty:
+                        non_oci_mask = ~cis_unique_rows[acc_col_name].astype(str).apply(
+                            lambda x: any(kw in x for kw in oci_keywords)
+                        )
+                        cis_is_items = cis_unique_rows[non_oci_mask]
+                        if not cis_is_items.empty:
+                            fs_data['is'] = pd.concat([is_df, cis_is_items], axis=0, ignore_index=True)
+                            print(f"[EXTRACT] IS와 CIS 병합: CIS에서 {len(cis_is_items)}개 계정과목 추가 (OCI {len(cis_unique_rows)-len(cis_is_items)}개 제외)")
+                        else:
+                            print(f"[EXTRACT] IS와 CIS 병합: 추가할 IS 항목 없음 (OCI만 {len(cis_unique_rows)}개)")
+                    else:
+                        print(f"[EXTRACT] IS와 CIS 병합: CIS 고유 계정과목 없음")
                 else:
-                    print(f"[EXTRACT] IS와 CIS 병합: 추가할 CIS 계정과목 없음")
+                    # 계정과목 컬럼이 없으면 기존 인덱스 방식 fallback
+                    is_accounts = set(is_df.index) if hasattr(is_df, 'index') else set()
+                    cis_accounts = set(cis_df.index) if hasattr(cis_df, 'index') else set()
+                    unique_cis = cis_accounts - is_accounts
+                    if unique_cis:
+                        cis_unique_df = cis_df.loc[list(unique_cis)]
+                        fs_data['is'] = pd.concat([is_df, cis_unique_df], axis=0)
+                        print(f"[EXTRACT] IS와 CIS 병합 (인덱스): CIS에서 {len(unique_cis)}개 추가")
+                    else:
+                        print(f"[EXTRACT] IS와 CIS 병합: 추가할 CIS 계정과목 없음")
             except Exception as e:
                 print(f"[EXTRACT] IS/CIS 병합 실패: {e}, IS만 사용")
                 # 병합 실패 시 IS만 사용
@@ -878,7 +900,7 @@ async def extract_financial_data(
                         print(f"  [{i}] {account}")
                     print(f"[EXTRACT] CIS 급여 관련 계정과목:")
                     for row in task['preview_data']['cis']:
-                        account = row.get('계정과목', '')
+                        account = row.get('계정과목', '') or ''
                         if '급여' in account or '수수료' in account or '임차' in account:
                             fy2024 = row.get('FY2024', 'N/A')
                             print(f"  - {account}: FY2024={fy2024}")
@@ -990,6 +1012,22 @@ async def extract_financial_data(
                         except Exception as e:
                             pass
                     task['preview_data']['bs'] = merged_bs_data
+
+        # ★ 주석 병합 후 컬럼 정제 (주석 테이블이 본문에 concat되면서 불필요 컬럼 유입 방지)
+        import re as _re2
+        _meta_cols2 = {'개념ID', '계정과목', '계정과목(영문)', '분류1', '분류2', '분류3', '분류4'}
+        for key in ['bs', 'is', 'cis', 'cf']:
+            df = fs_data.get(key)
+            if df is not None and not df.empty:
+                orig_cols = len(df.columns)
+                valid_cols = [c for c in df.columns if c in _meta_cols2 or (isinstance(c, str) and _re2.match(r'^FY\d{4}', c))]
+                if valid_cols and len(valid_cols) < orig_cols:
+                    fs_data[key] = df[valid_cols]
+                    print(f"[EXTRACT] 주석 병합 후 {key} 컬럼 정제: {orig_cols}열 → {len(valid_cols)}열")
+                # 중복 컬럼 제거
+                if fs_data[key] is not None and fs_data[key].columns.duplicated().any():
+                    fs_data[key] = fs_data[key].loc[:, ~fs_data[key].columns.duplicated()]
+                    print(f"[EXTRACT] {key} 중복 컬럼 제거")
 
         # ★ Excel 파일이 있으면 모든 데이터를 다시 읽어서 preview_data 업데이트
         # 참고: 현재 엑셀은 AI 분석 후 생성되므로 추출 단계에서는 보통 스킵됨
@@ -1113,7 +1151,20 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
     try:
         print(f"[FS] 사업보고서에서 추출 시도...")
         update_progress(20, '사업보고서 확인 중...')
-        fs = corp.extract_fs(bgn_de=start_date, end_de=end_date, separate=False)
+
+        # 1차: 연결재무제표 시도
+        fs = None
+        try:
+            fs = corp.extract_fs(bgn_de=start_date, end_de=end_date, separate=False)
+        except Exception as consolidated_err:
+            err_str = str(consolidated_err)
+            if 'consolidated' in err_str.lower() or 'NotFoundConsolidated' in type(consolidated_err).__name__:
+                # 연결재무제표 없음 → 별도재무제표로 재시도
+                print(f"[FS] 연결재무제표 없음, 별도재무제표로 재시도...")
+                update_progress(22, '별도재무제표 확인 중...')
+                fs = corp.extract_fs(bgn_de=start_date, end_de=end_date, separate=True)
+            else:
+                raise  # 다른 오류는 그대로 전달
 
         if fs is not None:
             for key in ['bs', 'is', 'cis', 'cf']:
@@ -1121,6 +1172,23 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                     fs_data[key] = fs[key]
                 except:
                     pass
+
+            # dart_fss가 주석 테이블을 본문에 병합하여 불필요한 컬럼이 추가되는 경우 정제
+            import re as _re
+            _meta_cols = {'개념ID', '계정과목', '계정과목(영문)', '분류1', '분류2', '분류3', '분류4'}
+            for key in ['bs', 'is', 'cis', 'cf']:
+                df = fs_data.get(key)
+                if df is not None and not df.empty:
+                    orig_cols = len(df.columns)
+                    # 메타 컬럼 + FY로 시작하는 연도 컬럼만 유지
+                    valid_cols = [c for c in df.columns if c in _meta_cols or (isinstance(c, str) and _re.match(r'^FY\d{4}', c))]
+                    if valid_cols and len(valid_cols) < orig_cols:
+                        fs_data[key] = df[valid_cols]
+                        print(f"[FS] {key} 컬럼 정제: {orig_cols}열 → {len(valid_cols)}열 (불필요 {orig_cols - len(valid_cols)}개 제거)")
+                    # 중복 컬럼명 제거
+                    if fs_data[key] is not None and fs_data[key].columns.duplicated().any():
+                        fs_data[key] = fs_data[key].loc[:, ~fs_data[key].columns.duplicated()]
+                        print(f"[FS] {key} 중복 컬럼 제거")
 
             has_data = any(fs_data[key] is not None for key in fs_data)
             # 사업보고서 추출 직후 상태 로깅
@@ -1178,19 +1246,22 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                     print(f"[FS] fs 객체 주석 추출 실패: {e}")
 
                 # 사업보고서 객체 찾기 (HTML 주석 추출용)
+                annual_list = []
                 try:
                     from dart_fss.filings import search as search_filings
                     annual_filings = search_filings(
                         corp_code=corp_code,
                         bgn_de=start_date,
                         end_de=end_date,
-                        pblntf_ty='A'
+                        pblntf_ty='A',
+                        page_count=100,
+                        last_reprt_at='Y'
                     )
                     if annual_filings:
                         annual_list = [f for f in annual_filings if '사업보고서' in str(f) and '반기' not in str(f) and '분기' not in str(f)]
                         if annual_list:
                             annual_report = annual_list[0]
-                            print(f"[FS] 사업보고서 객체 찾음: {annual_report.report_nm}")
+                            print(f"[FS] 사업보고서 객체 찾음: {annual_report.report_nm} (총 {len(annual_list)}개)")
                 except Exception as e:
                     print(f"[FS] 사업보고서 객체 검색 실패: {e}")
 
@@ -1232,113 +1303,141 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                     if has_current_year_annual:
                         break
 
-                # 사업보고서 HTML 주석 페이지 추출
+                # 사업보고서 HTML 주석 페이지 추출 (모든 사업보고서 순회)
+                # annual_list 전체를 순회하여 각 연도의 주석 테이블을 추출
+                reports_to_process = []
                 if annual_report and hasattr(annual_report, 'pages'):
-                    print(f"[FS] 사업보고서 HTML 주석 페이지 추출 시도...")
-                    try:
-                        # 보고서 연도 추출 (예: "사업보고서 (2023.12)" -> 2023)
-                        import re
-                        year_match = re.search(r'\((\d{4})', annual_report.report_nm)
-                        report_year = int(year_match.group(1)) if year_match else current_year
+                    reports_to_process = [annual_report]
+                # annual_list의 나머지 보고서도 추가 (첫번째는 이미 포함)
+                for ar in annual_list[1:]:
+                    if hasattr(ar, 'pages'):
+                        reports_to_process.append(ar)
 
-                        html_notes = extract_fs_from_pages(annual_report, report_year)
-                        if html_notes and html_notes.get('notes'):
-                            # HTML 주석을 XBRL 주석과 병합
-                            if fs_data.get('notes'):
-                                # 기존 XBRL 주석이 있으면 병합
+                if reports_to_process:
+                    print(f"[FS] 사업보고서 HTML 주석 추출: {len(reports_to_process)}개 보고서 처리")
+                    import re
+                    all_html_fy_cols = set()  # 이미 추출된 FY 컬럼 추적
+
+                    for rpt_idx, rpt in enumerate(reports_to_process):
+                        try:
+                            year_match = re.search(r'\((\d{4})', rpt.report_nm)
+                            rpt_year = int(year_match.group(1)) if year_match else current_year - rpt_idx
+                            print(f"[FS] 사업보고서 [{rpt_idx}] 처리: {rpt.report_nm} → 보고서연도={rpt_year}")
+
+                            html_notes = extract_fs_from_pages(rpt, rpt_year)
+                            if html_notes and html_notes.get('notes'):
+                                # 모든 주석 테이블을 추가 (VCM 스코어링에서 우선순위 결정)
                                 for note_type in ['is_notes', 'bs_notes', 'cf_notes']:
-                                    if html_notes['notes'].get(note_type):
-                                        fs_data['notes'][note_type].extend(html_notes['notes'][note_type])
-                            else:
-                                # 주석이 없으면 그대로 사용
-                                fs_data['notes'] = html_notes['notes']
-                            print(f"[FS] HTML 주석 병합 완료: IS={len(fs_data['notes'].get('is_notes', []))}개")
+                                    new_notes = html_notes['notes'].get(note_type, [])
+                                    valid_notes = []
+                                    for note in new_notes:
+                                        note_df = note.get('df')
+                                        if note_df is not None and not note_df.empty:
+                                            fy_cols_in_note = [c for c in note_df.columns if str(c).startswith('FY')]
+                                            if fy_cols_in_note:
+                                                valid_notes.append(note)
+                                                all_html_fy_cols.update(fy_cols_in_note)
 
-                            # ★ 핵심: 주석 데이터를 실제 DataFrame에 병합 (Excel 저장 전에 반영)
-                            import pandas as pd
+                                    if valid_notes:
+                                        if not fs_data.get('notes'):
+                                            fs_data['notes'] = {'bs_notes': [], 'is_notes': [], 'cf_notes': [], 'other_notes': []}
+                                        fs_data['notes'][note_type].extend(valid_notes)
+                                        print(f"[FS] 보고서[{rpt_idx}] {note_type} 주석 {len(valid_notes)}개 추가")
 
-                            # 손익계산서 주석을 cis 또는 is DataFrame에 병합
-                            is_notes = fs_data['notes'].get('is_notes', [])
-                            if is_notes:
-                                # cis 우선, 없으면 is 사용
-                                target_key = 'cis' if fs_data.get('cis') is not None else 'is'
-                                if fs_data.get(target_key) is not None:
-                                    print(f"[FS] {target_key}에 HTML 주석 병합 시도...")
-                                    base_df = fs_data[target_key]
+                                print(f"[FS] 보고서[{rpt_idx}] HTML 주석 병합 완료")
 
-                                    # ★ 핵심 수정: base_df를 먼저 정규화하여 컬럼 구조 통일
-                                    base_df_normalized = normalize_xbrl_columns(base_df)
+                            # DART API 속도 제한 방지
+                            import time
+                            time.sleep(0.5)
 
-                                    for note in is_notes:
-                                        try:
-                                            note_df = note['df']
-                                            if note_df is not None and not note_df.empty:
-                                                print(f"[FS] IS 주석 병합: shape={note_df.shape}")
-                                                # 계정과목 컬럼이 있는지 확인
-                                                if '계정과목' in note_df.columns:
-                                                    # 기존 계정과목 목록
-                                                    existing_accounts = set(base_df_normalized['계정과목'].values) if '계정과목' in base_df_normalized.columns else set()
-                                                    # 새로운 계정과목만 추가
-                                                    new_rows = note_df[~note_df['계정과목'].isin(existing_accounts)].copy()
-                                                    if len(new_rows) > 0:
-                                                        # ★ 주석 데이터는 천원 단위이므로 원 단위로 변환 (*1000)
-                                                        def convert_to_won(val):
-                                                            """천원 단위를 원 단위로 변환"""
-                                                            if pd.isna(val):
-                                                                return val
-                                                            try:
-                                                                val_str = str(val).replace(',', '').replace('(', '').replace(')', '').strip()
-                                                                if val_str == '' or val_str == '-':
-                                                                    return None
-                                                                return float(val_str) * 1000
-                                                            except:
-                                                                return val
+                        except Exception as e:
+                            print(f"[FS] 보고서[{rpt_idx}] HTML 주석 추출 실패: {e}")
+                            import traceback
+                            print(f"[FS] 상세: {traceback.format_exc()}")
 
-                                                        for col in new_rows.columns:
-                                                            if col.startswith('FY'):
-                                                                new_rows[col] = new_rows[col].apply(convert_to_won)
-                                                        print(f"[FS] IS 주석 단위 변환 완료 (천원→원)")
-                                                        # 정규화된 DataFrame에 병합
-                                                        base_df_normalized = pd.concat([base_df_normalized, new_rows], ignore_index=True)
-                                                        print(f"[FS] IS 주석 {len(new_rows)}개 행 추가")
-                                                        for acc in new_rows['계정과목'].head(5):
-                                                            print(f"[FS]   - {acc}")
-                                        except Exception as e:
-                                            print(f"[FS] IS 주석 병합 실패: {e}")
+                    print(f"[FS] 전체 HTML 주석 병합 완료: IS={len(fs_data.get('notes', {}).get('is_notes', []))}개, 추출된 FY={sorted(all_html_fy_cols)}")
 
-                                    fs_data[target_key] = base_df_normalized
-                                    print(f"[FS] {target_key} 병합 완료: {len(base_df_normalized)}개 행")
+                    # ★ 핵심: 주석 데이터를 실제 DataFrame에 병합 (Excel 저장 전에 반영)
+                    import pandas as pd
 
-                            # 재무상태표 주석을 bs DataFrame에 병합
-                            bs_notes = fs_data['notes'].get('bs_notes', [])
-                            if bs_notes and fs_data.get('bs') is not None:
-                                print(f"[FS] bs에 HTML 주석 병합 시도...")
-                                base_df = fs_data['bs']
+                    # 손익계산서 주석을 cis 또는 is DataFrame에 병합
+                    if fs_data.get('notes'):
+                        is_notes = fs_data['notes'].get('is_notes', [])
+                        if is_notes:
+                            # cis 우선, 없으면 is 사용
+                            target_key = 'cis' if fs_data.get('cis') is not None else 'is'
+                            if fs_data.get(target_key) is not None:
+                                print(f"[FS] {target_key}에 HTML 주석 병합 시도...")
+                                base_df = fs_data[target_key]
 
                                 # ★ 핵심 수정: base_df를 먼저 정규화하여 컬럼 구조 통일
                                 base_df_normalized = normalize_xbrl_columns(base_df)
 
-                                for note in bs_notes:
+                                for note in is_notes:
                                     try:
                                         note_df = note['df']
                                         if note_df is not None and not note_df.empty:
-                                            note_df_normalized = normalize_xbrl_columns(note_df)
-                                            if '계정과목' in note_df_normalized.columns:
+                                            print(f"[FS] IS 주석 병합: shape={note_df.shape}")
+                                            # 계정과목 컬럼이 있는지 확인
+                                            if '계정과목' in note_df.columns:
+                                                # 기존 계정과목 목록
                                                 existing_accounts = set(base_df_normalized['계정과목'].values) if '계정과목' in base_df_normalized.columns else set()
-                                                new_rows = note_df_normalized[~note_df_normalized['계정과목'].isin(existing_accounts)]
+                                                # 새로운 계정과목만 추가
+                                                new_rows = note_df[~note_df['계정과목'].isin(existing_accounts)].copy()
                                                 if len(new_rows) > 0:
+                                                    # ★ 주석 데이터는 천원 단위이므로 원 단위로 변환 (*1000)
+                                                    def convert_to_won(val):
+                                                        """천원 단위를 원 단위로 변환"""
+                                                        if pd.isna(val):
+                                                            return val
+                                                        try:
+                                                            val_str = str(val).replace(',', '').replace('(', '').replace(')', '').strip()
+                                                            if val_str == '' or val_str == '-':
+                                                                return None
+                                                            return float(val_str) * 1000
+                                                        except:
+                                                            return val
+
+                                                    for col in new_rows.columns:
+                                                        if col.startswith('FY'):
+                                                            new_rows[col] = new_rows[col].apply(convert_to_won)
+                                                    print(f"[FS] IS 주석 단위 변환 완료 (천원→원)")
+                                                    # 정규화된 DataFrame에 병합
                                                     base_df_normalized = pd.concat([base_df_normalized, new_rows], ignore_index=True)
-                                                    print(f"[FS] BS 주석 {len(new_rows)}개 행 추가")
+                                                    print(f"[FS] IS 주석 {len(new_rows)}개 행 추가")
+                                                    for acc in new_rows['계정과목'].head(5):
+                                                        print(f"[FS]   - {acc}")
                                     except Exception as e:
-                                        print(f"[FS] BS 주석 병합 실패: {e}")
+                                        print(f"[FS] IS 주석 병합 실패: {e}")
 
-                                fs_data['bs'] = base_df_normalized
-                                print(f"[FS] BS 병합 완료: {len(base_df_normalized)}개 행")
+                                fs_data[target_key] = base_df_normalized
+                                print(f"[FS] {target_key} 병합 완료: {len(base_df_normalized)}개 행")
 
-                    except Exception as e:
-                        print(f"[FS] HTML 주석 추출 실패: {e}")
-                        import traceback
-                        print(f"[FS] 상세: {traceback.format_exc()}")
+                        # 재무상태표 주석을 bs DataFrame에 병합
+                        bs_notes = fs_data['notes'].get('bs_notes', [])
+                        if bs_notes and fs_data.get('bs') is not None:
+                            print(f"[FS] bs에 HTML 주석 병합 시도...")
+                            base_df = fs_data['bs']
+
+                            # ★ 핵심 수정: base_df를 먼저 정규화하여 컬럼 구조 통일
+                            base_df_normalized = normalize_xbrl_columns(base_df)
+
+                            for note in bs_notes:
+                                try:
+                                    note_df = note['df']
+                                    if note_df is not None and not note_df.empty:
+                                        note_df_normalized = normalize_xbrl_columns(note_df)
+                                        if '계정과목' in note_df_normalized.columns:
+                                            existing_accounts = set(base_df_normalized['계정과목'].values) if '계정과목' in base_df_normalized.columns else set()
+                                            new_rows = note_df_normalized[~note_df_normalized['계정과목'].isin(existing_accounts)]
+                                            if len(new_rows) > 0:
+                                                base_df_normalized = pd.concat([base_df_normalized, new_rows], ignore_index=True)
+                                                print(f"[FS] BS 주석 {len(new_rows)}개 행 추가")
+                                except Exception as e:
+                                    print(f"[FS] BS 주석 병합 실패: {e}")
+
+                            fs_data['bs'] = base_df_normalized
+                            print(f"[FS] BS 병합 완료: {len(base_df_normalized)}개 행")
 
                 # 당해년도 사업보고서가 있으면 바로 반환
                 if has_current_year_annual:
@@ -1912,9 +2011,16 @@ def extract_fs_from_pages(report, report_year=None):
                             print(f"[PAGES] 상세: {traceback.format_exc()}")
                         break
 
-            # 주석 페이지 찾기 (재무제표 주석, 주석사항 등)
-            if any(kw in page_title_normalized for kw in ['주석', 'Notes', '주석사항']):
-                print(f"[PAGES] 주석 페이지 발견: {page_title}")
+            # 주석 페이지 찾기 (재무제표 주석, 주석사항, 개별 비용 주석 페이지 등)
+            is_note_page = any(kw in page_title_normalized for kw in ['주석', 'Notes', '주석사항'])
+            # 개별 비용 관련 주석 페이지도 포함 (예: "24. 판매비 및 관리비", "28. 비용의 성격별 분류")
+            is_expense_page = any(kw in page_title_normalized for kw in [
+                '판매비', '관리비', '판관비', '비용의성격별분류', '비용의성격별',
+                '매출원가', '매출액과매출원가'
+            ])
+            if is_note_page or is_expense_page:
+                page_type_label = '비용주석' if is_expense_page else '주석'
+                print(f"[PAGES] {page_type_label} 페이지 발견: {page_title}")
                 try:
                     html = page.html if hasattr(page, 'html') else None
                     if html:
@@ -1922,6 +2028,63 @@ def extract_fs_from_pages(report, report_year=None):
                         from io import StringIO
                         soup = BeautifulSoup(html, 'html.parser')
                         tables = pd.read_html(StringIO(str(soup)))
+
+                        # ★ 분리형 테이블 감지 및 병합 (당기/전기가 별도 테이블로 분리된 경우)
+                        # 패턴: [헤더(당기)] [데이터] [헤더(전기)] [데이터]
+                        if is_expense_page and len(tables) >= 2:
+                            period_data = {}  # {'FY2024': df, 'FY2023': df, ...}
+                            current_period = None
+                            for tidx, tbl in enumerate(tables):
+                                tbl_str = tbl.to_string()
+                                # 헤더 테이블 감지 (당기/전기/전전기 + 단위)
+                                if len(tbl) <= 2:
+                                    for val in tbl.values.flat:
+                                        val_str = re.sub(r'\s', '', str(val))
+                                        if '당기' in val_str or '금기' in val_str:
+                                            year = report_year if report_year else 2024
+                                            current_period = f'FY{year}'
+                                        elif '전전기' in val_str:
+                                            year = (report_year - 2) if report_year else 2022
+                                            current_period = f'FY{year}'
+                                        elif '전기' in val_str:
+                                            year = (report_year - 1) if report_year else 2023
+                                            current_period = f'FY{year}'
+                                    continue
+
+                                # 데이터 테이블 (현재 period가 설정된 상태)
+                                if current_period and len(tbl) > 2 and len(tbl.columns) == 2:
+                                    # 비용 키워드 확인
+                                    expense_keywords_check = ['급여', '복리후생', '감가상각', '수수료', '퇴직급여', '종업원', '원재료']
+                                    if any(kw in tbl_str for kw in expense_keywords_check):
+                                        # 계정과목 + 금액 형태
+                                        clean_df = tbl.copy()
+                                        clean_df.columns = ['계정과목', current_period]
+                                        # 계정과목 정제: "급여, 판관비" → "급여"
+                                        clean_df['계정과목'] = clean_df['계정과목'].apply(
+                                            lambda x: re.sub(r',\s*(판관비|판매비와관리비|비용의\s*성격별\s*분류)$', '', str(x)).strip()
+                                        )
+                                        period_data[current_period] = clean_df
+                                        print(f"[PAGES] 분리형 테이블 발견: {current_period}, rows={len(clean_df)}")
+                                        current_period = None  # 다음 헤더 대기
+
+                            # 분리형 테이블 병합
+                            if len(period_data) >= 1:
+                                # 모든 period 데이터를 하나의 DataFrame으로 병합
+                                merged_df = None
+                                for fy, df in sorted(period_data.items()):
+                                    if merged_df is None:
+                                        merged_df = df
+                                    else:
+                                        merged_df = merged_df.merge(df, on='계정과목', how='outer')
+
+                                if merged_df is not None and len(merged_df) > 2:
+                                    notes_tables['is_notes'].append({
+                                        'name': page_title,
+                                        'df': merged_df,
+                                        'consolidated': True
+                                    })
+                                    print(f"[PAGES] 분리형 IS 주석 테이블 추가: {merged_df.shape}, 컬럼={list(merged_df.columns)}")
+                                    continue  # 이 페이지의 추가 처리 불필요
 
                         for idx, table in enumerate(tables):
                             # 급여, 복리후생비, 감가상각비 등이 포함된 테이블 찾기
@@ -2328,12 +2491,18 @@ def create_vcm_format(fs_data, excel_filepath=None):
             if isinstance(note, dict) and 'df' in note:
                 note_df = note['df']
                 if note_df is not None and not note_df.empty:
+                    # XBRL 튜플 컬럼을 FY 형식으로 정규화 (search_notes에서 FY 컬럼 매칭 필요)
+                    has_tuple_cols = any(isinstance(c, tuple) for c in note_df.columns)
+                    if has_tuple_cols:
+                        note_df = normalize_xbrl_columns(note_df)
                     # 계정과목 컬럼이 없으면 첫 번째 컬럼을 계정과목으로 설정
                     if '계정과목' not in note_df.columns:
                         first_col = note_df.columns[0]
                         note_df = note_df.rename(columns={first_col: '계정과목'})
                     notes_dfs.append(note_df)
-                    print(f"[VCM] XBRL 주석 추가: {note.get('name', 'unknown')}, {len(note_df)}개 행")
+                    all_cols = list(note_df.columns)
+                    fy_cols_found = [c for c in all_cols if str(c).startswith('FY')]
+                    print(f"[VCM] XBRL 주석 추가: {note.get('name', 'unknown')}, {len(note_df)}개 행, 전체컬럼: {all_cols[:8]}, FY컬럼: {fy_cols_found}")
 
     # 주석 테이블 우선순위 정렬: 종합 비용 테이블 먼저 검색하도록
     # 급여, 감가상각비, 지급수수료 등 여러 키워드가 모두 있는 테이블을 우선
@@ -2342,7 +2511,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
         if '계정과목' not in df.columns:
             return 0
         try:
-            acc_str = df['계정과목'].astype(str).str.cat(sep=' ')
+            col = df['계정과목']
+            if isinstance(col, pd.DataFrame):
+                col = col.iloc[:, 0]
+            acc_str = col.astype(str).str.cat(sep=' ')
             score = 0
             # 종합 비용 테이블 특징 키워드
             priority_keywords = ['직원급여', '퇴직급여', '감가상각비', '지급수수료', '광고선전비', '수도광열비']
@@ -2356,12 +2528,25 @@ def create_vcm_format(fs_data, excel_filepath=None):
         except:
             return 0
 
+    def safe_get_accounts(df, limit=None):
+        """'계정과목' 컬럼을 안전하게 추출 (중복 컬럼 대응)"""
+        col = df['계정과목']
+        if isinstance(col, pd.DataFrame):
+            col = col.iloc[:, 0]  # 중복 시 첫 번째 컬럼 사용
+        result = col.astype(str).tolist()
+        return result[:limit] if limit else result
+
+    # 주석 테이블 중복 컬럼 정제
+    for i, df in enumerate(notes_dfs):
+        if df.columns.duplicated().any():
+            notes_dfs[i] = df.loc[:, ~df.columns.duplicated()]
+
     # 정렬 전 디버그 로깅
     print(f"[VCM] === 정렬 전 디버그 시작: {len(notes_dfs)}개 테이블 ===")
     for i, df in enumerate(notes_dfs):
         score = score_expense_table(df)
         if '계정과목' in df.columns:
-            accounts = df['계정과목'].astype(str).tolist()[:5]
+            accounts = safe_get_accounts(df, 5)
             print(f"[VCM] 주석 테이블 [{i}]: {len(df)}행, score={score}, accounts={accounts}...")
         else:
             print(f"[VCM] 주석 테이블 [{i}]: {len(df)}행, score={score}, 계정과목 컬럼 없음")
@@ -2371,7 +2556,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
         print(f"[VCM] 주석 테이블 정렬 완료: {len(notes_dfs)}개, 최우선 테이블 행수: {len(notes_dfs[0])}")
         # 최우선 테이블 상세 정보
         if '계정과목' in notes_dfs[0].columns:
-            accounts = notes_dfs[0]['계정과목'].astype(str).tolist()
+            accounts = safe_get_accounts(notes_dfs[0])
             print(f"[VCM] 최우선 테이블 계정과목: {accounts}")
 
     # 데이터 형식 감지: XBRL vs 감사보고서
@@ -2461,7 +2646,108 @@ def create_vcm_format(fs_data, excel_filepath=None):
     
     # 정렬된 원본 컬럼 목록
     fy_cols = sorted(fy_col_map.keys(), key=lambda c: fy_col_map[c])
-    
+
+    # ★ 2컬럼 주석 테이블에 FY 연도 컬럼 부여
+    # XBRL 주석 테이블은 ['계정과목', <값>] 형태로 FY 컬럼이 없음
+    # IS의 판관비 값과 비교하여 어떤 연도의 테이블인지 매핑
+    def _assign_fy_to_notes():
+        """2컬럼 주석 테이블에 FY 연도 할당"""
+        # IS에서 판관비 값 추출 (연도별)
+        sga_by_year = {}  # {year_str: sga_value}
+        for fy_col in fy_cols:
+            yr = fy_col_map[fy_col]
+            for _, row in is_df.iterrows():
+                acc = str(row.get(account_col, ''))
+                acc_norm = re.sub(r'\s', '', acc)
+                if '판매비와관리비' in acc_norm or '판매비및관리비' in acc_norm or '판관비' in acc_norm:
+                    val = row.get(fy_col)
+                    if isinstance(val, pd.Series):
+                        val = val.iloc[0]
+                    if pd.notna(val):
+                        try:
+                            sga_by_year[yr] = abs(float(str(val).replace(',', '')))
+                        except:
+                            pass
+                    break
+
+        if not sga_by_year:
+            return
+
+        # 판관비 합계가 있는 주석 테이블 찾기 → FY 연도 매핑
+        # 2컬럼 테이블뿐만 아니라 3컬럼(계정과목+당기+전기) 테이블도 처리
+        for i, note_df in enumerate(notes_dfs):
+            if '계정과목' not in note_df.columns:
+                continue
+
+            non_acc_cols = [c for c in note_df.columns if c != '계정과목']
+            if not non_acc_cols:
+                continue
+
+            # 이미 FY 컬럼만 있으면 스킵
+            fy_data_cols = [c for c in non_acc_cols if str(c).startswith('FY')]
+            non_fy_cols = [c for c in non_acc_cols if not str(c).startswith('FY')]
+
+            if not non_fy_cols:
+                continue  # 모든 데이터 컬럼이 이미 FY → 스킵
+
+            # 2컬럼(계정과목+1데이터) 또는 3컬럼 이하만 처리
+            if len(non_fy_cols) > 2:
+                continue
+
+            # 각 non-FY 데이터 컬럼에 대해 FY 매핑 시도
+            for data_col in non_fy_cols:
+                # 판관비 합계 행 찾기
+                sga_total = None
+                for _, row in note_df.iterrows():
+                    acc = re.sub(r'\s', '', str(row.get('계정과목', '')))
+                    if '판매비와관리비합계' in acc or '판관비합계' in acc or acc == '판매비와관리비':
+                        try:
+                            v = str(row[data_col]).replace(',', '').replace('(', '-').replace(')', '')
+                            sga_total = abs(float(v)) * 1000  # 주석은 천원 → 원
+                        except:
+                            pass
+                        break
+
+                if sga_total is None:
+                    # 비용의 성격별 분류: '성격별비용합계' 행 찾기
+                    for _, row in note_df.iterrows():
+                        acc = re.sub(r'\s', '', str(row.get('계정과목', '')))
+                        if '성격별비용합계' in acc or '비용합계' in acc:
+                            try:
+                                v = str(row[data_col]).replace(',', '').replace('(', '-').replace(')', '')
+                                sga_total = abs(float(v)) * 1000
+                            except:
+                                pass
+                            break
+
+                if sga_total is None:
+                    print(f"[VCM] 주석 테이블 [{i}] col={data_col} FY매핑 스킵: 판관비합계 없음, rows={len(note_df)}")
+                    continue
+
+                if not sga_by_year:
+                    print(f"[VCM] 주석 테이블 [{i}] col={data_col} FY매핑 스킵: 남은 IS연도 없음")
+                    break
+
+                # IS 판관비 값과 매칭 (20% 허용오차)
+                best_year = None
+                best_diff = float('inf')
+                for yr, is_val in sga_by_year.items():
+                    diff = abs(sga_total - is_val) / max(is_val, 1)
+                    if diff < 0.2 and diff < best_diff:
+                        best_diff = diff
+                        best_year = yr
+
+                if best_year:
+                    notes_dfs[i] = note_df.rename(columns={data_col: best_year})
+                    note_df = notes_dfs[i]  # 다음 컬럼 처리를 위해 갱신
+                    print(f"[VCM] 주석 테이블 [{i}] FY매핑: {data_col} → {best_year} (판관비 {sga_total/1e6:.0f}M vs IS {sga_by_year[best_year]/1e6:.0f}M, diff={best_diff:.1%})")
+                    # 매핑된 연도는 제거 (다른 테이블에 중복 매핑 방지)
+                    del sga_by_year[best_year]
+                else:
+                    print(f"[VCM] 주석 테이블 [{i}] FY매핑 실패: col={data_col}, note_sga={sga_total/1e6:.0f}M, 남은 IS: {{{', '.join(f'{yr}={v/1e6:.0f}M' for yr, v in sga_by_year.items())}}}")
+
+    _assign_fy_to_notes()
+
     # 계정과목 정규화 함수
     def normalize(s):
         if not s: return ''
@@ -2996,8 +3282,8 @@ def create_vcm_format(fs_data, excel_filepath=None):
     # ========== 판관비 상위 6개 항목 미리 결정 (모든 연도 합계 기준) ==========
     def get_sga_items_for_year(is_df, year):
         """특정 연도의 모든 판관비 항목 값을 반환"""
-        급여 = find_val(is_df, ['급여', '직원급여', '종업원급여'], year, ['퇴직', '연차']) or 0
-        퇴직급여 = find_val(is_df, ['퇴직급여'], year) or 0
+        급여 = find_val(is_df, ['급여', '직원급여', '종업원급여'], year, ['퇴직', '연차', '확정급여', '재측정', '보험수리', '순확정', '경영진', '만기', '지급액']) or 0
+        퇴직급여 = find_val(is_df, ['퇴직급여'], year, ['확정급여', '재측정', '보험수리', '순확정', '경영진']) or 0
         복리후생비 = find_val(is_df, ['복리후생비'], year) or 0
         기타장기종업원급여 = find_val(is_df, ['기타장기종업원급여'], year) or 0
         주식보상비용 = find_val(is_df, ['주식보상비용', '주식기준보상비용'], year) or 0
@@ -3106,6 +3392,19 @@ def create_vcm_format(fs_data, excel_filepath=None):
     non_op_expense_rest_names = [item[0] for item in non_op_expense_sorted[5:]]  # 기타에 포함될 항목들
     print(f"[VCM] 영업외비용 상위 5개 항목: {non_op_expense_top5_names}")
 
+    # ========== 서비스업 여부를 연도 루프 전에 미리 결정 ==========
+    # 어떤 연도라도 판관비가 존재하면 제조업으로 판단 (첫 연도 기준 오류 방지)
+    _pre_service_check = False
+    for _check_year in fy_cols:
+        _check_sga = find_val(is_df, ['판매비와관리비', '판매비및관리비', '판관비'], _check_year) or 0
+        if _check_sga > 0:
+            _pre_service_check = False
+            break
+        _check_opex = find_val(is_df, ['영업비용'], _check_year, ['매출원가', '원가']) or 0
+        if _check_opex > 0:
+            _pre_service_check = True
+    print(f"[VCM] 서비스업 사전 판정: {_pre_service_check}")
+
     # 각 연도별 값 계산
     rows = []
     for year in fy_cols:
@@ -3171,9 +3470,9 @@ def create_vcm_format(fs_data, excel_filepath=None):
         # 판매비와관리비: 손익계산서에서 직접 찾기 시도
         판관비_direct = find_val(is_df, ['판매비와관리비', '판매비및관리비', '판관비'], year) or 0
 
-        # 서비스업 여부 판단: 판관비 계정이 없고 영업비용이 있으면 서비스업
-        # 서비스업은 영업비용에 모든 비용이 포함되어 있으므로 판관비를 별도 계산하지 않음
-        is_service_business = (판관비_direct == 0) and (영업비용 > 0)
+        # 서비스업 여부 판단: 사전 판정 결과 사용 (첫 연도 기준 오류 방지)
+        # 개별 연도에서 판관비가 0이어도 다른 연도에 판관비가 있으면 제조업
+        is_service_business = _pre_service_check
 
         if is_service_business:
             # 서비스업: 판관비는 0 (영업비용에 이미 포함)
@@ -3183,7 +3482,12 @@ def create_vcm_format(fs_data, excel_filepath=None):
             판관비 = 판관비_direct if 판관비_direct else (인건비 + sum(v for _, v in sga_top5) + 기타판관비)
 
         # 영업이익: 손익계산서에서 직접 찾기 시도 (항상 원본값 우선)
-        영업이익_direct = find_val(is_df, ['영업이익', '영업손익', '영업손실'], year) or 0
+        # 영업손실은 음수로 변환 필요
+        영업이익_direct = find_val(is_df, ['영업이익', '영업손익'], year) or 0
+        if not 영업이익_direct:
+            영업손실_direct = find_val(is_df, ['영업손실'], year) or 0
+            if 영업손실_direct > 0:
+                영업이익_direct = -영업손실_direct  # 영업손실은 음수로 변환
         영업이익 = 영업이익_direct if 영업이익_direct else (매출총이익 - 판관비)
 
         # 영업외수익/비용: 직접 찾은 값 > 항목 합계 > fallback
@@ -3197,7 +3501,12 @@ def create_vcm_format(fs_data, excel_filepath=None):
         세전이익 = 세전이익_direct if 세전이익_direct else (영업이익 + 영업외수익 - 영업외비용)
 
         # 당기순이익: 손익계산서에서 직접 찾기 시도
+        # 당기순손실은 음수로 변환 필요
         당기순이익_direct = find_val(is_df, ['당기순이익', '당기순손익', '총당기순이익'], year) or 0
+        if not 당기순이익_direct:
+            당기순손실_direct = find_val(is_df, ['당기순손실'], year) or 0
+            if 당기순손실_direct > 0:
+                당기순이익_direct = -당기순손실_direct
         당기순이익 = 당기순이익_direct if 당기순이익_direct else (세전이익 - (법인세 or 0))
         
         values = {
@@ -4187,15 +4496,14 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     else:
                         display_row[col] = val
                 else:
-                    # 숫자는 백만원 단위로 변환하고 포맷팅
+                    # 숫자는 백만원 단위로 변환하고 포맷팅 (정수로 표시)
                     converted = val / unit_divisor
-                    # 소수점 1자리까지 표시, 천 단위 콤마 (0.0이면 빈값 처리)
-                    if abs(converted) < 0.05:
-                        display_row[col] = ''  # 너무 작으면 빈값
-                    elif converted == int(converted):
-                        display_row[col] = f"{int(converted):,}"  # 정수면 소수점 없이
+                    # 정수로 반올림, 천 단위 콤마 (0이면 빈값 처리)
+                    rounded = round(converted)
+                    if rounded == 0:
+                        display_row[col] = ''  # 0이면 빈값
                     else:
-                        display_row[col] = f"{converted:,.1f}"  # 소수점 1자리
+                        display_row[col] = f"{rounded:,}"  # 정수로 표시
             else:
                 display_row[col] = ''
 
@@ -4609,8 +4917,10 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                 bold_font = Font(bold=True)
                 th_font = Font(color='FFFFFF', bold=True)  # 컬럼 헤더용 흰색 글자
                 total_font = Font(bold=True, color='92400e')
-                highlight_font = Font(bold=True, color='dc2626')
+                highlight_font = Font(bold=True, color='991b1b')
                 gray_font = Font(color='6b7280')
+                negative_font = Font(color='dc2626')  # 음수용 빨간색 폰트
+                negative_bold_font = Font(bold=True, color='dc2626')  # 음수용 굵은 빨간색 폰트
                 thin_border = Border(bottom=Side(style='thin', color='e5e7eb'))
 
                 # 컬럼 정보
@@ -4664,8 +4974,23 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                     for row_idx, (_, row_data) in enumerate(df_rows.iterrows()):
                         item_type = types_list[row_idx] if row_idx < len(types_list) else 'item'
                         for col_idx, col_name in enumerate(data_cols):
-                            cell = ws.cell(row=3 + row_idx, column=start_col + col_idx, value=row_data[col_name])
+                            cell_value = row_data[col_name]
+                            cell = ws.cell(row=3 + row_idx, column=start_col + col_idx, value=cell_value)
                             apply_cell_style(cell, item_type, is_first_col=(col_idx == 0))
+
+                            # 숫자 컬럼에서 음수인 경우 빨간색 글자 적용
+                            if col_idx > 0 and cell_value is not None:
+                                try:
+                                    # 문자열에서 숫자 추출 (콤마 제거)
+                                    num_val = float(str(cell_value).replace(',', '')) if isinstance(cell_value, str) else float(cell_value)
+                                    if num_val < 0:
+                                        # 기존 스타일 유지하면서 글자색만 빨간색으로
+                                        if item_type in ['total', 'highlight', 'category']:
+                                            cell.font = negative_bold_font
+                                        else:
+                                            cell.font = negative_font
+                                except (ValueError, TypeError):
+                                    pass
 
                 # 재무상태표 작성 (A열부터)
                 write_table(1, '재무상태표', bs_rows, bs_types)

@@ -513,8 +513,20 @@
 
         async function updateUser(userId, field, value) {
             try {
+                // 토큰 변경 시 확인 다이얼로그
+                if (field === 'tokens') {
+                    if (!confirm(`토큰을 ${value}개로 변경하시겠습니까?`)) {
+                        loadUsers();  // 취소 시 원래 값 복원
+                        return;
+                    }
+                }
+
                 const body = {};
-                body[field] = value || null;
+                if (field === 'tokens') {
+                    body[field] = value;  // 0도 정상 저장
+                } else {
+                    body[field] = value || null;
+                }
 
                 const response = await fetch(`/api/admin/users/${userId}`, {
                     method: 'PUT',
@@ -527,8 +539,8 @@
                     throw new Error(data.detail || '수정 실패');
                 }
 
-                // 등급 변경 시 통계 새로고침
-                if (field === 'tier') {
+                // 등급 또는 토큰 변경 시 목록 새로고침
+                if (field === 'tier' || field === 'tokens') {
                     loadUsers();
                 }
 
