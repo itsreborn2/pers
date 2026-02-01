@@ -13,6 +13,7 @@ import asyncio
 import uuid
 import threading
 import math
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -37,8 +38,14 @@ import pandas as pd
 # ============================================================
 # 전역 변수: 작업 상태 관리
 # ============================================================
-# 작업 ID별 상태 저장: {task_id: {"status": "...", "progress": 0, "message": "...", "file_path": "...", "cancelled": False}}
+# 작업 ID별 상태 저장: {task_id: {"status": "...", "progress": 0, "message": "...", "file_path": "...",
+#                               "cancelled": False, "last_accessed": timestamp, "created_at": timestamp}}
 TASKS: Dict[str, Dict[str, Any]] = {}
+TASKS_LOCK = threading.Lock()
+
+# 메모리 정리 설정
+TASK_IDLE_TIMEOUT = 120  # 진행 중 작업: 2분간 status 조회 없으면 취소
+TASK_COMPLETED_TTL = 300  # 완료된 작업: 5분 후 전체 삭제 (파일은 유지)
 
 # 기업 리스트 캐시 (한 번만 로드)
 CORP_LIST = None
@@ -133,20 +140,91 @@ def get_corp_list():
         return CORP_LIST
 
 
-def cleanup_task(task_id: str):
-    """작업 정리 및 메모리 회수"""
-    if task_id in TASKS:
+def cleanup_task(task_id: str, force_delete: bool = False):
+    """작업 정리 및 메모리 회수
+
+    Args:
+        task_id: 작업 ID
+        force_delete: True면 파일 포함 완전 삭제, False면 preview_data만 정리
+    """
+    with TASKS_LOCK:
+        if task_id not in TASKS:
+            return
+
         task = TASKS[task_id]
-        # 임시 파일 삭제 (취소된 경우)
+
+        # 취소된 작업: 파일 삭제 및 TASKS에서 제거
         if task.get('cancelled') and task.get('file_path'):
             try:
                 if os.path.exists(task['file_path']):
                     os.remove(task['file_path'])
+                    print(f"[CLEANUP] 취소된 작업 파일 삭제: {task_id}")
             except Exception:
                 pass
-        # 작업 정보는 다운로드 후 삭제하도록 유지
-        if task.get('cancelled'):
+
+        if task.get('cancelled') or force_delete:
             del TASKS[task_id]
+            print(f"[CLEANUP] 작업 삭제: {task_id}")
+        else:
+            # 완료된 작업: preview_data만 정리 (파일 경로는 유지)
+            if 'preview_data' in task:
+                del task['preview_data']
+                print(f"[CLEANUP] preview_data 정리: {task_id}")
+
+
+def cleanup_preview_data(task_id: str):
+    """완료된 작업의 preview_data만 정리 (다운로드는 유지)"""
+    with TASKS_LOCK:
+        if task_id in TASKS and 'preview_data' in TASKS[task_id]:
+            del TASKS[task_id]['preview_data']
+            print(f"[CLEANUP] preview_data 정리: {task_id}")
+
+
+def background_cleanup_thread():
+    """백그라운드에서 주기적으로 오래된 작업 정리"""
+    while True:
+        try:
+            time.sleep(30)  # 30초마다 체크
+            current_time = time.time()
+
+            with TASKS_LOCK:
+                tasks_to_cleanup = []
+
+                for task_id, task in list(TASKS.items()):
+                    last_accessed = task.get('last_accessed', task.get('created_at', current_time))
+                    status = task.get('status', '')
+
+                    # 진행 중 작업: TASK_IDLE_TIMEOUT 동안 조회 없으면 취소
+                    if status == 'running':
+                        if current_time - last_accessed > TASK_IDLE_TIMEOUT:
+                            task['cancelled'] = True
+                            task['status'] = 'cancelled'
+                            task['message'] = '사용자 이탈로 작업 취소됨'
+                            tasks_to_cleanup.append((task_id, True))  # 파일 포함 삭제
+                            print(f"[CLEANUP] 유휴 작업 취소: {task_id} (마지막 조회: {int(current_time - last_accessed)}초 전)")
+
+                    # 완료된 작업: TASK_COMPLETED_TTL 이후 전체 삭제
+                    elif status == 'completed':
+                        completed_at = task.get('completed_at', last_accessed)
+                        if current_time - completed_at > TASK_COMPLETED_TTL:
+                            tasks_to_cleanup.append((task_id, True))  # 전체 삭제 (파일은 유지)
+                            print(f"[CLEANUP] 만료된 작업 삭제: {task_id}")
+
+                # Lock 밖에서 cleanup 수행 (deadlock 방지)
+            for task_id, force in tasks_to_cleanup:
+                if force:
+                    with TASKS_LOCK:
+                        if task_id in TASKS:
+                            # 파일은 삭제하지 않음 (output 폴더에 유지)
+                            del TASKS[task_id]
+
+        except Exception as e:
+            print(f"[CLEANUP] 에러: {e}")
+
+
+# 백그라운드 cleanup 스레드 시작
+_cleanup_thread = threading.Thread(target=background_cleanup_thread, daemon=True)
+_cleanup_thread.start()
 
 
 # ============================================================
@@ -164,9 +242,11 @@ async def lifespan(app: FastAPI):
 
     yield
     # 종료 시: 모든 작업 정리
+    with TASKS_LOCK:
+        for task_id in list(TASKS.keys()):
+            TASKS[task_id]['cancelled'] = True
     for task_id in list(TASKS.keys()):
-        TASKS[task_id]['cancelled'] = True
-        cleanup_task(task_id)
+        cleanup_task(task_id, force_delete=True)
 
 
 app = FastAPI(title="DART 재무제표 추출기", lifespan=lifespan)
@@ -634,6 +714,7 @@ async def start_extraction(
     task_id = str(uuid.uuid4())
 
     # 작업 상태 초기화 (사용자 정보 포함)
+    current_time = time.time()
     TASKS[task_id] = {
         "status": "pending",
         "progress": 0,
@@ -645,7 +726,9 @@ async def start_extraction(
         "company_info": request.company_info,  # 기업개황정보 저장
         "user_id": user['user_id'] if user else None,  # 사용자 ID 저장
         "start_year": request.start_year,
-        "end_year": request.end_year
+        "end_year": request.end_year,
+        "created_at": current_time,  # 작업 생성 시간
+        "last_accessed": current_time  # 마지막 접근 시간 (유휴 감지용)
     }
 
     # 백그라운드에서 추출 작업 실행
@@ -771,13 +854,25 @@ async def extract_financial_data(
                     print(f"[EXTRACT] 사업보고서 현재주소: {current_address}")
                     task['current_address'] = current_address
                 else:
-                    print(f"[EXTRACT] 사업보고서에서 주소 추출 실패 또는 없음")
+                    # 사업보고서에 주소가 없으면 기업개황정보 주소를 최신으로 사용
+                    if company_info and company_info.get('adres'):
+                        current_address = company_info['adres']
+                        print(f"[EXTRACT] 사업보고서 주소 없음 - 기업개황 주소 사용: {current_address}")
+                        task['current_address'] = current_address
+                    else:
+                        print(f"[EXTRACT] 사업보고서에서 주소 추출 실패 또는 없음")
                 if report_info.get('ceo'):
                     current_ceo = report_info['ceo']
                     print(f"[EXTRACT] 사업보고서 현재 대표자: {current_ceo}")
                     task['current_ceo'] = current_ceo
                 else:
-                    print(f"[EXTRACT] 사업보고서에서 대표자 추출 실패 또는 없음")
+                    # 사업보고서에 대표자가 없으면 기업개황정보 대표자를 최신으로 사용
+                    if company_info and company_info.get('ceo_nm'):
+                        current_ceo = company_info['ceo_nm']
+                        print(f"[EXTRACT] 사업보고서 대표자 없음 - 기업개황 대표자 사용: {current_ceo}")
+                        task['current_ceo'] = current_ceo
+                    else:
+                        print(f"[EXTRACT] 사업보고서에서 대표자 추출 실패 또는 없음")
         except Exception as info_err:
             print(f"[EXTRACT] 사업보고서 정보 추출 오류: {info_err}")
 
@@ -809,6 +904,7 @@ async def extract_financial_data(
         task['message'] = '추출 완료! AI 분석을 진행해주세요.'
         task['file_path'] = None  # 아직 엑셀 없음
         task['filename'] = None
+        task['completed_at'] = time.time()  # 완료 시간 (TTL 계산용)
 
         # 사용량 로깅 (로그인한 사용자인 경우)
         if task.get('user_id'):
@@ -1067,6 +1163,44 @@ async def extract_financial_data(
                     try:
                         fin_df = pd.read_excel(excel_filepath, sheet_name='Financials', header=1, engine='openpyxl')
                         if fin_df is not None and not fin_df.empty:
+                            # Financials 시트는 좌우 병렬 구조 (왼쪽: BS, 오른쪽: IS)
+                            # API용으로 상하 병렬 구조로 변환
+                            cols = fin_df.columns.tolist()
+
+                            # .1 접미사가 있는 컬럼이 있으면 좌우 병렬 구조
+                            has_side_by_side = any('.1' in str(c) for c in cols)
+
+                            if has_side_by_side:
+                                # 왼쪽(BS) 컬럼 추출 (.1 없는 것들, Unnamed 제외)
+                                bs_cols = [c for c in cols if '.1' not in str(c) and 'Unnamed' not in str(c)]
+                                # 오른쪽(IS) 컬럼 추출 (.1 있는 것들)
+                                is_cols = [c for c in cols if '.1' in str(c)]
+
+                                if bs_cols and is_cols:
+                                    # BS 데이터 추출
+                                    bs_df = fin_df[bs_cols].copy()
+                                    # 첫 번째 컬럼명을 '항목'으로
+                                    bs_df = bs_df.rename(columns={bs_df.columns[0]: '항목'})
+                                    # 빈 행 제거
+                                    bs_df = bs_df[bs_df['항목'].notna() & (bs_df['항목'] != '')]
+
+                                    # IS 데이터 추출
+                                    is_df = fin_df[is_cols].copy()
+                                    # 컬럼명에서 .1 제거
+                                    is_df.columns = [str(c).replace('.1', '') for c in is_df.columns]
+                                    # 첫 번째 컬럼명을 '항목'으로
+                                    is_df = is_df.rename(columns={is_df.columns[0]: '항목'})
+                                    # 빈 행 제거
+                                    is_df = is_df[is_df['항목'].notna() & (is_df['항목'] != '')]
+
+                                    # BS + IS 합치기 (상하 병렬)
+                                    fin_df = pd.concat([bs_df, is_df], ignore_index=True)
+                                    print(f"[EXTRACT] Financials 좌우→상하 변환: BS {len(bs_df)}행 + IS {len(is_df)}행 = {len(fin_df)}행")
+                            else:
+                                # 단일 구조면 첫 번째 컬럼명만 변경
+                                if len(fin_df.columns) > 0 and fin_df.columns[0] == '(단위: 백만원)':
+                                    fin_df = fin_df.rename(columns={fin_df.columns[0]: '항목'})
+
                             task['preview_data']['vcm_display'] = safe_dataframe_to_json(fin_df)
                             print(f"[EXTRACT] preview_data['vcm_display'] 생성: {len(task['preview_data']['vcm_display'])}개 행")
                     except Exception as fin_err:
@@ -2752,8 +2886,11 @@ def create_vcm_format(fs_data, excel_filepath=None):
     def normalize(s):
         if not s: return ''
         s = re.sub(r'\s', '', str(s))
+        # 로마숫자 접두사 제거 (전각: Ⅰ,Ⅱ,Ⅲ / 반각: I,II,III,IV,V)
         s = re.sub(r'^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+\.', '', s)
-        s = re.sub(r'\(주석[0-9,]+\)', '', s)
+        s = re.sub(r'^[IVX]+\.', '', s)  # 반각 로마숫자 제거
+        # 주석 참조 제거: (주10), (주1,2), (주석1,2) 등
+        s = re.sub(r'\(주[석\d,\s]*\)', '', s)
         s = re.sub(r'\(손실\)', '', s)
         return s
 
@@ -3036,7 +3173,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
                             val = val.iloc[0] if len(val) > 0 else None
                         if pd.notna(val):
                             try:
-                                val_str = str(val).replace(',', '').replace('(', '').replace(')', '')
+                                val_str = str(val).replace(',', '').strip()
+                                # 괄호로 표시된 음수 처리: (1234) → -1234
+                                if val_str.startswith('(') and val_str.endswith(')'):
+                                    val_str = '-' + val_str[1:-1]
                                 return float(val_str)
                             except:
                                 pass
@@ -3062,7 +3202,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
                                     val = val.iloc[0] if len(val) > 0 else None
                                 if pd.notna(val):
                                     try:
-                                        val_str = str(val).replace(',', '').replace('(', '').replace(')', '')
+                                        val_str = str(val).replace(',', '').strip()
+                                        # 괄호로 표시된 음수 처리: (1234) → -1234
+                                        if val_str.startswith('(') and val_str.endswith(')'):
+                                            val_str = '-' + val_str[1:-1]
                                         result = float(val_str)
                                         # 주석 테이블은 천원 단위이므로 원 단위로 변환
                                         result = result * 1000
@@ -3346,6 +3489,8 @@ def create_vcm_format(fs_data, excel_filepath=None):
             '지분법이익': find_val(is_df, ['지분법이익', '관계기업투자이익'], year) or 0,
             '기타금융수익': find_val(is_df, ['기타금융수익'], year) or 0,
             '기타영업외수익': find_val(is_df, ['기타영업외수익', '기타수익', '잡이익'], year) or 0,
+            # 금융수익 (일부 기업에서 합계 항목으로 표시) - 이자수익 등이 없을 때 fallback
+            '금융수익': find_val(is_df, ['금융수익'], year, ['기타']) or 0,
         }
 
     def get_non_op_expense_items_for_year(is_df, year):
@@ -3362,6 +3507,8 @@ def create_vcm_format(fs_data, excel_filepath=None):
             '지분법손실': find_val(is_df, ['지분법손실'], year) or 0,
             '기타금융비용': find_val(is_df, ['기타금융비용'], year) or 0,
             '기타영업외비용': find_val(is_df, ['기타영업외비용', '기타비용', '잡손실'], year) or 0,
+            # 금융비용 (일부 기업에서 합계 항목으로 표시) - 이자비용 등이 없을 때 fallback
+            '금융비용': find_val(is_df, ['금융비용'], year, ['기타']) or 0,
         }
 
     # 영업외수익 모든 연도 합계 계산
@@ -3414,7 +3561,8 @@ def create_vcm_format(fs_data, excel_filepath=None):
         
         # 기본 값들 먼저 계산
         # 서비스업(영업수익/영업비용) vs 제조업(매출액/매출원가) 모두 지원
-        영업수익 = find_val(is_df, ['영업수익', '매출액', '수익'], year, ['원가', '비용']) or 0
+        # '매출' 키워드 추가: E1 등 '매출' 항목 사용 기업 지원 (기존 키워드 유지)
+        영업수익 = find_val(is_df, ['영업수익', '매출액', '매출', '수익'], year, ['원가', '비용', '채권', '총이익']) or 0
         영업비용 = find_val(is_df, ['영업비용', '매출원가'], year) or 0
 
         # 동적으로 추출된 매출 항목 값 계산
@@ -3731,7 +3879,8 @@ def create_vcm_format(fs_data, excel_filepath=None):
     def find_bs_val(keywords, year, excludes=[]):
         # BS용 컬럼 사용 (IS와 다를 수 있음)
         for _, row in bs_df.iterrows():
-            acc = normalize(str(row.get(bs_account_col, '')))
+            acc_raw = str(row.get(bs_account_col, ''))
+            acc = normalize(acc_raw)
             excluded = any(normalize(ex) in acc for ex in excludes)
             if excluded: continue
             for kw in keywords:
@@ -3747,7 +3896,11 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     val = row.get(bs_year)
                     if pd.notna(val):
                         try:
-                            return float(str(val).replace(',', ''))
+                            val_str = str(val).replace(',', '').strip()
+                            # 괄호로 표시된 음수 처리: (1234) → -1234
+                            if val_str.startswith('(') and val_str.endswith(')'):
+                                val_str = '-' + val_str[1:-1]
+                            return float(val_str)
                         except:
                             pass
         return None
@@ -3816,14 +3969,17 @@ def create_vcm_format(fs_data, excel_filepath=None):
         add_fallback_to_section(비유동자산_items, '기타의투자자산', ['기타의투자자산', '기타투자자산'])
         add_fallback_to_section(비유동자산_items, '보증금', ['보증금', '임차보증금'])
 
-        # 비유동부채 fallback 항목 추가
-        add_fallback_to_section(비유동부채_items, '장기차입금', ['장기차입금'], ['유동성'])
-        add_fallback_to_section(비유동부채_items, '사채', ['사채'], ['유동성', '전환'])
+        # 비유동부채 fallback 항목 추가 (유동성, 유동, 전환 등 유동 항목 제외)
+        add_fallback_to_section(비유동부채_items, '장기차입금', ['장기차입금'], ['유동성', '유동'])
+        add_fallback_to_section(비유동부채_items, '사채', ['사채'], ['유동성', '유동', '전환'])
         add_fallback_to_section(비유동부채_items, '장기미지급금', ['장기미지급금'])
         add_fallback_to_section(비유동부채_items, '임대보증금', ['임대보증금'])
 
-        # 유동자산 총계 (섹션 합계 또는 총계에서)
-        유동자산 = 총계.get('유동자산') or sum(item['value'] for item in 유동자산_items) or find_bs_val(['유동자산'], year, ['비유동']) or 0
+        # 유동자산 총계: 총계 우선, 그 다음 find_bs_val (BS에서 직접 추출), 마지막으로 items 합계
+        # items 합계는 소계 항목 중복 포함 시 과대계상될 수 있으므로 find_bs_val 우선
+        유동자산_from_bs = find_bs_val(['유동자산'], year, ['비유동']) or 0
+        유동자산_from_items = sum(item['value'] for item in 유동자산_items) if 유동자산_items else 0
+        유동자산 = 총계.get('유동자산') or 유동자산_from_bs or 유동자산_from_items or 0
 
         # 주요 항목 찾기 (섹션 우선, fallback으로 키워드 검색)
         현금 = find_in_section(유동자산_items, ['현금및현금성자산', '현금']) or find_bs_val(['현금및현금성자산'], year) or 0
@@ -3857,7 +4013,11 @@ def create_vcm_format(fs_data, excel_filepath=None):
         기타비금융자산 = sum(item['value'] for item in 기타유동자산_items) if 기타유동자산_items else (find_bs_val(['기타유동자산', '기타비금융자산'], year) or 0)
 
         # ========== 비유동자산 항목 (섹션 기반) ==========
-        비유동자산 = 총계.get('비유동자산') or sum(item['value'] for item in 비유동자산_items) or find_bs_val(['비유동자산'], year) or 0
+        # 비유동자산: 총계 우선, 그 다음 find_bs_val (BS에서 직접 추출), 마지막으로 items 합계
+        # items 합계는 소계 항목 중복 포함 시 과대계상될 수 있으므로 find_bs_val 우선
+        비유동자산_from_bs = find_bs_val(['비유동자산'], year) or 0
+        비유동자산_from_items = sum(item['value'] for item in 비유동자산_items) if 비유동자산_items else 0
+        비유동자산 = 총계.get('비유동자산') or 비유동자산_from_bs or 비유동자산_from_items or 0
         유형자산 = find_in_section(비유동자산_items, ['유형자산'], ['무형', '처분', '사용권']) or find_bs_val(['유형자산'], year, ['무형', '처분']) or 0
         무형자산 = find_in_section(비유동자산_items, ['무형자산'], ['상각', '손상']) or find_bs_val(['무형자산'], year, ['상각']) or 0
         사용권자산 = find_in_section(비유동자산_items, ['사용권자산']) or 0
@@ -3941,9 +4101,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
         계약부채_비유동 = find_in_section(비유동부채_items, ['계약부채']) or 0
         비유동매입채무및기타채무 = 장기매입채무 + 장기미지급금 + 장기미지급비용 + 장기선수금 + 장기선수수익 + 장기예수금 + 임대보증금 + 예수보증금_비유동 + 계약부채_비유동
 
-        사채 = find_in_section(비유동부채_items, ['사채'], ['유동성']) or find_bs_val(['사채'], year, ['유동성']) or 0
+        # 비유동 사채: '유동성', '유동', '전환' 제외 (유동전환사채 등 유동 항목 제외)
+        사채 = find_in_section(비유동부채_items, ['사채'], ['유동성', '유동', '전환']) or find_bs_val(['사채'], year, ['유동성', '유동', '전환']) or 0
         # 사채가 섹션에 없지만 find_bs_val로 찾았으면 비유동부채_items에 추가 (동적 분류용)
-        if 사채 and not find_in_section(비유동부채_items, ['사채'], ['유동성']):
+        if 사채 and not find_in_section(비유동부채_items, ['사채'], ['유동성', '유동', '전환']):
             비유동부채_items.append({'name': '사채', 'value': 사채})
         장기차입금 = find_in_section(비유동부채_items, ['장기차입금', '비유동차입부채'], ['유동성']) or find_bs_val(['장기차입금'], year, ['유동성']) or 0
         퇴직급여채무 = find_in_section(비유동부채_items, ['퇴직급여충당부채', '퇴직급여채무', '확정급여채무', '순확정급여부채']) or find_bs_val(['퇴직급여충당부채', '퇴직급여채무', '확정급여채무'], year) or 0
@@ -3962,7 +4123,18 @@ def create_vcm_format(fs_data, excel_filepath=None):
         기타자본항목 = find_in_section(자본_items, ['기타자본', '기타자본구성요소', '기타자본항목']) or 0
         기타자본 = 자본잉여금 + 자본조정 + 기타포괄손익누계액 + 기타자본항목
 
-        자본총계 = 총계.get('자본총계') or find_bs_val(['자본총계'], year) or 0
+        # 자본총계/부채와자본총계 추출 (음수 허용)
+        자본총계_from_총계 = 총계.get('자본총계')
+        # '자본총계' 검색 시 '부채와자본총계', '부채및자본총계' 제외
+        자본총계_from_bs = find_bs_val(['자본총계'], year, excludes=['부채와', '부채및'])
+        # 자본총계가 음수인 경우도 허용 (자본잠식)
+        if 자본총계_from_총계 is not None:
+            자본총계 = 자본총계_from_총계
+        elif 자본총계_from_bs is not None:
+            자본총계 = 자본총계_from_bs
+        else:
+            자본총계 = 0
+
         부채와자본총계 = 총계.get('부채와자본총계') or 총계.get('부채및자본총계') or find_bs_val(['부채와자본총계', '부채및자본총계'], year) or 0
 
         # ========== 계산 항목 ==========
@@ -4032,7 +4204,8 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 if any(k in name_norm for k in ['매입채무', '미지급금', '미지급비용', '선수금', '선수수익',
                                                  '예수금', '예수보증금', '임대보증금', '계약부채']):
                     return '매입채무및기타채무'
-                elif any(k in name_norm for k in ['장기차입금', '사채', '비유동차입부채']):
+                # 비유동차입부채: 장기차입금, 사채 등 (단, 유동 항목 제외)
+                elif any(k in name_norm for k in ['장기차입금', '사채', '비유동차입부채']) and '유동' not in name_norm:
                     return '비유동차입부채'
                 elif any(k in name_norm for k in ['충당부채', '장기충당부채']) and '리스' not in name_norm:
                     return '장기충당부채'
@@ -4075,20 +4248,31 @@ def create_vcm_format(fs_data, excel_filepath=None):
             """
             세부항목이 부모와 중복되는지 확인
             - 부모가 자식 이름을 포함하거나 그 반대인 경우 (장기충당부채 vs 충당부채)
-            - 둘 다 '기타'를 포함하는 경우 (기타유동자산 vs 기타비금융자산)
+            - 정확히 같은 이름도 포함 관계이므로 True 반환
             """
             parent_norm = normalize(parent_name).replace('[비유동]', '').replace('[netdebt]', '').replace('[nwc]', '')
             child_norm = normalize(child_name)
 
-            # 이름이 서로 포함 관계인 경우 (장기충당부채 ↔ 충당부채)
+            # 이름이 서로 포함 관계인 경우 (장기충당부채 ↔ 충당부채, 같은 이름 포함)
             if parent_norm in child_norm or child_norm in parent_norm:
                 return True
 
-            # 둘 다 '기타'를 포함하는 경우
+            # 둘 다 '기타'를 포함하는 경우, 실제로 유사한 경우만 중복 처리
+            # 예: 기타비유동자산 vs 기타장기수취채권 → 다른 항목이므로 중복 아님
             if '기타' in parent_norm and '기타' in child_norm:
-                return True
+                # '기타' 제거 후 나머지 부분이 포함 관계인 경우만 중복
+                parent_rest = parent_norm.replace('기타', '')
+                child_rest = child_norm.replace('기타', '')
+                if parent_rest and child_rest and (parent_rest in child_rest or child_rest in parent_rest):
+                    return True
 
             return False
+
+        def get_display_name(item_name, parent_name):
+            """하위항목 표시명 결정 - 부모와 같은 이름이면 '(세부)' 추가"""
+            if normalize(item_name) == normalize(parent_name):
+                return f"{item_name}(세부)"
+            return item_name
 
         def select_top_items(groups, required_cats, max_items, section_name):
             """
@@ -4149,26 +4333,58 @@ def create_vcm_format(fs_data, excel_filepath=None):
         for cat_info in selected_유동자산:
             cat = cat_info['name']
             bs_items.append((cat, '유동자산', cat_info['total']))
-            # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
-            valid_items = [
-                i for i in cat_info['items']
-                if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat, i['name'])
-            ]
-            # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
-            if len(valid_items) >= 1:
-                sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
-                for item in sorted_items[:5]:  # 최대 5개까지
-                    bs_items.append((item['name'], cat, item['value']))
+
+            # 매출채권및기타채권의 경우 본체 계산에 사용된 값들을 명시적으로 추가 (누락 방지)
+            if cat == '매출채권및기타채권':
+                # 명시적으로 하위항목 추가 (본체 계산에 사용된 항목들)
+                if 매출채권:
+                    bs_items.append(('매출채권', '매출채권및기타채권', 매출채권))
+                if 미수금:
+                    bs_items.append(('미수금', '매출채권및기타채권', 미수금))
+                if 미수수익:
+                    bs_items.append(('미수수익', '매출채권및기타채권', 미수수익))
+                if 선급금:
+                    bs_items.append(('선급금', '매출채권및기타채권', 선급금))
+                if 선급비용:
+                    bs_items.append(('선급비용', '매출채권및기타채권', 선급비용))
+                if 계약자산_유동:
+                    bs_items.append(('계약자산', '매출채권및기타채권', 계약자산_유동))
+                if 기타금융자산_유동:
+                    bs_items.append(('기타금융자산', '매출채권및기타채권', 기타금융자산_유동))
+            else:
+                # 다른 카테고리 처리
+                all_items = cat_info['items']
+                # 세부가 1개뿐이고 카테고리명과 같으면 → 툴팁 불필요
+                if len(all_items) == 1 and normalize(all_items[0]['name']) == normalize(cat):
+                    pass  # 툴팁 안 만듦
+                elif len(all_items) >= 1:
+                    # 포함 관계만 제외, 같은 이름은 display_name으로 구분하여 포함
+                    valid_items = [i for i in all_items
+                                   if not is_redundant_child(cat, i['name'])
+                                   or normalize(i['name']) == normalize(cat)]
+                    sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                    for item in sorted_items[:5]:  # 최대 5개까지
+                        display_name = get_display_name(item['name'], cat)
+                        bs_items.append((display_name, cat, item['value']))
 
         # 기타유동자산 (남은 항목 합계)
+        # 중요: 기타유동자산_total은 MAX_ITEMS 초과된 모든 카테고리의 합계이므로,
+        # 하위항목도 기타유동자산_items (모든 초과 카테고리의 items)를 사용해야 본체와 일치함
         if 기타유동자산_total and abs(기타유동자산_total) > 0:
             bs_items.append(('기타유동자산', '유동자산', 기타유동자산_total))
-            # 기타유동자산에 포함된 세부항목들 (중복 항목 제외)
-            valid_기타유동 = [i for i in 기타유동자산_items if not is_redundant_child('기타유동자산', i['name'])]
-            if len(valid_기타유동) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
-                sorted_기타유동 = sorted(valid_기타유동, key=lambda x: abs(x['value']), reverse=True)
-                for item in sorted_기타유동[:5]:
-                    bs_items.append((item['name'], '기타유동자산', item['value']))
+            all_items = 기타유동자산_items
+            # 세부가 1개뿐이고 카테고리명과 같으면 → 툴팁 불필요
+            if len(all_items) == 1 and normalize(all_items[0]['name']) == normalize('기타유동자산'):
+                pass  # 툴팁 안 만듦
+            elif len(all_items) >= 1:
+                # 포함 관계만 제외, 같은 이름은 display_name으로 구분하여 포함
+                valid_items = [i for i in all_items
+                               if not is_redundant_child('기타유동자산', i['name'])
+                               or normalize(i['name']) == normalize('기타유동자산')]
+                sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                for item in sorted_items[:5]:
+                    display_name = get_display_name(item['name'], '기타유동자산')
+                    bs_items.append((display_name, '기타유동자산', item['value']))
 
         # 매각예정자산 (유동자산 섹션에 포함)
         매각예정자산 = find_bs_val(['매각예정비유동자산', '매각예정자산', '처분자산집단'], year) or 0
@@ -4191,25 +4407,35 @@ def create_vcm_format(fs_data, excel_filepath=None):
             cat = cat_info['name']
             cat_display = 비유동자산_카테고리_표시명.get(cat, cat)
             bs_items.append((cat_display, '비유동자산', cat_info['total']))
-            # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
-            valid_items = [
-                i for i in cat_info['items']
-                if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat_display, i['name'])
-            ]
-            # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
-            if len(valid_items) >= 1:
+            all_items = cat_info['items']
+            # 세부가 1개뿐이고 카테고리명과 같으면 → 툴팁 불필요
+            if len(all_items) == 1 and normalize(all_items[0]['name']) == normalize(cat):
+                pass  # 툴팁 안 만듦
+            elif len(all_items) >= 1:
+                # 포함 관계만 제외, 같은 이름은 display_name으로 구분하여 포함
+                valid_items = [i for i in all_items
+                               if not is_redundant_child(cat_display, i['name'])
+                               or normalize(i['name']) == normalize(cat)]
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
                 for item in sorted_items[:5]:  # 최대 5개까지
-                    bs_items.append((item['name'], cat_display, item['value']))
+                    display_name = get_display_name(item['name'], cat)
+                    bs_items.append((display_name, cat_display, item['value']))
 
         if 기타비유동자산_total and abs(기타비유동자산_total) > 0:
             bs_items.append(('기타비유동자산', '비유동자산', 기타비유동자산_total))
-            # 기타비유동자산에 포함된 세부항목들 (중복 항목 제외)
-            valid_기타비유동 = [i for i in 기타비유동자산_items if not is_redundant_child('기타비유동자산', i['name'])]
-            if len(valid_기타비유동) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
-                sorted_기타비유동 = sorted(valid_기타비유동, key=lambda x: abs(x['value']), reverse=True)
-                for item in sorted_기타비유동[:5]:
-                    bs_items.append((item['name'], '기타비유동자산', item['value']))
+            all_items = 기타비유동자산_items
+            # 세부가 1개뿐이고 카테고리명과 같으면 → 툴팁 불필요
+            if len(all_items) == 1 and normalize(all_items[0]['name']) == normalize('기타비유동자산'):
+                pass  # 툴팁 안 만듦
+            elif len(all_items) >= 1:
+                # 포함 관계만 제외, 같은 이름은 display_name으로 구분하여 포함
+                valid_items = [i for i in all_items
+                               if not is_redundant_child('기타비유동자산', i['name'])
+                               or normalize(i['name']) == normalize('기타비유동자산')]
+                sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                for item in sorted_items[:5]:
+                    display_name = get_display_name(item['name'], '기타비유동자산')
+                    bs_items.append((display_name, '기타비유동자산', item['value']))
 
         bs_items.append(('자산총계', '', 자산총계))
 
@@ -4223,25 +4449,35 @@ def create_vcm_format(fs_data, excel_filepath=None):
         for cat_info in selected_유동부채:
             cat = cat_info['name']
             bs_items.append((cat, '유동부채', cat_info['total']))
-            # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
-            valid_items = [
-                i for i in cat_info['items']
-                if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat, i['name'])
-            ]
-            # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
-            if len(valid_items) >= 1:
+            all_items = cat_info['items']
+            # 세부가 1개뿐이고 카테고리명과 같으면 → 툴팁 불필요
+            if len(all_items) == 1 and normalize(all_items[0]['name']) == normalize(cat):
+                pass  # 툴팁 안 만듦
+            elif len(all_items) >= 1:
+                # 포함 관계만 제외, 같은 이름은 display_name으로 구분하여 포함
+                valid_items = [i for i in all_items
+                               if not is_redundant_child(cat, i['name'])
+                               or normalize(i['name']) == normalize(cat)]
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
                 for item in sorted_items[:5]:  # 최대 5개까지
-                    bs_items.append((item['name'], cat, item['value']))
+                    display_name = get_display_name(item['name'], cat)
+                    bs_items.append((display_name, cat, item['value']))
 
         if 기타유동부채_total and abs(기타유동부채_total) > 0:
             bs_items.append(('기타유동부채', '유동부채', 기타유동부채_total))
-            # 기타유동부채에 포함된 세부항목들 (중복 항목 제외)
-            valid_기타유동부채 = [i for i in 기타유동부채_items if not is_redundant_child('기타유동부채', i['name'])]
-            if len(valid_기타유동부채) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
-                sorted_기타유동부채 = sorted(valid_기타유동부채, key=lambda x: abs(x['value']), reverse=True)
-                for item in sorted_기타유동부채[:5]:
-                    bs_items.append((item['name'], '기타유동부채', item['value']))
+            all_items = 기타유동부채_items
+            # 세부가 1개뿐이고 카테고리명과 같으면 → 툴팁 불필요
+            if len(all_items) == 1 and normalize(all_items[0]['name']) == normalize('기타유동부채'):
+                pass  # 툴팁 안 만듦
+            elif len(all_items) >= 1:
+                # 포함 관계만 제외, 같은 이름은 display_name으로 구분하여 포함
+                valid_items = [i for i in all_items
+                               if not is_redundant_child('기타유동부채', i['name'])
+                               or normalize(i['name']) == normalize('기타유동부채')]
+                sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                for item in sorted_items[:5]:
+                    display_name = get_display_name(item['name'], '기타유동부채')
+                    bs_items.append((display_name, '기타유동부채', item['value']))
 
         # 매각예정부채 별도 추출 (섹션 외부에 있을 수 있음)
         매각예정부채 = find_bs_val(['매각예정비유동부채', '매각예정부채'], year) or 0
@@ -4266,25 +4502,35 @@ def create_vcm_format(fs_data, excel_filepath=None):
             cat = cat_info['name']
             cat_display = 비유동부채_카테고리_표시명.get(cat, cat)
             bs_items.append((cat_display, '비유동부채', cat_info['total']))
-            # 세부 항목 필터링 (카테고리명과 같거나 중복되는 항목 제외)
-            valid_items = [
-                i for i in cat_info['items']
-                if normalize(i['name']) != normalize(cat) and not is_redundant_child(cat_display, i['name'])
-            ]
-            # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
-            if len(valid_items) >= 1:
+            all_items = cat_info['items']
+            # 세부가 1개뿐이고 카테고리명과 같으면 → 툴팁 불필요
+            if len(all_items) == 1 and normalize(all_items[0]['name']) == normalize(cat):
+                pass  # 툴팁 안 만듦
+            elif len(all_items) >= 1:
+                # 포함 관계만 제외, 같은 이름은 display_name으로 구분하여 포함
+                valid_items = [i for i in all_items
+                               if not is_redundant_child(cat_display, i['name'])
+                               or normalize(i['name']) == normalize(cat)]
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
                 for item in sorted_items[:5]:  # 최대 5개까지
-                    bs_items.append((item['name'], cat_display, item['value']))
+                    display_name = get_display_name(item['name'], cat)
+                    bs_items.append((display_name, cat_display, item['value']))
 
         if 기타비유동부채_total and abs(기타비유동부채_total) > 0:
             bs_items.append(('기타비유동부채', '비유동부채', 기타비유동부채_total))
-            # 기타비유동부채에 포함된 세부항목들 (중복 항목 제외)
-            valid_기타비유동부채 = [i for i in 기타비유동부채_items if not is_redundant_child('기타비유동부채', i['name'])]
-            if len(valid_기타비유동부채) >= 1:  # 유효 하위 항목이 1개 이상이면 추가 (툴팁용)
-                sorted_기타비유동부채 = sorted(valid_기타비유동부채, key=lambda x: abs(x['value']), reverse=True)
-                for item in sorted_기타비유동부채[:5]:
-                    bs_items.append((item['name'], '기타비유동부채', item['value']))
+            all_items = 기타비유동부채_items
+            # 세부가 1개뿐이고 카테고리명과 같으면 → 툴팁 불필요
+            if len(all_items) == 1 and normalize(all_items[0]['name']) == normalize('기타비유동부채'):
+                pass  # 툴팁 안 만듦
+            elif len(all_items) >= 1:
+                # 포함 관계만 제외, 같은 이름은 display_name으로 구분하여 포함
+                valid_items = [i for i in all_items
+                               if not is_redundant_child('기타비유동부채', i['name'])
+                               or normalize(i['name']) == normalize('기타비유동부채')]
+                sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                for item in sorted_items[:5]:
+                    display_name = get_display_name(item['name'], '기타비유동부채')
+                    bs_items.append((display_name, '기타비유동부채', item['value']))
 
         bs_items.append(('부채총계', '', 부채총계))
 
@@ -4292,12 +4538,15 @@ def create_vcm_format(fs_data, excel_filepath=None):
         bs_items.append(('자본금', '', 자본금))
         bs_items.append(('이익잉여금', '', 이익잉여금))
         bs_items.append(('기타자본구성요소', '', 기타자본))
-        # 자본 세부항목
-        for item in 자본_items:
-            name_norm = normalize(item['name'])
-            if '자본금' not in name_norm and '이익잉여금' not in name_norm and '결손금' not in name_norm:
-                if any(k in name_norm for k in ['자본잉여금', '주식발행초과금', '자본조정', '기타포괄손익', '기타자본']):
-                    bs_items.append((item['name'], '기타자본구성요소', item['value']))
+        # 자본 세부항목 - 본체 계산에 사용된 값들을 명시적으로 추가 (누락 방지)
+        if 자본잉여금:
+            bs_items.append(('자본잉여금', '기타자본구성요소', 자본잉여금))
+        if 자본조정:
+            bs_items.append(('자본조정', '기타자본구성요소', 자본조정))
+        if 기타포괄손익누계액:
+            bs_items.append(('기타포괄손익누계액', '기타자본구성요소', 기타포괄손익누계액))
+        if 기타자본항목:
+            bs_items.append(('기타자본항목', '기타자본구성요소', 기타자본항목))
 
         bs_items.append(('자본총계', '', 자본총계))
         bs_items.append(('부채와자본총계', '', 부채와자본총계))
@@ -5156,7 +5405,10 @@ async def get_task_status(task_id: str):
     task = TASKS.get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
-    
+
+    # 마지막 접근 시간 업데이트 (유휴 감지용)
+    task['last_accessed'] = time.time()
+
     result = {
         "status": task['status'],
         "progress": task['progress'],
@@ -5365,12 +5617,16 @@ async def get_analysis_status(task_id: str):
     if not task:
         raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
 
+    # 마지막 접근 시간 업데이트 (유휴 감지용)
+    task['last_accessed'] = time.time()
+
     return {
         "success": True,
         "status": task.get('analysis_status', 'not_started'),
         "progress": task.get('analysis_progress', 0),
         "message": task.get('analysis_message', ''),
-        "result": task.get('analysis_result')
+        "result": task.get('analysis_result'),
+        "filename": task.get('filename')  # 다운로드용 파일명
     }
 
 
@@ -5521,30 +5777,9 @@ async def download_file(task_id: str):
     """파일 다운로드 API"""
     task = TASKS.get(task_id)
 
-    # 서버 재시작 후에도 파일 다운로드 가능하도록 fallback
+    # 동시 사용자 환경에서 다른 사람 파일 다운로드 방지
     if not task:
-        # output 폴더에서 가장 최근 파일 찾기 시도
-        output_dir = os.path.join(os.path.dirname(__file__), 'output')
-        if os.path.exists(output_dir):
-            # 0바이트 파일 제외
-            files = [f for f in os.listdir(output_dir)
-                     if f.endswith('.xlsx') and os.path.getsize(os.path.join(output_dir, f)) > 0]
-            if files:
-                # 가장 최근 파일 사용
-                files.sort(key=lambda x: os.path.getmtime(os.path.join(output_dir, x)), reverse=True)
-                latest_file = files[0]
-                filepath = os.path.join(output_dir, latest_file)
-
-                # 다운로드 전 포맷팅 재적용
-                if not apply_excel_formatting(filepath):
-                    print(f"[Download] 포맷팅 실패, 원본 파일 반환: {filepath}")
-
-                return FileResponse(
-                    path=filepath,
-                    filename=latest_file,
-                    media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                )
-        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다. 재추출이 필요합니다.")
+        raise HTTPException(status_code=404, detail="작업이 만료되었습니다. 다시 추출해주세요.")
 
     if task['status'] != 'completed':
         raise HTTPException(status_code=400, detail="작업이 완료되지 않았습니다.")

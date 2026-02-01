@@ -2251,6 +2251,7 @@
         let currentUser = null;   // 현재 로그인한 사용자
         let selectedCorp = null;  // 선택된 기업 정보
         let currentTaskId = null;  // 현재 작업 ID
+        let currentFilename = null;  // 현재 파일명 (다운로드용)
         let statusCheckInterval = null;  // 상태 확인 인터벌
         let previewData = null;  // 미리보기 데이터
         let isIntegratedMode = false;  // 통합추출 모드 (AI 분석 자동 실행)
@@ -3258,6 +3259,8 @@
                     stopStatusCheck();
                     // 미리보기 데이터 저장
                     previewData = data.preview_data || null;
+                    // 파일명 저장 (다운로드용)
+                    currentFilename = data.filename || null;
                     // 현재 대표자/주소 업데이트 (사업보고서 기준)
                     if (data.current_ceo || data.current_address) {
                         updateCompanyInfoFromAnalysis(data.current_ceo, data.current_address);
@@ -5330,6 +5333,10 @@
 
                     if (data.status === 'completed') {
                         stopAnalysisStatusCheck();
+                        // 파일명 업데이트 (AI 분석 완료 후 엑셀 파일 생성됨)
+                        if (data.filename) {
+                            currentFilename = data.filename;
+                        }
                         showAnalysisResult(data.result);
                     } else if (data.status === 'failed') {
                         stopAnalysisStatusCheck();
@@ -5581,8 +5588,6 @@
         }
 
         function downloadFile() {
-            if (!currentTaskId) return;
-
             // AI 분석이 완료되지 않았으면 무시 (버튼이 disabled라 보통은 여기 안옴)
             if (!isAnalysisCompleted) {
                 return;
@@ -5590,7 +5595,15 @@
 
             // 페이지 이동 없이 다운로드 (화면 유지)
             const link = document.createElement('a');
-            link.href = `/api/download/${currentTaskId}`;
+            // filename이 있으면 직접 파일명으로 다운로드 (TASKS 만료 후에도 작동)
+            if (currentFilename) {
+                link.href = `/api/download-file/${encodeURIComponent(currentFilename)}`;
+            } else if (currentTaskId) {
+                link.href = `/api/download/${currentTaskId}`;
+            } else {
+                alert('다운로드할 파일이 없습니다. 다시 추출해주세요.');
+                return;
+            }
             link.download = '';  // 서버에서 파일명 지정
             document.body.appendChild(link);
             link.click();
@@ -5616,6 +5629,7 @@
 
             selectedCorp = null;
             previewData = null;
+            currentFilename = null;
             companyInfoData = null;
 
             // UI 초기화

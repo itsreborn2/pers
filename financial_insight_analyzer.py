@@ -29,6 +29,30 @@ from google.genai import types
 # 환경변수 로드
 load_dotenv()
 
+# FY 형식 변환 함수
+import re
+
+def convert_fy_to_year(text: str) -> str:
+    """
+    최종 보고서 텍스트에서 FY 형식을 연도 형식으로 변환
+    - FY2020-FY2024 → 2020~2024년
+    - FY2020년 → 2020년 (중복 방지)
+    - FY2020 → 2020년
+    """
+    if not text or not isinstance(text, str):
+        return text
+
+    # 1. FY2020-FY2024 또는 FY2020~FY2024 → 2020~2024년 (기간)
+    text = re.sub(r'FY(\d{4})\s*[-~]\s*FY(\d{4})', r'\1~\2년', text)
+
+    # 2. FY2020년 → 2020년 (이미 '년' 붙은 경우, 중복 방지)
+    text = re.sub(r'FY(\d{4})년', r'\1년', text)
+
+    # 3. FY2020 → 2020년 (단독)
+    text = re.sub(r'FY(\d{4})', r'\1년', text)
+
+    return text
+
 # Gemini 클라이언트 초기화
 client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
 
@@ -115,21 +139,21 @@ class SearchResult:
 def format_period(period: str) -> str:
     """
     기간 형식 변환
-    - "FY2024" → "24년"
-    - "FY2020-FY2024" → "20~24년"
+    - "FY2024" → "2024년"
+    - "FY2020-FY2024" → "2020~2024년"
     """
     if not period:
         return period
 
     if "-" in period:
-        # 기간: FY2020-FY2024 → 20~24년
+        # 기간: FY2020-FY2024 → 2020~2024년
         parts = period.split("-")
-        start = parts[0].replace("FY", "")[-2:]  # 2020 → 20
-        end = parts[1].replace("FY", "")[-2:]    # 2024 → 24
+        start = parts[0].replace("FY", "")  # FY2020 → 2020
+        end = parts[1].replace("FY", "")    # FY2024 → 2024
         return f"{start}~{end}년"
     else:
-        # 단일 연도: FY2024 → 24년
-        year = period.replace("FY", "")[-2:]  # 2024 → 24
+        # 단일 연도: FY2024 → 2024년
+        year = period.replace("FY", "")  # FY2024 → 2024
         return f"{year}년"
 
 
@@ -1067,7 +1091,8 @@ Write content immediately after the colon
                 model=MODEL_PRO,
                 contents=prompt
             )
-            return response.text
+            # FY 형식을 연도 형식으로 변환 (FY2020 → 2020년)
+            return convert_fy_to_year(response.text)
 
         except Exception as e:
             print(f"  [오류] 보고서 생성 실패: {e}")
@@ -1149,11 +1174,12 @@ Write content immediately after the colon
                 model=MODEL_PRO,
                 contents=prompt
             )
-            return response.text
+            # FY 형식을 연도 형식으로 변환 (FY2020 → 2020년)
+            return convert_fy_to_year(response.text)
 
         except Exception as e:
             print(f"  [오류] 요약본 생성 실패: {e}")
-            return original_report  # 실패 시 원본 반환
+            return convert_fy_to_year(original_report)  # 실패 시 원본 반환 (변환 적용)
 
     def _format_financial_data(self, financial_data: Dict[str, Any]) -> str:
         """재무 데이터를 분석용 문자열로 변환 (원본 재무제표 사용)"""
