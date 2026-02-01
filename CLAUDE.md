@@ -1,5 +1,64 @@
 # PERS 프로젝트 개발 규칙
 
+## 개발/프로덕션 환경 분리 (★최우선★)
+
+### 핵심 원칙
+**모든 개발 작업은 개발 환경(pers-dev)에서 진행한다. 프로덕션 환경(pers)은 사용자 요청 시에만 배포한다.**
+
+### 환경 구성
+
+| 항목 | Production | Development |
+|------|------------|-------------|
+| 디렉토리 | `/home/servermanager/pers` | `/home/servermanager/pers-dev` |
+| 브랜치 | `main` | `develop` |
+| 포트 | 8000 | 8001 |
+| URL | https://pers.moatai.app | https://dev.pers.moatai.app |
+| systemd | `pers.service` | `pers-dev.service` |
+
+### 작업 흐름
+
+```
+[1] 개발 환경에서 작업
+    cd /home/servermanager/pers-dev
+    # 코드 수정...
+    sudo systemctl restart pers-dev
+    # https://dev.pers.moatai.app 에서 테스트
+
+[2] 개발 완료 후 커밋
+    git add . && git commit -m "feat: ..." && git push origin develop
+
+[3] 사용자 요청 시 프로덕션 배포
+    # GitHub에서 develop → main PR 생성 및 머지
+    # 또는 로컬에서:
+    cd /home/servermanager/pers
+    git checkout main
+    git merge develop
+    git push origin main
+    sudo systemctl restart pers
+```
+
+### 서버 관리 명령어
+
+```bash
+# 개발 서버
+sudo systemctl status pers-dev    # 상태 확인
+sudo systemctl restart pers-dev   # 재시작
+sudo journalctl -u pers-dev -f    # 로그 실시간 확인
+
+# 프로덕션 서버
+sudo systemctl status pers        # 상태 확인
+sudo systemctl restart pers       # 재시작
+sudo journalctl -u pers -f        # 로그 실시간 확인
+```
+
+### 주의사항
+- **개발 환경**: 자유롭게 수정/테스트 가능
+- **프로덕션 환경**: 사용자 요청 없이 절대 수정 금지
+- 두 환경은 **별도의 DB 파일** 사용 (각 디렉토리의 `financial_data.db`)
+- `.env` 파일은 git에 포함되지 않으므로 수동 복사 필요
+
+---
+
 ## 문서화 규칙 (★필수★)
 
 ### 핵심 원칙
@@ -19,9 +78,11 @@
 **server.py, database.py 등 백엔드 파일을 수정한 후에는 반드시 서버를 재시작해야 변경사항이 적용된다.**
 
 ```bash
-pkill -9 -f "uvicorn server:app"
-cd /home/servermanager/pers
-nohup uvicorn server:app --host 0.0.0.0 --port 8000 > server.log 2>&1 &
+# 개발 환경 (일반적인 경우)
+sudo systemctl restart pers-dev
+
+# 프로덕션 환경 (배포 시에만)
+sudo systemctl restart pers
 ```
 
 ### 기록 형식
