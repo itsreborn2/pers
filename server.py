@@ -5991,12 +5991,15 @@ async def delete_task(task_id: str):
 # ============================================================
 if __name__ == "__main__":
     import uvicorn
-    
+    import os
+
+    port = int(os.environ.get("PORT", 8000))
+
     print("=" * 50)
     print("DART 재무제표 추출기 서버")
     print("=" * 50)
-    print("서버 시작: http://localhost:8000")
+    print(f"서버 시작: http://localhost:{port}")
     print("종료: Ctrl+C")
     print("=" * 50)
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=port)
