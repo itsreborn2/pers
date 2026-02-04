@@ -55,10 +55,33 @@
             border-radius: 12px;
             padding: 48px;
             width: 100%;
-            max-width: 1200px;
+            max-width: 840px;
             margin: 0 auto;
             box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
             border: 1px solid #e8e8e8;
+        }
+
+        /* 하단 확장 컨테이너 (결과 영역) */
+        .container-full {
+            display: none;
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 32px 48px;
+            width: calc(100% - 40px);
+            max-width: 1200px;
+            margin: 20px auto 0 auto;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e8e8e8;
+            text-align: center;
+            overflow-x: auto;
+        }
+
+        .container-full.show {
+            display: block;
+        }
+
+        .container-full.expanded {
+            max-width: none;
         }
         
         h1 {
@@ -569,11 +592,12 @@
 
         /* 기업개황정보 스타일 */
         .company-info-section {
-            margin-top: 20px;
+            margin: 20px auto 0 auto;
             background: #fafafa;
             border: 1px solid #e5e7eb;
             border-radius: 8px;
             padding: 16px;
+            max-width: 840px;
         }
 
         .company-info-title {
@@ -735,9 +759,10 @@
             text-align: center;
             margin-top: 24px;
         }
-        
+
         .complete-section.show {
-            display: block;
+            display: inline-block;
+            text-align: left;
         }
         
         .complete-icon {
@@ -815,43 +840,177 @@
         
         /* 미리보기 섹션 */
         .preview-section {
-            margin-top: 32px;
             text-align: left;
-            width: 100%;
+            overflow-x: auto;
         }
         
+        .preview-tabs-wrapper {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
         .preview-tabs {
             display: flex;
-            gap: 4px;
-            margin-bottom: 0;
-            border-bottom: 1px solid #e5e7eb;
-            padding-bottom: 0;
+            gap: 8px;
+            margin-bottom: 10px;
         }
-        
-        .preview-tab {
-            padding: 10px 20px;
-            border: 1px solid transparent;
-            border-bottom: none;
-            background: rgba(19, 19, 19, 0.08);
-            border-radius: 6px 6px 0 0;
-            cursor: pointer;
+
+        .btn-ai-analysis {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
             font-size: 0.85rem;
-            transition: all 0.15s;
-            color: #131313;
-            font-weight: 600;
-            margin-right: 2px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-ai-analysis:hover {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-ai-analysis.analyzing {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .btn-ai-analysis.completed {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .financials-content {
+            overflow-x: auto;
+        }
+
+        .vcm-sub-tabs {
+            display: none;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding-left: 4px;
+        }
+
+        .vcm-sub-tabs.show {
+            display: flex;
+        }
+
+        .vcm-sub-tab {
+            padding: 6px 14px;
+            font-size: 0.8rem;
+            border: 1px solid #e5e7eb;
+            background: #ffffff;
+            color: #9ca3af;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .vcm-sub-tab:hover {
+            background: #f9fafb;
+            color: #6b7280;
+        }
+
+        .vcm-sub-tab.active {
+            background: #374151;
+            color: #ffffff;
+            border-color: #374151;
+        }
+
+        .vcm-sub-tab.active:hover {
+            background: #4b5563;
+            border-color: #4b5563;
+        }
+
+        .vcm-sub-tab.analyzing {
+            background: #fbbf24;
+            color: #78350f;
+            border-color: #fbbf24;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        /* VCM 서브탭 AI 버튼 툴팁 */
+        .vcm-ai-tooltip-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .vcm-ai-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: calc(100% + 10px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fbbf24;
+            color: #78350f;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            z-index: 100;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .vcm-ai-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 8px;
+            border-style: solid;
+            border-color: #fbbf24 transparent transparent transparent;
+        }
+
+        .vcm-ai-tooltip-wrapper:hover .vcm-ai-tooltip:not(.hidden) {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .vcm-ai-tooltip.hidden {
+            display: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .vcm-box.hidden {
+            display: none !important;
+        }
+
+        .preview-tab {
+            padding: 6px 14px;
+            font-size: 0.8rem;
+            border: 1px solid #e5e7eb;
+            background: #ffffff;
+            color: #9ca3af;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
         }
 
         .preview-tab:hover {
-            color: #131313;
-            background: rgba(19, 19, 19, 0.15);
+            background: #f9fafb;
+            color: #6b7280;
         }
 
         .preview-tab.active {
-            background: #131313;
+            background: #374151;
             color: #ffffff;
-            border: 1px solid #131313;
-            border-bottom: 1px solid #131313;
+            border-color: #374151;
+        }
+
+        .preview-tab.active:hover {
+            background: #4b5563;
+            border-color: #4b5563;
         }
 
         /* 상위 탭 메뉴 (재무정보 / 재무분석 AI) */
@@ -859,7 +1018,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
+            width: 100%;
         }
 
         .main-tabs {
@@ -891,9 +1051,9 @@
         }
 
         .main-tab.analyzing {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: #ffffff;
+            background: #fbbf24;
+            border-color: #fbbf24;
+            color: #78350f;
             animation: pulse-analyzing 1.5s ease-in-out infinite;
         }
 
@@ -923,11 +1083,13 @@
         }
 
         .preview-content {
-            border: 1px solid #e5e7eb;
-            border-radius: 0 8px 8px 8px;
-            background: #ffffff;
+            border: none;
+            border-radius: 0;
+            background: transparent;
             overflow-x: auto;
-            margin-top: -1px;
+            margin: 0;
+            padding: 0;
+            text-align: center;
         }
         
         .preview-table {
@@ -990,26 +1152,56 @@
             text-align: left;
             font-weight: 500;
         }
-        
+
+        /* 재무상태표/손익계산서/현금흐름표 테이블 wrapper */
+        .preview-table-wrapper {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 16px;
+            overflow-x: auto;
+            background: #fafafa;
+            border-radius: 8px;
+        }
+
+        .preview-table-wrapper .preview-table {
+            width: 100%;
+            max-width: 100%;
+        }
+
         /* VCM 전용 포맷 스타일 */
-        .vcm-container {
-            display: flex;
+        .vcm-wrapper {
+            display: inline-flex;
             flex-direction: row;
             gap: 20px;
             align-items: flex-start;
-        }
-        
-        .vcm-section {
-            flex: 1;
-            min-width: 0;
-            overflow-x: auto;
-            display: table;
-            width: 100%;
+            text-align: left;
+            border: none;
+            background: transparent;
+            outline: none;
+            box-shadow: none;
         }
 
-        .vcm-title {
-            display: table-caption;
-            caption-side: top;
+        /* 재무 상세 프리뷰 (다중 선택) */
+        .preview-wrapper {
+            display: inline-flex;
+            flex-direction: row;
+            gap: 20px;
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .preview-box {
+            flex: 1 1 500px;
+            min-width: 500px;
+            max-width: fit-content;
+            overflow-x: auto;
+            background: #fafafa;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .preview-title {
             background: #131313;
             color: white;
             padding: 10px 14px;
@@ -1017,6 +1209,88 @@
             text-align: center;
             font-size: 0.9rem;
             letter-spacing: 0.5px;
+            margin: -16px -16px 16px -16px;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .vcm-box {
+            flex: 1 1 500px;
+            min-width: 500px;
+            max-width: fit-content;
+            overflow-x: auto;
+            background: #fafafa;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 재무분석 AI 박스 전용 스타일 */
+        .vcm-box-analysis {
+            flex: 1 1 500px;
+            min-width: 400px;
+            max-width: 600px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            /* height는 JS에서 동적으로 설정 */
+        }
+
+        .vcm-analysis-content {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            padding-right: 8px;
+        }
+
+        .vcm-analysis-content h1 {
+            font-size: 1.1rem;
+            margin: 0 0 12px 0;
+            color: #1f2937;
+        }
+
+        .vcm-analysis-content h2 {
+            font-size: 1rem;
+            margin: 16px 0 8px 0;
+            color: #374151;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 4px;
+        }
+
+        .vcm-analysis-content h3 {
+            font-size: 0.9rem;
+            margin: 12px 0 6px 0;
+            color: #4b5563;
+        }
+
+        .vcm-analysis-content p {
+            margin: 8px 0;
+            color: #4b5563;
+        }
+
+        .vcm-analysis-content ul {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        .vcm-analysis-content li {
+            margin: 4px 0;
+            color: #4b5563;
+        }
+
+        .vcm-title {
+            background: #131313;
+            color: white;
+            padding: 10px 14px;
+            font-weight: 600;
+            text-align: center;
+            font-size: 0.9rem;
+            letter-spacing: 0.5px;
+            margin: -16px -16px 16px -16px;
+            border-radius: 8px 8px 0 0;
         }
 
         .vcm-table {
@@ -2009,14 +2283,18 @@
                 <button class="btn btn-danger" id="cancelBtn" onclick="cancelExtraction()">취소</button>
             </div>
         </div>
-        
+    </div>
+
+    <!-- 하단 확장 영역 (결과) -->
+    <div class="container-full" id="resultContainer">
         <!-- 완료 섹션 -->
         <div class="complete-section" id="completeSection">
             <!-- 상위 탭 메뉴 -->
             <div class="main-tabs-container">
                 <div class="main-tabs">
-                    <button class="main-tab active" data-main-tab="financial" onclick="showMainTab('financial')">재무정보</button>
-                    <span class="hover-tooltip-wrapper insight-tab-wrapper">
+                    <button class="main-tab active" data-main-tab="financials" onclick="showMainTab('financials')">Financials</button>
+                    <button class="main-tab" data-main-tab="financial" onclick="showMainTab('financial')">재무 상세</button>
+                    <span class="hover-tooltip-wrapper insight-tab-wrapper" style="display: none;">
                         <button class="main-tab" data-main-tab="insight" id="insightTabBtn" onclick="showMainTab('insight')">재무분석 AI</button>
                         <div class="hover-tooltip hidden" id="insightTooltip">분석 작업은 약 1~3분 정도 소요됩니다.</div>
                     </span>
@@ -2024,6 +2302,23 @@
                 <div class="download-btn-wrapper" id="downloadBtnWrapper">
                     <button class="btn btn-success" id="downloadBtn" onclick="downloadFile()" disabled>엑셀 다운로드</button>
                     <div class="hover-tooltip" id="downloadTooltip">재무분석 AI 작업이 완료되면 다운로드가 가능합니다.</div>
+                </div>
+            </div>
+
+            <!-- Financials 서브 탭 (vcm-box 토글) -->
+            <div class="vcm-sub-tabs" id="vcmSubTabs">
+                <button class="vcm-sub-tab active" data-vcm-box="bs" onclick="toggleVcmBox('bs')">재무상태표</button>
+                <button class="vcm-sub-tab active" data-vcm-box="is" onclick="toggleVcmBox('is')">손익계산서</button>
+                <span class="vcm-ai-tooltip-wrapper">
+                    <button class="vcm-sub-tab" data-vcm-box="ai" onclick="toggleVcmBox('ai')">재무분석 AI</button>
+                    <div class="vcm-ai-tooltip hidden" id="vcmAiTooltip">분석 작업은 약 1~3분 정도 소요됩니다.</div>
+                </span>
+            </div>
+
+            <!-- Financials 탭 콘텐츠 (VCM) -->
+            <div class="main-tab-content active" id="financialsTabContent">
+                <div class="financials-content" id="financialsContent">
+                    <p class="preview-placeholder">데이터 로딩 중...</p>
                 </div>
             </div>
 
@@ -2051,13 +2346,12 @@
             </div>
 
             <!-- 재무정보 탭 콘텐츠 -->
-            <div class="main-tab-content active" id="financialTabContent">
+            <div class="main-tab-content" id="financialTabContent">
                 <div class="preview-section" id="previewSection">
                     <div class="preview-tabs">
-                        <button class="preview-tab active" data-tab="vcm" onclick="showPreviewTab('vcm')">Financials</button>
-                        <button class="preview-tab" data-tab="bs" onclick="showPreviewTab('bs')">재무상태표</button>
-                        <button class="preview-tab" data-tab="is" onclick="showPreviewTab('is')">손익계산서</button>
-                        <button class="preview-tab" data-tab="cf" onclick="showPreviewTab('cf')">현금흐름표</button>
+                        <button class="preview-tab active" data-tab="bs" onclick="togglePreviewTab('bs')">재무상태표</button>
+                        <button class="preview-tab active" data-tab="is" onclick="togglePreviewTab('is')">손익계산서</button>
+                        <button class="preview-tab" data-tab="cf" onclick="togglePreviewTab('cf')">현금흐름표</button>
                     </div>
                     <div class="preview-content" id="previewContent">
                         <p class="preview-placeholder">데이터 로딩 중...</p>
@@ -2253,6 +2547,7 @@
         let currentTaskId = null;  // 현재 작업 ID
         let currentFilename = null;  // 현재 파일명 (다운로드용)
         let statusCheckInterval = null;  // 상태 확인 인터벌
+        let heartbeatInterval = null;  // heartbeat 인터벌 (작업 유지용)
         let previewData = null;  // 미리보기 데이터
         let isIntegratedMode = false;  // 통합추출 모드 (AI 분석 자동 실행)
         let isExtractionComplete = false;  // 추출 완료 여부 (중복 호출 방지)
@@ -2918,7 +3213,12 @@
         document.addEventListener('DOMContentLoaded', function() {
             renderSearchHistory();
         });
-        
+
+        // 윈도우 리사이즈 시 AI 박스 높이 재조정
+        window.addEventListener('resize', function() {
+            updateAiBoxHeight();
+        });
+
         // ============================================================
         // 기업 검색
         // ============================================================
@@ -3288,7 +3588,32 @@
                 statusCheckInterval = null;
             }
         }
-        
+
+        // Heartbeat: 브라우저가 열려있는 동안 작업 유지
+        function startHeartbeat() {
+            stopHeartbeat();  // 기존 인터벌 정리
+            if (!currentTaskId) return;
+
+            heartbeatInterval = setInterval(async () => {
+                if (!currentTaskId) {
+                    stopHeartbeat();
+                    return;
+                }
+                try {
+                    await fetch(`/api/heartbeat/${currentTaskId}`, { method: 'POST' });
+                } catch (e) {
+                    // 무시 (서버 연결 끊김 등)
+                }
+            }, 60000);  // 60초마다
+        }
+
+        function stopHeartbeat() {
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+                heartbeatInterval = null;
+            }
+        }
+
         function updateProgress(progress, message) {
             const progressBar = document.getElementById('progressBar');
             progressBar.style.width = `${progress}%`;
@@ -3301,15 +3626,16 @@
         // ============================================================
         async function cancelExtraction() {
             if (!currentTaskId) return;
-            
+
             stopStatusCheck();
-            
+            stopHeartbeat();
+
             try {
                 await fetch(`/api/cancel/${currentTaskId}`, { method: 'POST' });
             } catch (error) {
                 console.error('Cancel error:', error);
             }
-            
+
             currentTaskId = null;
             resetAll();
         }
@@ -3326,16 +3652,23 @@
             isExtractionComplete = true;
 
             document.getElementById('extractingSection').classList.remove('show');
+            document.getElementById('resultContainer').classList.add('show');
+            document.getElementById('resultContainer').classList.add('expanded');
             document.getElementById('completeSection').classList.add('show');
+
+            // Heartbeat 시작 (브라우저 열려있는 동안 작업 유지)
+            startHeartbeat();
 
             // 토큰 갱신 (차감된 토큰 반영)
             checkAuth();
 
             // 미리보기 표시
             if (previewData) {
-                showPreviewTab('vcm');  // 기본으로 VCM 포맷 표시
+                renderFinancialsVCM();  // Financials 탭에 VCM 렌더링
+                renderActivePreviewTabs();  // 재무 상세 탭 (모든 활성 탭 렌더링)
+                showMainTab('financials');  // Financials 탭 활성화
             } else {
-                document.getElementById('previewContent').innerHTML =
+                document.getElementById('financialsContent').innerHTML =
                     '<p class="preview-placeholder">미리보기 데이터가 없습니다.</p>';
             }
 
@@ -3367,49 +3700,168 @@
                 content.classList.remove('active');
             });
 
-            if (tabName === 'insight') {
+            // vcm-sub-tabs 표시/숨김
+            const vcmSubTabs = document.getElementById('vcmSubTabs');
+            if (tabName === 'financials') {
+                document.getElementById('financialsTabContent').classList.add('active');
+                vcmSubTabs.classList.add('show');
+            } else if (tabName === 'insight') {
                 document.getElementById('insightTabContent').classList.add('active');
+                vcmSubTabs.classList.remove('show');
             } else if (tabName === 'financial') {
                 document.getElementById('financialTabContent').classList.add('active');
+                vcmSubTabs.classList.remove('show');
             }
         }
 
-        function showPreviewTab(tabName) {
-            // 탭 버튼 활성화 상태 변경
-            document.querySelectorAll('.preview-tab').forEach(tab => {
-                tab.classList.remove('active');
-                if (tab.dataset.tab === tabName) {
-                    tab.classList.add('active');
+        // VCM 박스 토글 (재무상태표, 손익계산서, 재무분석 AI)
+        function toggleVcmBox(boxType) {
+            const btn = document.querySelector(`.vcm-sub-tab[data-vcm-box="${boxType}"]`);
+            const allBtns = document.querySelectorAll('.vcm-sub-tab');
+            const activeCount = document.querySelectorAll('.vcm-sub-tab.active').length;
+
+            // 마지막 하나 남은 활성 버튼은 비활성화 불가
+            if (btn.classList.contains('active') && activeCount <= 1) {
+                return;
+            }
+
+            btn.classList.toggle('active');
+
+            // vcm-box에 hidden 클래스 토글 (#financialsContent 내의 박스만 대상)
+            const financialsContent = document.getElementById('financialsContent');
+            const vcmWrapper = financialsContent ? financialsContent.querySelector('.vcm-wrapper') : null;
+            if (!vcmWrapper) return;
+
+            const vcmBoxes = vcmWrapper.querySelectorAll('.vcm-box');
+            const boxMap = {
+                'bs': 0,  // 재무상태표 (첫 번째 vcm-box)
+                'is': 1,  // 손익계산서 (두 번째 vcm-box)
+                'ai': 2   // 재무분석 AI (세 번째 vcm-box)
+            };
+            const boxIndex = boxMap[boxType];
+
+            if (vcmBoxes[boxIndex]) {
+                if (btn.classList.contains('active')) {
+                    vcmBoxes[boxIndex].classList.remove('hidden');
+                } else {
+                    vcmBoxes[boxIndex].classList.add('hidden');
                 }
+            }
+
+            // 재무분석 AI 박스 너비/높이 조정
+            updateAiBoxWidth();
+            updateAiBoxHeight();
+        }
+
+        // 재무분석 AI 박스 너비 조정 (BS/IS 중 하나만 선택 시 700px, 둘 다 선택 시 600px)
+        function updateAiBoxWidth() {
+            const bsBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="bs"]');
+            const isBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="is"]');
+            const aiBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="ai"]');
+
+            // #financialsContent 내의 AI 박스만 대상
+            const financialsContent = document.getElementById('financialsContent');
+            const aiBox = financialsContent ? financialsContent.querySelector('.vcm-box-analysis') : null;
+
+            if (!aiBox || !aiBtn || !aiBtn.classList.contains('active')) return;
+
+            const bsActive = bsBtn && bsBtn.classList.contains('active');
+            const isActive = isBtn && isBtn.classList.contains('active');
+
+            // BS와 IS 중 하나만 선택된 경우 (XOR)
+            if ((bsActive && !isActive) || (!bsActive && isActive)) {
+                aiBox.style.maxWidth = '700px';
+            } else {
+                aiBox.style.maxWidth = '600px';
+            }
+        }
+
+        // 재무분석 AI 박스 높이 조정 (BS/IS 중 가장 긴 것에 맞춤)
+        function updateAiBoxHeight() {
+            const financialsContent = document.getElementById('financialsContent');
+            if (!financialsContent) return;
+
+            const wrapper = financialsContent.querySelector('.vcm-wrapper');
+            if (!wrapper) return;
+
+            const aiBox = wrapper.querySelector('.vcm-box-analysis');
+            if (!aiBox || aiBox.classList.contains('hidden')) return;
+
+            // BS, IS 박스만 선택 (AI 제외, hidden 제외)
+            const bsBox = wrapper.querySelector('.vcm-box:not(.vcm-box-analysis):nth-child(1)');
+            const isBox = wrapper.querySelector('.vcm-box:not(.vcm-box-analysis):nth-child(2)');
+
+            let maxHeight = 0;
+            if (bsBox && !bsBox.classList.contains('hidden')) {
+                maxHeight = Math.max(maxHeight, bsBox.offsetHeight);
+            }
+            if (isBox && !isBox.classList.contains('hidden')) {
+                maxHeight = Math.max(maxHeight, isBox.offsetHeight);
+            }
+
+            console.log('[AI높이] BS:', bsBox?.offsetHeight, 'IS:', isBox?.offsetHeight, '최대:', maxHeight);
+
+            if (maxHeight > 0) {
+                aiBox.style.height = maxHeight + 'px';
+                aiBox.style.maxHeight = maxHeight + 'px';
+                console.log('[AI높이] 설정 완료:', maxHeight + 'px');
+            }
+        }
+
+        // 프리뷰 탭 토글 (다중 선택 가능)
+        function togglePreviewTab(tabName) {
+            const btn = document.querySelector(`.preview-tab[data-tab="${tabName}"]`);
+            const activeCount = document.querySelectorAll('.preview-tab.active').length;
+
+            // 마지막 하나 남은 활성 버튼은 비활성화 불가
+            if (btn.classList.contains('active') && activeCount <= 1) {
+                return;
+            }
+
+            btn.classList.toggle('active');
+            renderActivePreviewTabs();
+        }
+
+        // 활성화된 모든 프리뷰 탭 렌더링
+        function renderActivePreviewTabs() {
+            const content = document.getElementById('previewContent');
+            const activeTabs = Array.from(document.querySelectorAll('.preview-tab.active'))
+                .map(btn => btn.dataset.tab);
+
+            if (activeTabs.length === 0) {
+                content.innerHTML = '<p class="preview-placeholder">탭을 선택해주세요.</p>';
+                return;
+            }
+
+            let allHtml = '<div class="preview-wrapper">';
+
+            activeTabs.forEach(tabName => {
+                allHtml += renderPreviewTable(tabName);
             });
 
-            const content = document.getElementById('previewContent');
+            allHtml += '</div>';
+            content.innerHTML = allHtml;
+        }
 
-            // VCM 전용 포맷
-            if (tabName === 'vcm') {
-                content.innerHTML = renderVCMFormat();
-                return;
-            }
-            
-            // 미리보기 데이터 표시
+        // 단일 프리뷰 테이블 렌더링
+        function renderPreviewTable(tabName) {
+            const tabNames = { 'bs': '재무상태표', 'is': '손익계산서', 'cf': '현금흐름표' };
+
             if (!previewData || !previewData[tabName]) {
-                const tabNames = { 'bs': '재무상태표', 'is': '손익계산서', 'cf': '현금흐름표' };
-                content.innerHTML = `<p class="preview-placeholder">${tabNames[tabName]} 데이터가 없습니다.</p>`;
-                return;
+                return `<div class="preview-box"><div class="preview-title">${tabNames[tabName]}</div><p class="preview-placeholder">${tabNames[tabName]} 데이터가 없습니다.</p></div>`;
             }
-            
+
             const data = previewData[tabName];
             if (data.length === 0) {
-                content.innerHTML = '<p class="preview-placeholder">데이터가 없습니다.</p>';
-                return;
+                return `<div class="preview-box"><div class="preview-title">${tabNames[tabName]}</div><p class="preview-placeholder">데이터가 없습니다.</p></div>`;
             }
-            
+
             // 테이블 생성 - 필요한 컬럼만 표시 (계정과목 + 분류2~4 + FY 연도)
             const allHeaders = Object.keys(data[0]);
             // 계정과목, 분류2~4, FY 연도 컬럼만 필터링 (분류1 제외)
-            const headers = allHeaders.filter(h => 
-                h === '계정과목' || 
-                (h.startsWith('분류') && h !== '분류1') || 
+            const headers = allHeaders.filter(h =>
+                h === '계정과목' ||
+                (h.startsWith('분류') && h !== '분류1') ||
                 h.startsWith('FY')
             );
             // 정렬: 계정과목 -> 분류1~4 -> FY 연도(오름차순, 최신이 우측)
@@ -3420,14 +3872,20 @@
                 if (!a.startsWith('분류') && b.startsWith('분류')) return 1;
                 return a.localeCompare(b);
             });
-            
-            let tableHtml = '<p class="preview-unit">(단위: 백만원)</p>';
+
+            let tableHtml = '<div class="preview-box">';
+            tableHtml += `<div class="preview-title">${tabNames[tabName]}</div>`;
             tableHtml += '<table class="preview-table"><thead><tr>';
             headers.forEach(h => {
-                tableHtml += `<th>${h}</th>`;
+                // 헤더에서 계정과목 대신 단위 표시
+                if (h === '계정과목') {
+                    tableHtml += '<th>(단위: 백만원)</th>';
+                } else {
+                    tableHtml += `<th>${h}</th>`;
+                }
             });
             tableHtml += '</tr></thead><tbody>';
-            
+
             data.forEach(row => {
                 tableHtml += '<tr>';
                 headers.forEach((h, idx) => {
@@ -3447,11 +3905,41 @@
                 });
                 tableHtml += '</tr>';
             });
-            
+
             tableHtml += '</tbody></table>';
-            tableHtml += '<p class="preview-info">* 처음 20행만 표시됩니다. 전체 데이터는 엑셀 파일을 다운로드하세요.</p>';
-            
-            content.innerHTML = tableHtml;
+            tableHtml += '</div>';
+
+            return tableHtml;
+        }
+
+        function showPreviewTab(tabName) {
+            // 단일 탭 선택 (기존 호환성 유지)
+            document.querySelectorAll('.preview-tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.dataset.tab === tabName) {
+                    tab.classList.add('active');
+                }
+            });
+            renderActivePreviewTabs();
+        }
+
+        // ============================================================
+        // Financials 탭에 VCM 렌더링
+        // ============================================================
+        function renderFinancialsVCM() {
+            const financialsContent = document.getElementById('financialsContent');
+            financialsContent.innerHTML = renderVCMFormat();
+
+            // 재무분석 AI 서브탭 상태에 따라 vcm-box 숨김 처리
+            const aiBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="ai"]');
+            const vcmBoxes = document.querySelectorAll('.vcm-box');
+            if (vcmBoxes[2] && aiBtn && !aiBtn.classList.contains('active')) {
+                vcmBoxes[2].classList.add('hidden');
+            }
+
+            // 재무분석 AI 박스 너비/높이 조정
+            updateAiBoxWidth();
+            updateAiBoxHeight();
         }
 
         // ============================================================
@@ -4442,17 +4930,34 @@
                 }
                 isTableHtml += '</tbody></table>';
 
-                // 최종 HTML 반환 (기존 형식 유지)
+                // 재무분석 AI 결과가 있으면 3번째 박스로 추가
+                const analysisResultEl = document.getElementById('analysisResult');
+                const hasAnalysisResult = analysisResultEl && analysisResultEl.innerHTML.trim() !== '' && analysisResultEl.style.display !== 'none';
+
+                let analysisBoxHtml = '';
+                if (hasAnalysisResult) {
+                    analysisBoxHtml = `
+                        <div class="vcm-box vcm-box-analysis">
+                            <div class="vcm-title">재무분석 AI</div>
+                            <div class="vcm-analysis-content">
+                                ${analysisResultEl.innerHTML}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // 최종 HTML 반환 (가로 배치, 각각 별개 컨테이너)
                 return `
-                    <div class="vcm-container">
-                        <div class="vcm-section">
+                    <div class="vcm-wrapper">
+                        <div class="vcm-box">
                             <div class="vcm-title">재무상태표</div>
                             ${bsTableHtml}
                         </div>
-                        <div class="vcm-section">
+                        <div class="vcm-box">
                             <div class="vcm-title">손익계산서</div>
                             ${isTableHtml}
                         </div>
+                        ${analysisBoxHtml}
                     </div>
                 `;
             }
@@ -5204,18 +5709,36 @@
             isTableHtml += '</tr>';
             isTableHtml += '</tbody></table>';
             
-            // 최종 HTML
+            // 최종 HTML (가로 배치, 각각 별개 컨테이너)
+            // 재무분석 AI 결과가 있으면 3번째 박스로 추가
+            const analysisResultEl = document.getElementById('analysisResult');
+            const hasAnalysisResult = analysisResultEl && analysisResultEl.innerHTML.trim() !== '' && analysisResultEl.style.display !== 'none';
+
+            let analysisBoxHtml = '';
+            if (hasAnalysisResult) {
+                analysisBoxHtml = `
+                    <div class="vcm-box vcm-box-analysis">
+                        <div class="vcm-title">재무분석 AI</div>
+                        <div class="vcm-analysis-content">
+                            ${analysisResultEl.innerHTML}
+                        </div>
+                    </div>
+                `;
+            }
+
             return `
-                <div class="vcm-container">
-                    <div class="vcm-section">
+                <div class="vcm-wrapper">
+                    <div class="vcm-box">
                         <div class="vcm-title">재무상태표</div>
                         ${bsTableHtml}
                     </div>
-                    <div class="vcm-section">
+                    <div class="vcm-box">
                         <div class="vcm-title">손익계산서</div>
                         ${isTableHtml}
                     </div>
+                    ${analysisBoxHtml}
                 </div>
+                <p class="preview-info" style="text-align: center; margin-top: 16px;">* 상세 재무정보는 엑셀 파일을 다운로드하여 확인하세요.</p>
             `;
         }
 
@@ -5249,6 +5772,20 @@
             insightTabBtn.classList.add('analyzing');
             insightTabBtn.classList.remove('completed');
             document.getElementById('insightTooltip').classList.remove('hidden');
+
+            // VCM 서브탭 버튼도 동기화
+            const vcmAiBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="ai"]');
+            if (vcmAiBtn) {
+                vcmAiBtn.textContent = '재무분석중...(0%)';
+                vcmAiBtn.classList.add('analyzing');
+            }
+
+            // VCM 서브탭 AI 버튼 툴팁 초기화
+            const vcmAiTooltip = document.getElementById('vcmAiTooltip');
+            if (vcmAiTooltip) {
+                vcmAiTooltip.textContent = '분석 준비 중';
+                vcmAiTooltip.classList.remove('hidden');
+            }
 
             // 복사 버튼 숨김
             document.getElementById('analysisCopyBtn').style.display = 'none';
@@ -5327,9 +5864,22 @@
                         insightTabBtn.textContent = `재무분석중...(${data.progress}%)`;
                     }
 
+                    // VCM 서브탭 버튼도 동기화
+                    const vcmAiBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="ai"]');
+                    if (vcmAiBtn && vcmAiBtn.classList.contains('analyzing')) {
+                        vcmAiBtn.textContent = `재무분석중...(${data.progress}%)`;
+                    }
+
                     const messageEl = document.getElementById('analysisMessage');
                     messageEl.textContent = data.message || '분석 중';
                     messageEl.classList.add('loading');
+
+                    // VCM 서브탭 AI 버튼 툴팁에도 상태 메시지 동기화
+                    const vcmAiTooltip = document.getElementById('vcmAiTooltip');
+                    if (vcmAiTooltip && vcmAiBtn && vcmAiBtn.classList.contains('analyzing')) {
+                        vcmAiTooltip.textContent = data.message || '분석 중';
+                        vcmAiTooltip.classList.remove('hidden');
+                    }
 
                     if (data.status === 'completed') {
                         stopAnalysisStatusCheck();
@@ -5407,6 +5957,9 @@
 
             isAnalysisCompleted = true;
 
+            // 결과 컨테이너 확장 (재무분석 완료 시)
+            document.getElementById('resultContainer').classList.add('expanded');
+
             // 다운로드 버튼 활성화 및 툴팁 숨김
             enableDownloadButton();
 
@@ -5417,12 +5970,199 @@
             insightTabBtn.classList.add('completed');
             document.getElementById('insightTooltip').classList.add('hidden');
 
+            // VCM 서브탭 버튼도 완료 표시 + 활성화
+            const vcmAiBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="ai"]');
+            if (vcmAiBtn) {
+                vcmAiBtn.textContent = '재무분석 AI';
+                vcmAiBtn.classList.remove('analyzing');
+                vcmAiBtn.classList.add('active');  // 분석 완료 시 활성화
+            }
+
+            // 재무분석 AI vcm-box도 표시
+            const vcmBoxes = document.querySelectorAll('.vcm-box');
+            if (vcmBoxes[2]) {
+                vcmBoxes[2].classList.remove('hidden');
+            }
+
+            // 재무분석 AI 박스 높이 조정 (다른 테이블에 맞춤)
+            updateAiBoxHeight();
+
+            // VCM 서브탭 AI 버튼 툴팁 숨김
+            const vcmAiTooltip = document.getElementById('vcmAiTooltip');
+            if (vcmAiTooltip) {
+                vcmAiTooltip.classList.add('hidden');
+            }
+
             // 최신 대표자/주소 정보가 있으면 기업개황정보 업데이트
             if (result.current_ceo || result.current_address) {
                 updateCompanyInfoFromAnalysis(result.current_ceo, result.current_address);
                 console.log('기업개황정보 업데이트 완료:', { ceo: result.current_ceo, address: result.current_address });
             }
+
+            // Financials 탭에 재무분석 AI 결과 반영 (항상 갱신)
+            renderFinancialsVCM();
+
+            // Financials 탭으로 전환하여 결과 표시
+            showMainTab('financials');
         }
+
+        // ============================================================
+        // 전체 목업 테스트 함수 (콘솔에서 loadMockData() 호출)
+        // ============================================================
+        function loadMockData() {
+            console.log('[MOCK] 전체 목업 데이터 로딩 시작...');
+
+            // 1. 기업개황정보 목업
+            const mockCompanyInfo = {
+                corp_name: '조일물류(주)',
+                corp_name_eng: 'JOIL LOGISTICS CO., LTD.',
+                ceo_nm: '홍길동',
+                adres: '경기도 안양시 동안구 엘에스로 92',
+                hm_url: 'http://www.joil.co.kr',
+                phn_no: '031-123-4567',
+                induty_code: '49',
+                induty_name: '운수업',
+                est_dt_formatted: '1990-01-15',
+                acc_mt_formatted: '12월',
+                bizr_no: '123-45-67890',
+                jurir_no: '110111-0123456',
+                market_name: '비상장'
+            };
+            companyInfoData = mockCompanyInfo;
+
+            // 기업개황정보 표시
+            document.getElementById('companyInfoWrapper').style.display = 'block';
+            const infoTable = document.getElementById('companyInfoTable');
+            infoTable.innerHTML = `
+                <tr><th>회사명</th><td>${mockCompanyInfo.corp_name}</td><th>영문명</th><td>${mockCompanyInfo.corp_name_eng || '-'}</td></tr>
+                <tr><th>대표자</th><td>${mockCompanyInfo.ceo_nm}</td><th>업종</th><td>${mockCompanyInfo.induty_name || mockCompanyInfo.induty_code || '-'}</td></tr>
+                <tr><th>주소</th><td colspan="3">${mockCompanyInfo.adres}</td></tr>
+                <tr><th>전화번호</th><td>${mockCompanyInfo.phn_no || '-'}</td><th>홈페이지</th><td>${mockCompanyInfo.hm_url ? '<a href="' + mockCompanyInfo.hm_url + '" target="_blank">' + mockCompanyInfo.hm_url + '</a>' : '-'}</td></tr>
+                <tr><th>설립일</th><td>${mockCompanyInfo.est_dt_formatted || '-'}</td><th>결산월</th><td>${mockCompanyInfo.acc_mt_formatted || '-'}</td></tr>
+                <tr><th>사업자번호</th><td>${mockCompanyInfo.bizr_no || '-'}</td><th>법인번호</th><td>${mockCompanyInfo.jurir_no || '-'}</td></tr>
+                <tr><th>시장구분</th><td colspan="3">${mockCompanyInfo.market_name || '-'}</td></tr>
+            `;
+
+            // 2. 재무분석 AI 결과 목업
+            const mockAnalysisHtml = `<h1>조일물류(주) 재무 분석 보고서</h1>
+<h2>요약</h2>
+<p>2023년 매출총이익률은 5년 연속 하락세(2020년 6.8% → 2024년 4.2%)를 이어갔으며, 대규모 자산 매각 이후 발생한 지급임차료 부담으로 영업이익은 2.5억원 적자로 전환되었습니다.</p>
+<h2>주요 발견사항</h2>
+<h3>1. [2023년] 당기순이익</h3>
+<ul>
+<li><strong>현상</strong>: 100.6억원으로 비정상적 급증 (전년 0.8억원)</li>
+<li><strong>원인 분석</strong>: 영업이익은 2.5억원 적자였으나, 영업외수익인 유형자산처분이익 133.7억원이 발생하여 당기순이익이 급증했습니다.</li>
+</ul>
+<h3>2. [2023~2024년] 영업활동현금흐름</h3>
+<ul>
+<li><strong>현상</strong>: 2년 연속 대규모 순유출 기록</li>
+<li><strong>원인 분석</strong>: 비현금성 유형자산처분이익 차감 조정 및 법인세 납부 영향</li>
+</ul>`;
+
+            // analysisResult 요소에 직접 HTML 삽입
+            const analysisResultEl = document.getElementById('analysisResult');
+            analysisResultEl.innerHTML = mockAnalysisHtml;
+            analysisResultEl.style.display = 'block';
+            isAnalysisCompleted = true;
+
+            // 분석 섹션 UI 업데이트
+            document.getElementById('analysisProgress').style.display = 'none';
+            document.getElementById('analysisStartContainer').style.display = 'none';
+            document.getElementById('analysisCopyBtn').style.display = 'inline-block';
+            document.getElementById('analysisOriginalBtn').style.display = 'inline-block';
+
+            // 3. 메인 컨테이너 표시
+            document.getElementById('resultContainer').style.display = 'block';
+            document.getElementById('resultContainer').classList.add('show');
+            document.getElementById('resultContainer').classList.add('expanded');
+            document.getElementById('completeSection').classList.add('show');
+
+            // 4. VCM 데이터 직접 렌더링 (재무상태표 + 손익계산서 + 재무분석 AI)
+            const financialsContent = document.getElementById('financialsContent');
+            financialsContent.innerHTML = getMockVCMHtml();
+
+            // 5. 탭 활성화
+            showMainTab('financials');
+
+            // 6. VCM 서브탭 표시 및 AI 박스 높이 조정
+            const vcmSubTabs = document.getElementById('vcmSubTabs');
+            if (vcmSubTabs) {
+                vcmSubTabs.classList.add('show');
+                // AI 버튼 활성화
+                const aiBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="ai"]');
+                if (aiBtn) {
+                    aiBtn.textContent = '재무분석 AI';
+                    aiBtn.classList.remove('analyzing');
+                    aiBtn.classList.add('active');
+                }
+            }
+
+            // 7. AI 박스 높이 조정 (다른 테이블에 맞춤)
+            setTimeout(() => {
+                updateAiBoxHeight();
+            }, 100);
+
+            console.log('[MOCK] 전체 목업 데이터 로딩 완료!');
+            console.log('[MOCK] 콘솔에서 loadMockData() 호출하여 테스트하세요.');
+        }
+
+        // VCM 목업 HTML 반환 (AI 분석 포함)
+        function getMockVCMHtml() {
+            return `
+                <div class="vcm-wrapper">
+                    <div class="vcm-box">
+                        <div class="vcm-title">재무상태표</div>
+                        <table class="vcm-table"><thead><tr><th>(단위: 백만원)</th><th>FY2020</th><th>FY2021</th><th>FY2022</th><th>FY2023</th><th>FY2024</th></tr></thead><tbody><tr class="category-row"><td class="">유동자산</td><td class="" title="" style="">8,897</td><td class="" title="" style="">9,845</td><td class="" title="" style="">10,005</td><td class="" title="" style="">19,421</td><td class="" title="" style="">17,373</td></tr><tr class=""><td class="sub-item">단기투자자산</td><td class="calc-cell" title="[FY2020 세부내역]&#10;단기금융상품: 2,008&#10;─────────&#10;합계: 2,008" style="">2,008</td><td class="calc-cell" title="[FY2021 세부내역]&#10;단기금융상품: 2,320&#10;─────────&#10;합계: 2,320" style="">2,320</td><td class="calc-cell" title="[FY2022 세부내역]&#10;단기금융상품: 2,057&#10;─────────&#10;합계: 2,057" style="">2,057</td><td class="calc-cell" title="[FY2023 세부내역]&#10;단기금융상품: 10,052&#10;─────────&#10;합계: 10,052" style="">10,052</td><td class="calc-cell" title="[FY2024 세부내역]&#10;단기금융상품: 7,193&#10;─────────&#10;합계: 7,193" style="">7,193</td></tr><tr class=""><td class="sub-item">매출채권및기타채권</td><td class="calc-cell" title="[FY2020 세부내역]&#10;매출채권: 4,493&#10;미수금: 344&#10;미수수익: 5&#10;선급금: 12&#10;선급비용: 45&#10;─────────&#10;합계: 4,900" style="">4,900</td><td class="calc-cell" title="[FY2021 세부내역]&#10;매출채권: 4,863&#10;미수금: 43&#10;미수수익: 5&#10;선급금: 50&#10;선급비용: 81&#10;─────────&#10;합계: 5,042" style="">5,042</td><td class="calc-cell" title="[FY2022 세부내역]&#10;매출채권: 4,793&#10;미수금: 44&#10;미수수익: 4&#10;선급금: 145&#10;선급비용: 96&#10;─────────&#10;합계: 5,082" style="">5,082</td><td class="calc-cell" title="[FY2023 세부내역]&#10;매출채권: 5,018&#10;미수금: 107&#10;미수수익: 97&#10;선급금: 186&#10;선급비용: 135&#10;─────────&#10;합계: 5,542" style="">5,542</td><td class="calc-cell" title="[FY2024 세부내역]&#10;매출채권: 5,558&#10;미수금: 4&#10;미수수익: 173&#10;선급금: 19&#10;선급비용: 100&#10;─────────&#10;합계: 5,854" style="">5,854</td></tr><tr class=""><td class="sub-item">현금및현금성자산</td><td class="" title="" style="">2,034</td><td class="" title="" style="">2,531</td><td class="" title="" style="">2,879</td><td class="" title="" style="">3,878</td><td class="" title="" style="">3,829</td></tr><tr class=""><td class="sub-item">기타유동자산</td><td class="" title="" style=""></td><td class="" title="" style=""></td><td class="calc-cell" title="[FY2022 세부내역]&#10;선납세금: 35&#10;─────────&#10;합계: 35" style="">35</td><td class="" title="" style=""></td><td class="calc-cell" title="[FY2024 세부내역]&#10;단기대여금: 500&#10;선납세금: 52&#10;─────────&#10;합계: 552" style="">552</td></tr><tr class="category-row"><td class="">비유동자산</td><td class="" title="" style="">22,671</td><td class="" title="" style="">21,536</td><td class="" title="" style="">21,928</td><td class="" title="" style="">11,595</td><td class="" title="" style="">9,393</td></tr><tr class=""><td class="sub-item">기타비유동자산</td><td class="calc-cell" title="[FY2020 세부내역]&#10;차량운반구: 4,694&#10;건물: 9,153&#10;토지: 8,083&#10;비품: 989&#10;시설장치: 896&#10;─────────&#10;합계: 24,725" style="">24,725</td><td class="calc-cell" title="[FY2021 세부내역]&#10;차량운반구: 5,709&#10;건물: 9,153&#10;토지: 8,083&#10;비품: 1,310&#10;기타비유동자산(세부): 967&#10;─────────&#10;합계: 26,232" style="">26,232</td><td class="calc-cell" title="[FY2022 세부내역]&#10;차량운반구: 7,063&#10;건물: 9,153&#10;토지: 8,083&#10;비품: 1,319&#10;기타비유동자산(세부): 1,162&#10;─────────&#10;합계: 27,894" style="">27,894</td><td class="calc-cell" title="[FY2023 세부내역]&#10;차량운반구: 8,485&#10;건물: 2,446&#10;토지: 2,130&#10;비품: 1,097&#10;기타비유동자산(세부): 1,285&#10;─────────&#10;합계: 16,378" style="">16,378</td><td class="calc-cell" title="[FY2024 세부내역]&#10;차량운반구: 8,940&#10;건물: 2,446&#10;토지: 2,130&#10;비품: 1,154&#10;기타비유동자산(세부): 785&#10;─────────&#10;합계: 16,393" style="">16,393</td></tr><tr class=""><td class="sub-item">유형자산</td><td class="" title="" style="">18,921</td><td class="" title="" style="">18,915</td><td class="" title="" style="">18,721</td><td class="" title="" style="">7,644</td><td class="" title="" style="">6,469</td></tr><tr class=""><td class="sub-item">장기투자자산</td><td class="calc-cell" title="[FY2020 세부내역]&#10;장기금융상품: 2,928&#10;─────────&#10;합계: 2,928" style="">2,928</td><td class="calc-cell" title="[FY2021 세부내역]&#10;장기금융상품: 1,549&#10;─────────&#10;합계: 1,549" style="">1,549</td><td class="calc-cell" title="[FY2022 세부내역]&#10;장기금융상품: 1,901&#10;─────────&#10;합계: 1,901" style="">1,901</td><td class="calc-cell" title="[FY2023 세부내역]&#10;장기금융상품: 1,999&#10;─────────&#10;합계: 1,999" style="">1,999</td><td class="calc-cell" title="[FY2024 세부내역]&#10;장기금융상품: 1,470&#10;─────────&#10;합계: 1,470" style="">1,470</td></tr><tr class=""><td class="sub-item">매출채권및기타채권[비유동]</td><td class="calc-cell" title="[FY2020 세부내역]&#10;임차보증금: 615&#10;기타보증금: 102&#10;─────────&#10;합계: 717" style="">717</td><td class="calc-cell" title="[FY2021 세부내역]&#10;임차보증금: 865&#10;기타보증금: 102&#10;─────────&#10;합계: 967" style="">967</td><td class="calc-cell" title="[FY2022 세부내역]&#10;임차보증금: 1,070&#10;기타보증금: 92&#10;─────────&#10;합계: 1,162" style="">1,162</td><td class="calc-cell" title="[FY2023 세부내역]&#10;임차보증금: 1,116&#10;기타보증금: 169&#10;─────────&#10;합계: 1,285" style="">1,285</td><td class="calc-cell" title="[FY2024 세부내역]&#10;임차보증금: 616&#10;기타보증금: 169&#10;─────────&#10;합계: 785" style="">785</td></tr><tr class="total-row"><td class="">자산총계</td><td class="" title="" style="">31,568</td><td class="" title="" style="">31,381</td><td class="" title="" style="">31,933</td><td class="" title="" style="">31,016</td><td class="" title="" style="">26,766</td></tr><tr class="category-row"><td class="">유동부채</td><td class="" title="" style="">16,931</td><td class="" title="" style="">24,466</td><td class="" title="" style="">23,101</td><td class="" title="" style="">12,148</td><td class="" title="" style="">9,602</td></tr><tr class=""><td class="sub-item">매입채무및기타채무</td><td class="calc-cell" title="[FY2020 세부내역]&#10;미지급금: 2,572&#10;미지급비용: 17&#10;예수금: 29&#10;선수수익: 71&#10;퇴직연금미지급금: 60&#10;─────────&#10;합계: 6,519" style="">6,519</td><td class="calc-cell" title="[FY2021 세부내역]&#10;미지급금: 2,875&#10;부가세예수금: 79&#10;미지급비용: 27&#10;예수금: 39&#10;선수수익: 52&#10;─────────&#10;합계: 6,931" style="">6,931</td><td class="calc-cell" title="[FY2022 세부내역]&#10;미지급금: 3,033&#10;부가세예수금: 108&#10;미지급비용: 94&#10;예수금: 58&#10;선수수익: 34&#10;─────────&#10;합계: 6,998" style="">6,998</td><td class="calc-cell" title="[FY2023 세부내역]&#10;미지급금: 1,201&#10;미지급비용: 82&#10;선수금: 1&#10;예수금: 92&#10;─────────&#10;합계: 5,371" style="">5,371</td><td class="calc-cell" title="[FY2024 세부내역]&#10;미지급금: 769&#10;미지급비용: 79&#10;예수금: 64&#10;─────────&#10;합계: 5,029" style="">5,029</td></tr><tr class=""><td class="sub-item">유동차입부채</td><td class="calc-cell" title="[FY2020 세부내역]&#10;단기차입금: 6,508&#10;유동성장기부채: 3,800&#10;─────────&#10;합계: 10,308" style="">10,308</td><td class="calc-cell" title="[FY2021 세부내역]&#10;단기차입금: 9,503&#10;유동성장기부채: 7,972&#10;─────────&#10;합계: 17,475" style="">17,475</td><td class="calc-cell" title="[FY2022 세부내역]&#10;단기차입금: 16,103&#10;─────────&#10;합계: 16,103" style="">16,103</td><td class="calc-cell" title="[FY2023 세부내역]&#10;단기차입금: 4,502&#10;─────────&#10;합계: 4,502" style="">4,502</td><td class="calc-cell" title="[FY2024 세부내역]&#10;단기차입금: 4,502&#10;─────────&#10;합계: 4,502" style="">4,502</td></tr><tr class=""><td class="sub-item">기타비금융부채</td><td class="calc-cell" title="[FY2020 세부내역]&#10;미지급세금: 103&#10;─────────&#10;합계: 103" style="">103</td><td class="calc-cell" title="[FY2021 세부내역]&#10;미지급세금: 60&#10;─────────&#10;합계: 60" style="">60</td><td class="" title="" style=""></td><td class="calc-cell" title="[FY2023 세부내역]&#10;미지급세금: 2,275&#10;─────────&#10;합계: 2,275" style="">2,275</td><td class="calc-cell" title="[FY2024 세부내역]&#10;미지급세금: 71&#10;─────────&#10;합계: 71" style="">71</td></tr><tr class="category-row"><td class="">비유동부채</td><td class="" title="" style="">8,968</td><td class="" title="" style="">589</td><td class="" title="" style="">3,033</td><td class="" title="" style="">3,341</td><td class="" title="" style="">1,469</td></tr><tr class=""><td class="sub-item">비유동차입부채</td><td class="calc-cell" title="[FY2020 세부내역]&#10;사채상환할증금: 96&#10;장기차입금: 7,272&#10;전환사채: 1,000&#10;─────────&#10;합계: 8,369" style="">8,369</td><td class="calc-cell" title="[FY2021 세부내역]&#10;사채상환할증금: 96&#10;─────────&#10;합계: 96" style="">96</td><td class="calc-cell" title="[FY2022 세부내역]&#10;장기차입금: 1,948&#10;─────────&#10;합계: 1,948" style="">1,948</td><td class="" title="" style=""></td><td class="" title="" style=""></td></tr><tr class=""><td class="sub-item">매입채무및기타채무[비유동]</td><td class="calc-cell" title="[FY2020 세부내역]&#10;임대보증금: 599&#10;─────────&#10;합계: 599" style="">599</td><td class="calc-cell" title="[FY2021 세부내역]&#10;임대보증금: 493&#10;─────────&#10;합계: 493" style="">493</td><td class="calc-cell" title="[FY2022 세부내역]&#10;임대보증금: 1,086&#10;─────────&#10;합계: 1,086" style="">1,086</td><td class="calc-cell" title="[FY2023 세부내역]&#10;장기미지급금: 2,626&#10;임대보증금: 715&#10;─────────&#10;합계: 3,341" style="">3,341</td><td class="calc-cell" title="[FY2024 세부내역]&#10;장기미지급금: 845&#10;임대보증금: 623&#10;─────────&#10;합계: 1,469" style="">1,469</td></tr><tr class="total-row"><td class="">부채총계</td><td class="" title="" style="">25,778</td><td class="" title="" style="">26,014</td><td class="" title="" style="">26,482</td><td class="" title="" style="">15,505</td><td class="" title="" style="">11,071</td></tr><tr class=""><td class="sub-item">자본금</td><td class="" title="" style="">200</td><td class="" title="" style="">200</td><td class="" title="" style="">200</td><td class="" title="" style="">200</td><td class="" title="" style="">200</td></tr><tr class=""><td class="sub-item">이익잉여금</td><td class="" title="" style="">5,457</td><td class="" title="" style="">6,309</td><td class="" title="" style="">6,381</td><td class="" title="" style="">16,441</td><td class="" title="" style="">16,625</td></tr><tr class=""><td class="sub-item">기타자본구성요소</td><td class="calc-cell" title="[FY2020 세부내역]&#10;자본잉여금: 132&#10;─────────&#10;합계: 132" style="">132</td><td class="calc-cell" title="[FY2021 세부내역]&#10;자본잉여금: 132&#10;자본조정: -1,274&#10;─────────&#10;합계: -1,142" style="color: #dc2626;">-1,142</td><td class="calc-cell" title="[FY2022 세부내역]&#10;자본잉여금: 132&#10;자본조정: -1,274&#10;기타자본항목: 132&#10;─────────&#10;합계: -1,010" style="color: #dc2626;">-1,010</td><td class="calc-cell" title="[FY2023 세부내역]&#10;자본잉여금: 132&#10;자본조정: -1,274&#10;기타자본항목: 132&#10;─────────&#10;합계: -1,010" style="color: #dc2626;">-1,010</td><td class="calc-cell" title="[FY2024 세부내역]&#10;자본잉여금: 132&#10;자본조정: -1,274&#10;기타자본항목: 132&#10;─────────&#10;합계: -1,010" style="color: #dc2626;">-1,010</td></tr><tr class="total-row"><td class="">자본총계</td><td class="" title="" style="">5,789</td><td class="" title="" style="">5,367</td><td class="" title="" style="">5,451</td><td class="" title="" style="">15,511</td><td class="" title="" style="">15,695</td></tr><tr class="total-row"><td class="">부채와자본총계</td><td class="" title="" style="">31,568</td><td class="" title="" style="">31,381</td><td class="" title="" style="">31,933</td><td class="" title="" style="">31,016</td><td class="" title="" style="">26,766</td></tr><tr class="total-row"><td class="">NWC</td><td class="calc-cell" title="[FY2020 세부내역]&#10;유동자산: 8,897&#10;유동부채: 16,931&#10;─────────&#10;합계: -8,034" style="color: #dc2626;">-8,034</td><td class="calc-cell" title="[FY2021 세부내역]&#10;유동자산: 9,845&#10;유동부채: 24,466&#10;─────────&#10;합계: -14,621" style="color: #dc2626;">-14,621</td><td class="calc-cell" title="[FY2022 세부내역]&#10;유동자산: 10,005&#10;유동부채: 23,101&#10;─────────&#10;합계: -13,097" style="color: #dc2626;">-13,097</td><td class="calc-cell" title="[FY2023 세부내역]&#10;유동자산: 19,421&#10;유동부채: 12,148&#10;─────────&#10;합계: 7,274" style="">7,274</td><td class="calc-cell" title="[FY2024 세부내역]&#10;유동자산: 17,373&#10;유동부채: 9,602&#10;─────────&#10;합계: 7,771" style="">7,771</td></tr><tr class="total-row"><td class="">Net Debt</td><td class="calc-cell" title="[FY2020 세부내역]&#10;유동차입부채: 10,308&#10;비유동차입부채: 8,369&#10;현금및현금성자산: -2,034&#10;단기투자자산: -2,008&#10;─────────&#10;합계: 14,635" style="">14,635</td><td class="calc-cell" title="[FY2021 세부내역]&#10;유동차입부채: 17,475&#10;비유동차입부채: 96&#10;현금및현금성자산: -2,531&#10;단기투자자산: -2,320&#10;─────────&#10;합계: 12,720" style="">12,720</td><td class="calc-cell" title="[FY2022 세부내역]&#10;유동차입부채: 16,103&#10;비유동차입부채: 1,948&#10;현금및현금성자산: -2,879&#10;단기투자자산: -2,057&#10;─────────&#10;합계: 13,115" style="">13,115</td><td class="calc-cell" title="[FY2023 세부내역]&#10;유동차입부채: 4,502&#10;현금및현금성자산: -3,878&#10;단기투자자산: -10,052&#10;─────────&#10;합계: -9,427" style="color: #dc2626;">-9,427</td><td class="calc-cell" title="[FY2024 세부내역]&#10;유동차입부채: 4,502&#10;현금및현금성자산: -3,829&#10;단기투자자산: -7,193&#10;─────────&#10;합계: -6,521" style="color: #dc2626;">-6,521</td></tr></tbody></table>
+                    </div>
+                    <div class="vcm-box">
+                        <div class="vcm-title">손익계산서</div>
+                        <table class="vcm-table"><thead><tr><th>(단위: 백만원)</th><th>FY2020</th><th>FY2021</th><th>FY2022</th><th>FY2023</th><th>FY2024</th></tr></thead><tbody><tr class="category-row"><td class="">매출</td><td class="" title="" style="">39,196</td><td class="" title="" style="">46,431</td><td class="" title="" style="">44,869</td><td class="" title="" style="">48,026</td><td class="" title="" style="">54,590</td></tr><tr class=""><td class="sub-item">  운송수입</td><td class="" title="" style="">38,266</td><td class="" title="" style="">45,052</td><td class="" title="" style="">43,473</td><td class="" title="" style="">46,300</td><td class="" title="" style="">53,713</td></tr><tr class=""><td class="sub-item">  임대료수입</td><td class="" title="" style="">930</td><td class="" title="" style="">1,379</td><td class="" title="" style="">1,396</td><td class="" title="" style="">1,726</td><td class="" title="" style="">877</td></tr><tr class="category-row"><td class="">매출원가</td><td class="" title="" style="">36,538</td><td class="" title="" style="">43,385</td><td class="" title="" style="">42,241</td><td class="" title="" style="">45,605</td><td class="" title="" style="">52,315</td></tr><tr class=""><td class="sub-item">  운송매출원가</td><td class="" title="" style="">36,538</td><td class="" title="" style="">43,385</td><td class="" title="" style="">42,241</td><td class="" title="" style="">45,605</td><td class="" title="" style="">52,315</td></tr><tr class="total-row"><td class="">매출총이익</td><td class="" title="" style="">2,658</td><td class="" title="" style="">3,046</td><td class="" title="" style="">2,628</td><td class="" title="" style="">2,420</td><td class="" title="" style="">2,275</td></tr><tr class="percent-row"><td class="sub-item">% of Sales</td><td class="" title="" style="">6.8%</td><td class="" title="" style="">6.6%</td><td class="" title="" style="">5.9%</td><td class="" title="" style="">5.0%</td><td class="" title="" style="">4.2%</td></tr><tr class="category-row"><td class="">판매비와관리비</td><td class="" title="" style="">1,608</td><td class="" title="" style="">1,524</td><td class="" title="" style="">1,793</td><td class="" title="" style="">2,671</td><td class="" title="" style="">1,989</td></tr><tr class=""><td class="sub-item">  인건비</td><td class="" title="" style="">535</td><td class="" title="" style="">583</td><td class="" title="" style="">794</td><td class="" title="" style="">906</td><td class="" title="" style="">604</td></tr><tr class=""><td class="sub-item">  임차료비용</td><td class="" title="" style=""></td><td class="" title="" style=""></td><td class="" title="" style=""></td><td class="" title="" style="">815</td><td class="" title="" style="">855</td></tr><tr class=""><td class="sub-item">  수수료비용</td><td class="" title="" style="">97</td><td class="" title="" style="">106</td><td class="" title="" style="">138</td><td class="" title="" style="">157</td><td class="" title="" style="">147</td></tr><tr class=""><td class="sub-item">  세금과공과</td><td class="" title="" style="">126</td><td class="" title="" style="">141</td><td class="" title="" style="">144</td><td class="" title="" style="">131</td><td class="" title="" style="">23</td></tr><tr class=""><td class="sub-item">  접대비</td><td class="" title="" style="">30</td><td class="" title="" style="">22</td><td class="" title="" style="">30</td><td class="" title="" style="">72</td><td class="" title="" style="">36</td></tr><tr class=""><td class="sub-item">  보험료</td><td class="" title="" style="">30</td><td class="" title="" style="">11</td><td class="" title="" style="">18</td><td class="" title="" style="">18</td><td class="" title="" style="">44</td></tr><tr class=""><td class="sub-item">  기타판매비와관리비</td><td class="calc-cell" title="[FY2020 세부내역]&#10;수도광열비: 1&#10;대손상각비: 27&#10;여비교통비: 4&#10;차량유지비: 6&#10;교육훈련비: (98,000원)&#10;통신비: 14&#10;소모품비: 11&#10;건물관리비: (346,260원)&#10;─────────&#10;합계: 64" style="">64</td><td class="calc-cell" title="[FY2021 세부내역]&#10;수도광열비: 2&#10;대손상각비: 4&#10;여비교통비: 4&#10;차량유지비: 3&#10;교육훈련비: (48,000원)&#10;통신비: 18&#10;소모품비: 12&#10;건물관리비: (310,740원)&#10;─────────&#10;합계: 45" style="">45</td><td class="calc-cell" title="[FY2022 세부내역]&#10;수도광열비: (36,285원)&#10;대손상각비: 14&#10;여비교통비: 4&#10;차량유지비: 5&#10;교육훈련비: 2&#10;통신비: 17&#10;소모품비: 6&#10;─────────&#10;합계: 47" style="">47</td><td class="calc-cell" title="[FY2023 세부내역]&#10;수도광열비: (191,295원)&#10;대손상각비: 16&#10;여비교통비: 6&#10;차량유지비: 30&#10;교육훈련비: 2&#10;통신비: 15&#10;소모품비: 12&#10;─────────&#10;합계: 82" style="">82</td><td class="calc-cell" title="[FY2024 세부내역]&#10;대손상각비: 41&#10;여비교통비: 1&#10;차량유지비: 74&#10;통신비: 13&#10;소모품비: 6&#10;─────────&#10;합계: 136" style="">136</td></tr><tr class="total-row highlight-row"><td class="">영업이익</td><td class="" title="" style="">1,050</td><td class="" title="" style="">1,522</td><td class="" title="" style="">834</td><td class="" title="" style="color: #dc2626;">-251</td><td class="" title="" style="">287</td></tr><tr class="percent-row"><td class="sub-item">% of Sales (영업이익)</td><td class="" title="" style="">2.7%</td><td class="" title="" style="">3.3%</td><td class="" title="" style="">1.9%</td><td class="" title="" style="">-0.5%</td><td class="" title="" style="">0.5%</td></tr><tr class="category-row"><td class="">영업외수익</td><td class="" title="" style="">77</td><td class="" title="" style="">60</td><td class="" title="" style="">121</td><td class="" title="" style="">13,585</td><td class="" title="" style="">348</td></tr><tr class=""><td class="sub-item">  유형자산처분이익</td><td class="" title="" style="">1</td><td class="" title="" style="">9</td><td class="" title="" style="">11</td><td class="" title="" style="">13,372</td><td class="" title="" style=""></td></tr><tr class=""><td class="sub-item">  이자수익</td><td class="" title="" style="">33</td><td class="" title="" style="">23</td><td class="" title="" style="">61</td><td class="" title="" style="">153</td><td class="" title="" style="">307</td></tr><tr class=""><td class="sub-item">  자산평가이익</td><td class="" title="" style=""></td><td class="" title="" style=""></td><td class="" title="" style="">31</td><td class="" title="" style="">38</td><td class="" title="" style="">18</td></tr><tr class=""><td class="sub-item">  기타영업외수익</td><td class="" title="" style="">43</td><td class="" title="" style="">28</td><td class="" title="" style="">18</td><td class="" title="" style="">21</td><td class="" title="" style="">23</td></tr><tr class="category-row"><td class="">영업외비용</td><td class="" title="" style="">531</td><td class="" title="" style="">613</td><td class="" title="" style="">866</td><td class="" title="" style="">992</td><td class="" title="" style="">381</td></tr><tr class=""><td class="sub-item">  이자비용</td><td class="" title="" style="">521</td><td class="" title="" style="">611</td><td class="" title="" style="">812</td><td class="" title="" style="">851</td><td class="" title="" style="">350</td></tr><tr class=""><td class="sub-item">  유형자산처분손실</td><td class="" title="" style=""></td><td class="" title="" style=""></td><td class="" title="" style=""></td><td class="" title="" style="">114</td><td class="" title="" style=""></td></tr><tr class=""><td class="sub-item">  기타영업외비용</td><td class="" title="" style="">6</td><td class="calc-cell" title="[FY2021 세부내역]&#10;광고선전비: 3&#10;─────────&#10;합계: 3" style="">3</td><td class="" title="" style="">50</td><td class="" title="" style="">18</td><td class="" title="" style="">28</td></tr><tr class="total-row"><td class="">법인세비용차감전이익</td><td class="" title="" style="">596</td><td class="" title="" style="">968</td><td class="" title="" style="">90</td><td class="" title="" style="">12,342</td><td class="" title="" style="">253</td></tr><tr class=""><td class="sub-item">법인세비용</td><td class="" title="" style="">105</td><td class="" title="" style="">116</td><td class="" title="" style="">6</td><td class="" title="" style="">2,281</td><td class="" title="" style="">69</td></tr><tr class="total-row highlight-row"><td class="">당기순이익</td><td class="" title="" style="">492</td><td class="" title="" style="">852</td><td class="" title="" style="">83</td><td class="" title="" style="">10,061</td><td class="" title="" style="">184</td></tr><tr class="percent-row"><td class="sub-item">% of Sales (순이익)</td><td class="" title="" style="">1.3%</td><td class="" title="" style="">1.8%</td><td class="" title="" style="">0.2%</td><td class="" title="" style="">20.9%</td><td class="" title="" style="">0.3%</td></tr><tr class="total-row highlight-row"><td class="">EBITDA</td><td class="calc-cell" title="[FY2020 계산식]&#10;영업이익: 1,050&#10;+ 감가상각비: 706&#10;+ 무형자산상각비: 0&#10;─────────&#10;= EBITDA: 1,756" style="">1,756</td><td class="calc-cell" title="[FY2021 계산식]&#10;영업이익: 1,522&#10;+ 감가상각비: 598&#10;+ 무형자산상각비: 0&#10;─────────&#10;= EBITDA: 2,119" style="">2,119</td><td class="calc-cell" title="[FY2022 계산식]&#10;영업이익: 834&#10;+ 감가상각비: 611&#10;+ 무형자산상각비: 0&#10;─────────&#10;= EBITDA: 1,445" style="">1,445</td><td class="calc-cell" title="[FY2023 계산식]&#10;영업이익: -251&#10;+ 감가상각비: 469&#10;+ 무형자산상각비: 0&#10;─────────&#10;= EBITDA: 218" style="">218</td><td class="calc-cell" title="[FY2024 계산식]&#10;영업이익: 287&#10;+ 감가상각비: 113&#10;+ 무형자산상각비: 0&#10;─────────&#10;= EBITDA: 399" style="">399</td></tr><tr class="percent-row"><td class="sub-item">% of Sales (EBITDA)</td><td class="" title="" style="">4.5%</td><td class="" title="" style="">4.6%</td><td class="" title="" style="">3.2%</td><td class="" title="" style="">0.5%</td><td class="" title="" style="">0.7%</td></tr></tbody></table>
+                    </div>
+                    <div class="vcm-box vcm-box-analysis">
+                        <div class="vcm-title">재무분석 AI</div>
+                        <div class="vcm-analysis-content">
+                            <h1>조일물류(주) 재무 분석 보고서</h1>
+                            <h2>요약</h2>
+                            <p>5년간 매출액은 391.9억원에서 545.9억원으로 39% 성장했으나, 매출원가율 상승과 판관비 증가로 같은 기간 영업이익은 10.5억원에서 2.8억원으로 73% 감소했습니다. 2023년 당기순이익은 100.6억원을 기록하며 전년 대비 폭증했으나, 이는 영업활동과 무관한 133.7억원의 유형자산처분이익에 따른 일회성 효과입니다.</p>
+                            <h2>주요 발견사항</h2>
+                            <h3>1. [2023년] 당기순이익</h3>
+                            <ul>
+                                <li><strong>현상</strong>: 100.6억원 기록, 전년(0.8억원) 대비 11,960% 폭증. 일회성 이익으로 인한 착시 현상.</li>
+                                <li><strong>원인 분석</strong>: 영업손실 2.5억원에도 불구하고, 영업외수익 항목의 유형자산처분이익 133.7억원이 발생하여 당기순이익이 급증했습니다.</li>
+                            </ul>
+                            <h3>2. [2023~2024년] 영업활동으로인한현금흐름</h3>
+                            <ul>
+                                <li><strong>현상</strong>: 2년 연속 대규모 순유출 기록 (FY23: -13.3억원, FY24: -16.1억원)</li>
+                                <li><strong>원인 분석</strong>: FY23 순유출은 비현금성 이익인 유형자산처분이익(133.7억원)을 당기순이익에서 차감 조정했기 때문입니다.</li>
+                            </ul>
+                            <h3>3. [2023년] 이익과 현금흐름의 괴리</h3>
+                            <ul>
+                                <li><strong>현상</strong>: 당기순이익은 100.6억원 흑자였으나, 영업활동현금흐름은 13.3억원 적자를 기록하여 113.9억원의 심각한 괴리 발생.</li>
+                                <li><strong>원인 분석</strong>: 당기순이익에 반영된 133.7억원의 유형자산처분이익은 비현금성 수익으로, 영업활동현금흐름 계산 시 차감 조정되었기 때문입니다.</li>
+                            </ul>
+                            <h3>4. [2023년] 유형자산</h3>
+                            <ul>
+                                <li><strong>현상</strong>: 토지 및 건물을 대량 매각하여 비유동자산이 219.2억원에서 115.9억원으로 47% 급감.</li>
+                                <li><strong>원인 분석</strong>: 손익계산서상 유형자산처분이익 133.7억원 발생과 함께, 재무상태표상 토지(장부가 60.7억원) 및 건물(장부가 49.5억원)을 매각했습니다.</li>
+                            </ul>
+                            <h3>5. [2020~2024년] 매출총이익률</h3>
+                            <ul>
+                                <li><strong>현상</strong>: 5년간 지속적으로 하락 (FY20: 6.8% → FY22: 5.9% → FY24: 4.2%)</li>
+                                <li><strong>원인 분석</strong>: 매출액 증가율(FY24 13.7%)보다 매출원가 상승률(FY24 14.7%)이 더 높았기 때문입니다.</li>
+                            </ul>
+                            <h3>6. [2023년] 영업이익</h3>
+                            <ul>
+                                <li><strong>현상</strong>: 영업손실 2.5억원 기록, 전년(영업이익 8.3억원) 대비 적자 전환.</li>
+                                <li><strong>원인 분석</strong>: 판매비와관리비가 17.9억원에서 26.7억원으로 급증한 것이 주된 원인입니다. 이는 유형자산 처분 후 임차 방식으로 전환하며 신규 발생한 지급임차료 8.2억원 때문입니다.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 전역에서 접근 가능하도록 window에 등록
+        window.loadMockData = loadMockData;
 
         function stripMarkdown(text) {
             return text
@@ -5518,6 +6258,19 @@
             insightTabBtn.textContent = '재무분석 AI';
             insightTabBtn.classList.remove('analyzing');
             document.getElementById('insightTooltip').classList.add('hidden');
+
+            // VCM 서브탭 버튼도 원복
+            const vcmAiBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="ai"]');
+            if (vcmAiBtn) {
+                vcmAiBtn.textContent = '재무분석 AI';
+                vcmAiBtn.classList.remove('analyzing');
+            }
+
+            // VCM 서브탭 AI 버튼 툴팁 숨김
+            const vcmAiTooltip = document.getElementById('vcmAiTooltip');
+            if (vcmAiTooltip) {
+                vcmAiTooltip.classList.add('hidden');
+            }
 
             // 복사 버튼 숨김
             document.getElementById('analysisCopyBtn').style.display = 'none';
@@ -5616,6 +6369,7 @@
         function resetAll() {
             stopStatusCheck();
             stopAnalysisStatusCheck();
+            stopHeartbeat();
 
             // 상태 플래그 초기화
             isExtractionComplete = false;
@@ -5637,6 +6391,8 @@
             document.getElementById('searchResults').classList.remove('show');
             document.getElementById('progressSection').classList.remove('show');
             document.getElementById('extractingSection').classList.remove('show');
+            document.getElementById('resultContainer').classList.remove('show');
+            document.getElementById('resultContainer').classList.remove('expanded');
             document.getElementById('completeSection').classList.remove('show');
             document.getElementById('companyInfoWrapper').style.display = 'none';
             hideError();
@@ -5675,13 +6431,26 @@
 
             // 상위 탭 초기화 (재무정보 탭으로)
             document.querySelectorAll('.main-tab').forEach(tab => {
-                tab.classList.remove('active');
+                tab.classList.remove('active', 'analyzing', 'completed');
                 if (tab.dataset.mainTab === 'financial') tab.classList.add('active');
             });
+            document.getElementById('insightTabBtn').textContent = '재무분석 AI';
             document.querySelectorAll('.main-tab-content').forEach(content => {
                 content.classList.remove('active');
             });
             document.getElementById('financialTabContent').classList.add('active');
+
+            // VCM 서브탭 버튼 및 툴팁 초기화
+            const vcmAiBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="ai"]');
+            if (vcmAiBtn) {
+                vcmAiBtn.textContent = '재무분석 AI';
+                vcmAiBtn.classList.remove('analyzing');
+            }
+            const vcmAiTooltip = document.getElementById('vcmAiTooltip');
+            if (vcmAiTooltip) {
+                vcmAiTooltip.textContent = '분석 작업은 약 1~3분 정도 소요됩니다.';
+                vcmAiTooltip.classList.add('hidden');
+            }
 
             // 진행바 초기화
             const progressBar = document.getElementById('progressBar');

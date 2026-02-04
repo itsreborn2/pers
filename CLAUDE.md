@@ -12,8 +12,27 @@
 | 디렉토리 | `/home/servermanager/pers` | `/home/servermanager/pers-dev` |
 | 브랜치 | `main` | `develop` |
 | 포트 | 8000 | 8001 |
-| URL | https://pers.moatai.app | https://dev.pers.moatai.app |
+| URL | https://pers.moatai.app | https://pers-dev.moatai.app |
 | systemd | `pers.service` | `pers-dev.service` |
+
+### 서버 하드웨어 사양 (vm-docker-01)
+
+| 항목 | 사양 | 비고 |
+|------|------|------|
+| CPU | Intel Xeon E5-2673 v4 @ 2.30GHz | 2코어 |
+| RAM | 3.8GB | Swap 4GB 포함 |
+| Disk | 29GB (16GB 가용) | Azure VM |
+| OS | Ubuntu 22.04 LTS | - |
+
+### 리소스 사용량 (참고)
+
+| 프로세스 | RAM 사용량 | 비고 |
+|----------|-----------|------|
+| pers (프로덕션) | ~300MB | 분석 시 최대 500MB |
+| pers-dev (개발) | ~110MB | 유휴 시 |
+| 동시 운영 | ~500MB | 충분한 여유 있음 |
+
+**주의:** RAM이 부족하면 Swap을 사용하므로 성능 저하 가능. 동시에 무거운 AI 분석 작업은 피할 것.
 
 ### 작업 흐름
 
@@ -22,7 +41,7 @@
     cd /home/servermanager/pers-dev
     # 코드 수정...
     sudo systemctl restart pers-dev
-    # https://dev.pers.moatai.app 에서 테스트
+    # https://pers-dev.moatai.app 에서 테스트
 
 [2] 개발 완료 후 커밋
     git add . && git commit -m "feat: ..." && git push origin develop

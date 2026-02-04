@@ -203,12 +203,12 @@ def background_cleanup_thread():
                             tasks_to_cleanup.append((task_id, True))  # 파일 포함 삭제
                             print(f"[CLEANUP] 유휴 작업 취소: {task_id} (마지막 조회: {int(current_time - last_accessed)}초 전)")
 
-                    # 완료된 작업: TASK_COMPLETED_TTL 이후 전체 삭제
+                    # 완료된 작업: last_accessed 기준으로 삭제 (브라우저 열려있으면 유지)
                     elif status == 'completed':
-                        completed_at = task.get('completed_at', last_accessed)
-                        if current_time - completed_at > TASK_COMPLETED_TTL:
+                        # last_accessed가 갱신되고 있으면 (heartbeat) 삭제하지 않음
+                        if current_time - last_accessed > TASK_COMPLETED_TTL:
                             tasks_to_cleanup.append((task_id, True))  # 전체 삭제 (파일은 유지)
-                            print(f"[CLEANUP] 만료된 작업 삭제: {task_id}")
+                            print(f"[CLEANUP] 만료된 작업 삭제: {task_id} (마지막 접근: {int(current_time - last_accessed)}초 전)")
 
                 # Lock 밖에서 cleanup 수행 (deadlock 방지)
             for task_id, force in tasks_to_cleanup:
@@ -5399,6 +5399,17 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
             print(f"[Excel] 시트 순서 재배치 실패: {e}")
 
 
+@app.post("/api/heartbeat/{task_id}")
+async def heartbeat(task_id: str):
+    """작업 유지 heartbeat - 브라우저가 열려있는 동안 작업 삭제 방지"""
+    task = TASKS.get(task_id)
+    if not task:
+        return {"success": False}
+
+    task['last_accessed'] = time.time()
+    return {"success": True}
+
+
 @app.get("/api/status/{task_id}")
 async def get_task_status(task_id: str):
     """작업 상태 조회 API"""
@@ -5961,6 +5972,9 @@ async def add_insight_to_excel(task_id: str, request: Request):
 
         wb.save(filepath)
         wb.close()
+
+        # 완료 시간 갱신 (TTL 리셋) - AI 분석 완료 후 다운로드 시간 확보
+        task['completed_at'] = time.time()
 
         return {"success": True, "message": "재무분석 AI(원본+요약)가 엑셀에 추가되었습니다."}
 
