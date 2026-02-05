@@ -2006,6 +2006,121 @@
             color: #6b7280;
         }
 
+        /* 관리자 분석 대시보드 */
+        .admin-analytics {
+            padding: 20px 32px;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .analytics-section {
+            margin-bottom: 20px;
+        }
+
+        .analytics-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .analytics-section-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 12px;
+        }
+
+        .analytics-card {
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+
+        .analytics-card.highlight {
+            background: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 100%);
+            border: 1px solid rgba(55, 60, 95, 0.1);
+        }
+
+        .analytics-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .analytics-value.small {
+            font-size: 1rem;
+        }
+
+        .analytics-sublabel {
+            font-size: 0.7rem;
+            color: #9ca3af;
+            margin-top: 2px;
+        }
+
+        .analytics-label {
+            font-size: 0.75rem;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        /* 인기 검색 종목 */
+        .top-searched-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .top-searched-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .top-searched-rank {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #e5e7eb;
+            color: #6b7280;
+            font-size: 0.7rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .top-searched-rank.top3 {
+            background: var(--accent);
+            color: white;
+        }
+
+        .top-searched-name {
+            flex: 1;
+            font-size: 0.8rem;
+            color: #374151;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .top-searched-count {
+            font-size: 0.75rem;
+            color: #9ca3af;
+        }
+
         .admin-table-container {
             flex: 1;
             overflow-y: auto;
@@ -2516,6 +2631,102 @@
                 </div>
             </div>
 
+            <!-- 분석 대시보드 -->
+            <div class="admin-analytics" id="adminAnalytics">
+                <!-- 활성 사용자 & 리텐션 -->
+                <div class="analytics-section">
+                    <div class="analytics-section-title">활성 사용자 & 리텐션</div>
+                    <div class="analytics-grid">
+                        <div class="analytics-card highlight">
+                            <div class="analytics-value" id="statDAU">-</div>
+                            <div class="analytics-label">DAU (오늘)</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statWAU">-</div>
+                            <div class="analytics-label">WAU (7일)</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statMAU">-</div>
+                            <div class="analytics-label">MAU (30일)</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value small" id="statRetention7d">-</div>
+                            <div class="analytics-label">리텐션 7일</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value small" id="statRetention30d">-</div>
+                            <div class="analytics-label">리텐션 30일</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 토큰 사용량 -->
+                <div class="analytics-section">
+                    <div class="analytics-section-title">토큰 사용량</div>
+                    <div class="analytics-grid">
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statTokensTotal">-</div>
+                            <div class="analytics-label">전체</div>
+                        </div>
+                        <div class="analytics-card highlight">
+                            <div class="analytics-value" id="statTokensWeek">-</div>
+                            <div class="analytics-label">이번 주</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statTokensToday">-</div>
+                            <div class="analytics-label">오늘</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 추출 & AI 분석 -->
+                <div class="analytics-section">
+                    <div class="analytics-section-title">추출 & 검색 현황</div>
+                    <div class="analytics-grid">
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statExtractionsTotal">-</div>
+                            <div class="analytics-sublabel">전체</div>
+                            <div class="analytics-label">추출</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statExtractionsWeek">-</div>
+                            <div class="analytics-sublabel">이번 주</div>
+                            <div class="analytics-label">추출</div>
+                        </div>
+                        <div class="analytics-card highlight">
+                            <div class="analytics-value" id="statExtractionsToday">-</div>
+                            <div class="analytics-sublabel">오늘</div>
+                            <div class="analytics-label">추출</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statSearchesTotal">-</div>
+                            <div class="analytics-sublabel">전체</div>
+                            <div class="analytics-label">검색</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statSearchesWeek">-</div>
+                            <div class="analytics-sublabel">이번 주</div>
+                            <div class="analytics-label">검색</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statAITotal">-</div>
+                            <div class="analytics-sublabel">전체</div>
+                            <div class="analytics-label">AI분석</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 인기 검색 종목 -->
+                <div class="analytics-section">
+                    <div class="analytics-section-title">인기 검색 종목 (최근 30일)</div>
+                    <div class="top-searched-list" id="topSearchedList">
+                        <div class="top-searched-item">
+                            <span class="top-searched-name" style="color: #9ca3af;">로딩 중...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="admin-table-container">
                 <table class="admin-table" id="adminUserTable">
                     <thead>
@@ -2523,15 +2734,16 @@
                             <th>ID</th>
                             <th>이메일</th>
                             <th>등급</th>
-                            <th>검색</th>
-                            <th>유료 시작일</th>
+                            <th>마지막 접속</th>
+                            <th>토큰 사용</th>
+                            <th>일평균</th>
+                            <th>주간</th>
                             <th>만료일</th>
-                            <th>가입일</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody id="adminUserTableBody">
-                        <tr><td colspan="8" class="loading-row">로딩 중...</td></tr>
+                        <tr><td colspan="9" class="loading-row">로딩 중...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -2965,15 +3177,62 @@
             tbody.innerHTML = '<tr><td colspan="8" class="loading-row">로딩 중...</td></tr>';
 
             try {
-                const response = await fetch('/api/admin/users');
-                if (!response.ok) {
+                // 사용자 목록과 분석 데이터를 병렬로 로드
+                const [usersResponse, analyticsResponse] = await Promise.all([
+                    fetch('/api/admin/users'),
+                    fetch('/api/admin/analytics')
+                ]);
+
+                if (!usersResponse.ok) {
                     throw new Error('권한이 없습니다');
                 }
 
-                const data = await response.json();
-                const users = data.users || [];
+                const usersData = await usersResponse.json();
+                const users = usersData.users || [];
 
-                // 통계 업데이트
+                // 분석 데이터 업데이트
+                if (analyticsResponse.ok) {
+                    const analyticsData = await analyticsResponse.json();
+                    const a = analyticsData.analytics || {};
+
+                    // 활성 사용자 & 리텐션
+                    document.getElementById('statDAU').textContent = a.dau || 0;
+                    document.getElementById('statWAU').textContent = a.wau || 0;
+                    document.getElementById('statMAU').textContent = a.mau || 0;
+                    document.getElementById('statRetention7d').textContent = (a.retention_7d || 0) + '%';
+                    document.getElementById('statRetention30d').textContent = (a.retention_30d || 0) + '%';
+
+                    // 토큰 사용량 (숫자 포맷팅)
+                    const formatNum = (n) => n ? n.toLocaleString() : '0';
+                    document.getElementById('statTokensTotal').textContent = formatNum(a.tokens_total);
+                    document.getElementById('statTokensWeek').textContent = formatNum(a.tokens_week);
+                    document.getElementById('statTokensToday').textContent = formatNum(a.tokens_today);
+
+                    // 추출 & 검색
+                    document.getElementById('statExtractionsTotal').textContent = formatNum(a.extractions_total);
+                    document.getElementById('statExtractionsWeek').textContent = formatNum(a.extractions_week);
+                    document.getElementById('statExtractionsToday').textContent = formatNum(a.extractions_today);
+                    document.getElementById('statSearchesTotal').textContent = formatNum(a.searches_total);
+                    document.getElementById('statSearchesWeek').textContent = formatNum(a.searches_week);
+                    document.getElementById('statAITotal').textContent = formatNum(a.ai_analyses_total);
+
+                    // 인기 검색 종목
+                    const topList = document.getElementById('topSearchedList');
+                    const topSearched = a.top_searched || [];
+                    if (topSearched.length > 0) {
+                        topList.innerHTML = topSearched.map((item, idx) => `
+                            <div class="top-searched-item">
+                                <span class="top-searched-rank ${idx < 3 ? 'top3' : ''}">${idx + 1}</span>
+                                <span class="top-searched-name" title="${item.corp_name}">${item.corp_name}</span>
+                                <span class="top-searched-count">${item.count}회</span>
+                            </div>
+                        `).join('');
+                    } else {
+                        topList.innerHTML = '<div class="top-searched-item"><span class="top-searched-name" style="color: #9ca3af;">검색 기록 없음</span></div>';
+                    }
+                }
+
+                // 회원 통계 업데이트
                 document.getElementById('statTotalUsers').textContent = users.length;
                 document.getElementById('statProUsers').textContent = users.filter(u => u.tier === 'pro').length;
                 document.getElementById('statBasicUsers').textContent = users.filter(u => u.tier === 'basic').length;
@@ -2981,15 +3240,36 @@
 
                 // 테이블 렌더링
                 if (users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" class="loading-row">등록된 회원이 없습니다</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="9" class="loading-row">등록된 회원이 없습니다</td></tr>';
                     return;
                 }
 
                 tbody.innerHTML = users.map(user => {
                     const isAdmin = user.role === 'admin';
-                    const subStart = user.subscription_start ? user.subscription_start.split('T')[0] : '';
-                    const subEnd = user.expires_at ? user.expires_at.split('T')[0] : '';
-                    const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString('ko-KR') : '-';
+                    const subEnd = user.expires_at ? user.expires_at.split('T')[0] : '-';
+
+                    // 마지막 접속 시간 포맷팅
+                    let lastLoginText = '-';
+                    let lastLoginTitle = '';
+                    if (user.last_login) {
+                        const lastLogin = new Date(user.last_login);
+                        const now = new Date();
+                        const diffMs = now - lastLogin;
+                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                        const diffMins = Math.floor(diffMs / (1000 * 60));
+
+                        if (diffMins < 60) {
+                            lastLoginText = diffMins + '분 전';
+                        } else if (diffHours < 24) {
+                            lastLoginText = diffHours + '시간 전';
+                        } else if (diffDays < 30) {
+                            lastLoginText = diffDays + '일 전';
+                        } else {
+                            lastLoginText = lastLogin.toLocaleDateString('ko-KR');
+                        }
+                        lastLoginTitle = lastLogin.toLocaleString('ko-KR');
+                    }
 
                     return `
                         <tr data-user-id="${user.id}">
@@ -3002,16 +3282,11 @@
                                     <option value="pro" ${user.tier === 'pro' ? 'selected' : ''}>Pro</option>
                                 </select>
                             </td>
-                            <td class="usage-cell">${user.search_used || 0}</td>
-                            <td>
-                                <input type="date" class="inline-date" value="${subStart}"
-                                       onchange="updateUserField(${user.id}, 'subscription_start', this.value)" />
-                            </td>
-                            <td>
-                                <input type="date" class="inline-date" value="${subEnd}"
-                                       onchange="updateUserField(${user.id}, 'expires_at', this.value)" />
-                            </td>
-                            <td>${createdAt}</td>
+                            <td title="${lastLoginTitle}">${lastLoginText}</td>
+                            <td class="usage-cell">${(user.total_tokens_used || 0).toLocaleString()}</td>
+                            <td class="usage-cell">${user.daily_avg_tokens || 0}</td>
+                            <td class="usage-cell">${(user.weekly_tokens_used || 0).toLocaleString()}</td>
+                            <td>${subEnd}</td>
                             <td>
                                 <button class="btn-icon" onclick="resetUserUsageById(${user.id})" title="사용량 초기화">↺</button>
                                 ${!isAdmin ? `<button class="btn-icon btn-icon-danger" onclick="deleteUserById(${user.id})" title="삭제">✕</button>` : ''}
@@ -3022,7 +3297,7 @@
 
             } catch (err) {
                 console.error('Load users error:', err);
-                tbody.innerHTML = '<tr><td colspan="8" class="loading-row">회원 목록을 불러올 수 없습니다</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="loading-row">회원 목록을 불러올 수 없습니다</td></tr>';
             }
         }
 

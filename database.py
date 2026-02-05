@@ -456,7 +456,7 @@ def get_popular_companies(limit: int = 10) -> List[Dict]:
 
 
 def get_all_users() -> List[Dict]:
-    """모든 사용자 조회 (관리자용)"""
+    """모든 사용자 조회 (관리자용) - 활동 통계 포함"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -465,7 +465,54 @@ def get_all_users() -> List[Dict]:
             FROM users
             ORDER BY created_at DESC
         ''')
-        return [dict(row) for row in cursor.fetchall()]
+        users = [dict(row) for row in cursor.fetchall()]
+
+        # 각 사용자별 활동 통계 추가
+        for user in users:
+            user_id = user['id']
+
+            # 마지막 로그인 시간
+            cursor.execute('''
+                SELECT login_at FROM login_history
+                WHERE user_id = ?
+                ORDER BY login_at DESC LIMIT 1
+            ''', (user_id,))
+            row = cursor.fetchone()
+            user['last_login'] = row[0] if row else None
+
+            # 총 토큰 사용량 (llm_usage에서 total_tokens 합계)
+            cursor.execute('''
+                SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage
+                WHERE user_id = ?
+            ''', (user_id,))
+            user['total_tokens_used'] = cursor.fetchone()[0]
+
+            # 최근 7일간 토큰 사용량
+            cursor.execute('''
+                SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage
+                WHERE user_id = ? AND created_at >= datetime('now', '-7 days')
+            ''', (user_id,))
+            weekly_tokens = cursor.fetchone()[0]
+            user['weekly_tokens_used'] = weekly_tokens
+            user['daily_avg_tokens'] = round(weekly_tokens / 7, 1) if weekly_tokens else 0
+
+            # 첫 사용일부터 현재까지 일수 (평균 계산용)
+            cursor.execute('''
+                SELECT MIN(created_at) FROM llm_usage WHERE user_id = ?
+            ''', (user_id,))
+            first_usage = cursor.fetchone()[0]
+            if first_usage and user['total_tokens_used'] > 0:
+                from datetime import datetime
+                try:
+                    first_date = datetime.fromisoformat(first_usage.replace('Z', '+00:00'))
+                    days_since_first = max(1, (datetime.now() - first_date.replace(tzinfo=None)).days)
+                    user['overall_daily_avg'] = round(user['total_tokens_used'] / days_since_first, 1)
+                except:
+                    user['overall_daily_avg'] = 0
+            else:
+                user['overall_daily_avg'] = 0
+
+        return users
 
 
 def use_token(user_id: int) -> bool:
@@ -503,6 +550,168 @@ def update_user_password(user_id: int, new_password_hash: str):
             UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         ''', (new_password_hash, user_id))
+
+
+def get_admin_analytics() -> Dict:
+    """관리자용 종합 분석 데이터"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        analytics = {}
+
+        # 1. 사용자 통계
+        cursor.execute('SELECT COUNT(*) FROM users')
+        analytics['total_users'] = cursor.fetchone()[0]
+
+        # 2. DAU (Daily Active Users) - 오늘 로그인한 유니크 사용자
+        cursor.execute('''
+            SELECT COUNT(DISTINCT user_id) FROM login_history
+            WHERE date(login_at) = date('now')
+        ''')
+        analytics['dau'] = cursor.fetchone()[0]
+
+        # 3. WAU (Weekly Active Users) - 최근 7일 로그인한 유니크 사용자
+        cursor.execute('''
+            SELECT COUNT(DISTINCT user_id) FROM login_history
+            WHERE login_at >= datetime('now', '-7 days')
+        ''')
+        analytics['wau'] = cursor.fetchone()[0]
+
+        # 4. MAU (Monthly Active Users) - 최근 30일 로그인한 유니크 사용자
+        cursor.execute('''
+            SELECT COUNT(DISTINCT user_id) FROM login_history
+            WHERE login_at >= datetime('now', '-30 days')
+        ''')
+        analytics['mau'] = cursor.fetchone()[0]
+
+        # 5. 리텐션율 (7일) - 7일 전에 가입한 사용자 중 최근 7일 내 재접속 비율
+        cursor.execute('''
+            SELECT COUNT(*) FROM users
+            WHERE created_at <= datetime('now', '-7 days')
+        ''')
+        users_7days_ago = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COUNT(DISTINCT u.id) FROM users u
+            INNER JOIN login_history lh ON u.id = lh.user_id
+            WHERE u.created_at <= datetime('now', '-7 days')
+            AND lh.login_at >= datetime('now', '-7 days')
+        ''')
+        retained_7days = cursor.fetchone()[0]
+        analytics['retention_7d'] = round(retained_7days / users_7days_ago * 100, 1) if users_7days_ago > 0 else 0
+
+        # 6. 리텐션율 (30일)
+        cursor.execute('''
+            SELECT COUNT(*) FROM users
+            WHERE created_at <= datetime('now', '-30 days')
+        ''')
+        users_30days_ago = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COUNT(DISTINCT u.id) FROM users u
+            INNER JOIN login_history lh ON u.id = lh.user_id
+            WHERE u.created_at <= datetime('now', '-30 days')
+            AND lh.login_at >= datetime('now', '-30 days')
+        ''')
+        retained_30days = cursor.fetchone()[0]
+        analytics['retention_30d'] = round(retained_30days / users_30days_ago * 100, 1) if users_30days_ago > 0 else 0
+
+        # 7. 토큰 사용량
+        cursor.execute('SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage')
+        analytics['tokens_total'] = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage
+            WHERE created_at >= datetime('now', '-7 days')
+        ''')
+        analytics['tokens_week'] = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage
+            WHERE date(created_at) = date('now')
+        ''')
+        analytics['tokens_today'] = cursor.fetchone()[0]
+
+        # 8. 추출/AI 분석 횟수
+        cursor.execute('SELECT COUNT(*) FROM extraction_history')
+        analytics['extractions_total'] = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COUNT(*) FROM extraction_history
+            WHERE date(created_at) = date('now')
+        ''')
+        analytics['extractions_today'] = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COUNT(*) FROM extraction_history
+            WHERE created_at >= datetime('now', '-7 days')
+        ''')
+        analytics['extractions_week'] = cursor.fetchone()[0]
+
+        cursor.execute('SELECT COUNT(*) FROM llm_usage')
+        analytics['ai_analyses_total'] = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COUNT(*) FROM llm_usage
+            WHERE date(created_at) = date('now')
+        ''')
+        analytics['ai_analyses_today'] = cursor.fetchone()[0]
+
+        # 9. 검색 횟수
+        cursor.execute('SELECT COUNT(*) FROM search_history')
+        analytics['searches_total'] = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COUNT(*) FROM search_history
+            WHERE date(searched_at) = date('now')
+        ''')
+        analytics['searches_today'] = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COUNT(*) FROM search_history
+            WHERE searched_at >= datetime('now', '-7 days')
+        ''')
+        analytics['searches_week'] = cursor.fetchone()[0]
+
+        # 10. 인기 검색 종목 (최근 30일)
+        cursor.execute('''
+            SELECT corp_name, corp_code, COUNT(*) as cnt
+            FROM search_history
+            WHERE searched_at >= datetime('now', '-30 days')
+            GROUP BY corp_code
+            ORDER BY cnt DESC
+            LIMIT 10
+        ''')
+        analytics['top_searched'] = [
+            {'corp_name': row[0], 'corp_code': row[1], 'count': row[2]}
+            for row in cursor.fetchall()
+        ]
+
+        # 11. 최근 7일 일별 활동 (차트용)
+        cursor.execute('''
+            SELECT date(login_at) as day, COUNT(DISTINCT user_id) as users
+            FROM login_history
+            WHERE login_at >= datetime('now', '-7 days')
+            GROUP BY date(login_at)
+            ORDER BY day
+        ''')
+        analytics['daily_active_users'] = [
+            {'date': row[0], 'users': row[1]}
+            for row in cursor.fetchall()
+        ]
+
+        cursor.execute('''
+            SELECT date(created_at) as day, COUNT(*) as cnt
+            FROM extraction_history
+            WHERE created_at >= datetime('now', '-7 days')
+            GROUP BY date(created_at)
+            ORDER BY day
+        ''')
+        analytics['daily_extractions'] = [
+            {'date': row[0], 'count': row[1]}
+            for row in cursor.fetchall()
+        ]
+
+        return analytics
 
 
 # 초기화

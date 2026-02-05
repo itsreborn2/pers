@@ -391,6 +391,13 @@ async def get_users(admin: Dict = Depends(require_admin)):
     return {"users": users}
 
 
+@app.get("/api/admin/analytics")
+async def get_admin_analytics(admin: Dict = Depends(require_admin)):
+    """관리자용 종합 분석 데이터 조회"""
+    analytics = db.get_admin_analytics()
+    return {"analytics": analytics}
+
+
 class UpdateUserRequest(BaseModel):
     """회원 정보 수정 요청"""
     tier: Optional[str] = None
@@ -618,7 +625,7 @@ def _get_market_name(corp) -> str:
 
 
 @app.get("/api/company-info/{corp_code}")
-async def get_company_info(corp_code: str):
+async def get_company_info(corp_code: str, user: Optional[Dict] = Depends(get_current_user)):
     """
     기업개황정보 조회 API
 
@@ -684,6 +691,20 @@ async def get_company_info(corp_code: str):
             info["acc_mt_formatted"] = ""
 
         print(f"[COMPANY_INFO] 조회 완료: {info['corp_name']}")
+
+        # 검색 기록 저장 (로그인한 사용자만)
+        if user:
+            try:
+                db.log_search(
+                    user_id=user['user_id'],
+                    corp_code=corp_code,
+                    corp_name=info['corp_name'],
+                    market=info.get('market_name', '')
+                )
+                print(f"[COMPANY_INFO] 검색 기록 저장: user_id={user['user_id']}, corp={info['corp_name']}")
+            except Exception as e:
+                print(f"[COMPANY_INFO] 검색 기록 저장 실패: {e}")
+
         return {"success": True, "data": info}
 
     except HTTPException:

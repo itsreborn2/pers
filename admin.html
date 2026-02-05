@@ -128,6 +128,152 @@
         .stat-card.basic .value { color: #10b981; }
         .stat-card.free .value { color: #6b7280; }
 
+        /* 분석 대시보드 */
+        .analytics-container {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+
+        .analytics-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 20px;
+        }
+
+        .analytics-sections {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+
+        .analytics-section {
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .analytics-section-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 12px;
+        }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 10px;
+        }
+
+        .analytics-card {
+            background: white;
+            border-radius: 8px;
+            padding: 12px 8px;
+            text-align: center;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .analytics-card.highlight {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border: 1px solid rgba(37, 99, 235, 0.1);
+        }
+
+        .analytics-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #2563eb;
+        }
+
+        .analytics-value.small {
+            font-size: 1rem;
+        }
+
+        .analytics-sublabel {
+            font-size: 0.65rem;
+            color: #9ca3af;
+            margin-top: 2px;
+        }
+
+        .analytics-label {
+            font-size: 0.7rem;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        /* 인기 검색 종목 */
+        .top-searched-section {
+            grid-column: 1 / -1;
+        }
+
+        .top-searched-list {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+
+        .top-searched-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .top-searched-rank {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #e5e7eb;
+            color: #6b7280;
+            font-size: 0.7rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .top-searched-rank.top3 {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: white;
+        }
+
+        .top-searched-name {
+            flex: 1;
+            font-size: 0.8rem;
+            color: #374151;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .top-searched-count {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 1200px) {
+            .analytics-sections {
+                grid-template-columns: 1fr;
+            }
+            .top-searched-list {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .top-searched-list {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* 테이블 컨테이너 */
         .table-container {
             background: #ffffff;
@@ -380,6 +526,81 @@
             </div>
         </div>
 
+        <!-- 분석 대시보드 -->
+        <div class="analytics-container">
+            <h2 class="analytics-title">서비스 현황</h2>
+            <div class="analytics-sections">
+                <!-- 활성 사용자 & 리텐션 -->
+                <div class="analytics-section">
+                    <div class="analytics-section-title">활성 사용자 & 리텐션</div>
+                    <div class="analytics-grid">
+                        <div class="analytics-card highlight">
+                            <div class="analytics-value" id="statDAU">-</div>
+                            <div class="analytics-label">DAU</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statWAU">-</div>
+                            <div class="analytics-label">WAU</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statMAU">-</div>
+                            <div class="analytics-label">MAU</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value small" id="statRetention7d">-</div>
+                            <div class="analytics-label">7일 리텐션</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value small" id="statRetention30d">-</div>
+                            <div class="analytics-label">30일 리텐션</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 토큰 & 사용량 -->
+                <div class="analytics-section">
+                    <div class="analytics-section-title">토큰 & 사용량</div>
+                    <div class="analytics-grid">
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statTokensTotal">-</div>
+                            <div class="analytics-sublabel">전체</div>
+                            <div class="analytics-label">토큰</div>
+                        </div>
+                        <div class="analytics-card highlight">
+                            <div class="analytics-value" id="statTokensWeek">-</div>
+                            <div class="analytics-sublabel">이번 주</div>
+                            <div class="analytics-label">토큰</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statExtractionsTotal">-</div>
+                            <div class="analytics-sublabel">전체</div>
+                            <div class="analytics-label">추출</div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-value" id="statExtractionsWeek">-</div>
+                            <div class="analytics-sublabel">이번 주</div>
+                            <div class="analytics-label">추출</div>
+                        </div>
+                        <div class="analytics-card highlight">
+                            <div class="analytics-value" id="statExtractionsToday">-</div>
+                            <div class="analytics-sublabel">오늘</div>
+                            <div class="analytics-label">추출</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 인기 검색 종목 -->
+                <div class="analytics-section top-searched-section">
+                    <div class="analytics-section-title">인기 검색 종목 (최근 30일)</div>
+                    <div class="top-searched-list" id="topSearchedList">
+                        <div class="top-searched-item">
+                            <span class="top-searched-name" style="color: #9ca3af;">로딩 중...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="table-container">
             <div class="table-header">
                 <h2>회원 목록</h2>
@@ -442,13 +663,54 @@
             const tbody = document.getElementById('userTableBody');
 
             try {
-                const response = await fetch('/api/admin/users');
-                if (!response.ok) throw new Error('권한 없음');
+                // 사용자 목록과 분석 데이터 병렬 로드
+                const [usersResponse, analyticsResponse] = await Promise.all([
+                    fetch('/api/admin/users'),
+                    fetch('/api/admin/analytics')
+                ]);
 
-                const data = await response.json();
-                const users = data.users || [];
+                if (!usersResponse.ok) throw new Error('권한 없음');
 
-                // 통계 업데이트
+                const usersData = await usersResponse.json();
+                const users = usersData.users || [];
+
+                // 분석 데이터 업데이트
+                if (analyticsResponse.ok) {
+                    const analyticsData = await analyticsResponse.json();
+                    const a = analyticsData.analytics || {};
+
+                    // 활성 사용자 & 리텐션
+                    document.getElementById('statDAU').textContent = a.dau || 0;
+                    document.getElementById('statWAU').textContent = a.wau || 0;
+                    document.getElementById('statMAU').textContent = a.mau || 0;
+                    document.getElementById('statRetention7d').textContent = (a.retention_7d || 0) + '%';
+                    document.getElementById('statRetention30d').textContent = (a.retention_30d || 0) + '%';
+
+                    // 토큰 & 사용량
+                    const formatNum = (n) => n ? n.toLocaleString() : '0';
+                    document.getElementById('statTokensTotal').textContent = formatNum(a.tokens_total);
+                    document.getElementById('statTokensWeek').textContent = formatNum(a.tokens_week);
+                    document.getElementById('statExtractionsTotal').textContent = formatNum(a.extractions_total);
+                    document.getElementById('statExtractionsWeek').textContent = formatNum(a.extractions_week);
+                    document.getElementById('statExtractionsToday').textContent = formatNum(a.extractions_today);
+
+                    // 인기 검색 종목
+                    const topList = document.getElementById('topSearchedList');
+                    const topSearched = a.top_searched || [];
+                    if (topSearched.length > 0) {
+                        topList.innerHTML = topSearched.map((item, idx) => `
+                            <div class="top-searched-item">
+                                <span class="top-searched-rank ${idx < 3 ? 'top3' : ''}">${idx + 1}</span>
+                                <span class="top-searched-name" title="${item.corp_name}">${item.corp_name}</span>
+                                <span class="top-searched-count">${item.count}회</span>
+                            </div>
+                        `).join('');
+                    } else {
+                        topList.innerHTML = '<div class="top-searched-item"><span class="top-searched-name" style="color: #9ca3af;">검색 기록 없음</span></div>';
+                    }
+                }
+
+                // 회원 통계 업데이트
                 document.getElementById('statTotal').textContent = users.length;
                 document.getElementById('statPro').textContent = users.filter(u => u.tier === 'pro').length;
                 document.getElementById('statBasic').textContent = users.filter(u => u.tier === 'basic').length;
