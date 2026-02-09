@@ -46,6 +46,7 @@ TASKS_LOCK = threading.Lock()
 # 메모리 정리 설정
 TASK_IDLE_TIMEOUT = 120  # 진행 중 작업: 2분간 status 조회 없으면 취소
 TASK_COMPLETED_TTL = 300  # 완료된 작업: 5분 후 전체 삭제 (파일은 유지)
+PREVIEW_DATA_TTL = 60    # preview_data: AI분석 미시작 시 1분 후 정리
 
 # 기업 리스트 캐시 (한 번만 로드)
 CORP_LIST = None
@@ -193,6 +194,7 @@ def background_cleanup_thread():
                 for task_id, task in list(TASKS.items()):
                     last_accessed = task.get('last_accessed', task.get('created_at', current_time))
                     status = task.get('status', '')
+                    idle_seconds = int(current_time - last_accessed)
 
                     # 진행 중 작업: TASK_IDLE_TIMEOUT 동안 조회 없으면 취소
                     if status == 'running':
@@ -201,14 +203,37 @@ def background_cleanup_thread():
                             task['status'] = 'cancelled'
                             task['message'] = '사용자 이탈로 작업 취소됨'
                             tasks_to_cleanup.append((task_id, True))  # 파일 포함 삭제
-                            print(f"[CLEANUP] 유휴 작업 취소: {task_id} (마지막 조회: {int(current_time - last_accessed)}초 전)")
+                            print(f"[CLEANUP] 유휴 작업 취소: {task_id} (마지막 조회: {idle_seconds}초 전)")
 
-                    # 완료된 작업: last_accessed 기준으로 삭제 (브라우저 열려있으면 유지)
+                    # 완료된 작업이지만 백그라운드 분석/리서치가 진행 중인 경우
                     elif status == 'completed':
+                        # 브라우저 닫힘 감지 (heartbeat 없음)
+                        if current_time - last_accessed > TASK_IDLE_TIMEOUT:
+                            # 재무분석 AI 취소
+                            if task.get('analysis_status') == 'running':
+                                task['analysis_status'] = 'cancelled'
+                                task['analysis_message'] = '사용자 이탈로 분석 취소됨'
+                                print(f"[CLEANUP] 재무분석 AI 취소: {task_id} (마지막 조회: {idle_seconds}초 전)")
+
+                            # 기업 리서치 취소
+                            if task.get('super_research_status') == 'running':
+                                task['super_research_status'] = 'cancelled'
+                                task['super_research_message'] = '사용자 이탈로 리서치 취소됨'
+                                print(f"[CLEANUP] 기업 리서치 취소: {task_id} (마지막 조회: {idle_seconds}초 전)")
+
+                        # 메모리 절약: AI분석/리서치 시작 안 한 경우 preview_data 조기 정리
+                        completed_at = task.get('completed_at', last_accessed)
+                        if (current_time - completed_at > PREVIEW_DATA_TTL and
+                            'preview_data' in task and
+                            task.get('analysis_status') != 'running' and
+                            task.get('super_research_status') != 'running'):
+                            del task['preview_data']
+                            print(f"[CLEANUP] preview_data 조기 정리: {task_id} (AI 미시작, {int(current_time - completed_at)}초 경과)")
+
                         # last_accessed가 갱신되고 있으면 (heartbeat) 삭제하지 않음
                         if current_time - last_accessed > TASK_COMPLETED_TTL:
                             tasks_to_cleanup.append((task_id, True))  # 전체 삭제 (파일은 유지)
-                            print(f"[CLEANUP] 만료된 작업 삭제: {task_id} (마지막 접근: {int(current_time - last_accessed)}초 전)")
+                            print(f"[CLEANUP] 만료된 작업 삭제: {task_id} (마지막 접근: {idle_seconds}초 전)")
 
                 # Lock 밖에서 cleanup 수행 (deadlock 방지)
             for task_id, force in tasks_to_cleanup:
@@ -5541,13 +5566,25 @@ async def run_financial_analysis(task_id: str):
         print(f"[ANALYSIS ERROR] Task not found: {task_id}")
         return
 
-    # 진행 상태 업데이트 콜백
+    # 취소 체크 함수
+    def is_cancelled():
+        return task.get('analysis_status') == 'cancelled'
+
+    # 진행 상태 업데이트 콜백 (취소 체크 포함)
     def update_progress(progress: int, message: str):
+        # 취소 확인
+        if is_cancelled():
+            raise Exception("사용자 이탈로 분석 취소됨")
         task['analysis_progress'] = progress
         task['analysis_message'] = message
         print(f"[ANALYSIS] Progress: {progress}% - {message}")
 
     try:
+        # 취소 확인
+        if is_cancelled():
+            print(f"[ANALYSIS] 시작 전 취소됨: {task_id}")
+            return
+
         print("[ANALYSIS] FinancialInsightAnalyzer 임포트 중...")
         from financial_insight_analyzer import FinancialInsightAnalyzer
 
@@ -5616,6 +5653,11 @@ async def run_financial_analysis(task_id: str):
         task['analysis_message'] = '분석 완료'
         task['analysis_result'] = result
 
+        # 메모리 절약: AI 분석 완료 후 preview_data 정리 (더 이상 불필요)
+        if 'preview_data' in task:
+            del task['preview_data']
+            print(f"[ANALYSIS] preview_data 메모리 해제: {task_id}")
+
         # LLM 사용량 로깅 (로그인한 사용자인 경우)
         if task.get('user_id'):
             try:
@@ -5659,6 +5701,177 @@ async def get_analysis_status(task_id: str):
         "message": task.get('analysis_message', ''),
         "result": task.get('analysis_result'),
         "filename": task.get('filename')  # 다운로드용 파일명
+    }
+
+
+# ============================================================
+# 기업 리서치 API
+# ============================================================
+@app.post("/api/super-research/{task_id}")
+async def start_super_research(task_id: str):
+    """
+    기업 리서치 시작 API
+
+    기업 정보를 기반으로 종합 리서치를 수행합니다.
+    """
+    import threading
+    import asyncio
+
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
+
+    if task['status'] != 'completed':
+        raise HTTPException(status_code=400, detail="재무제표 추출이 완료되지 않았습니다.")
+
+    # 이미 리서치 중이면 중복 실행 방지
+    if task.get('super_research_status') == 'running':
+        print(f"[SUPER_RESEARCH] 이미 리서치 중인 작업입니다: task_id={task_id}")
+        return {"success": True, "message": "이미 리서치가 진행 중입니다.", "already_running": True}
+
+    # 리서치 상태 초기화
+    task['super_research_status'] = 'running'
+    task['super_research_progress'] = 0
+    task['super_research_message'] = '리서치 준비 중'
+    task['super_research_result'] = None
+
+    # 별도 스레드에서 async 함수 실행
+    def run_in_thread():
+        asyncio.run(run_super_research(task_id))
+
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+
+    print(f"[SUPER_RESEARCH] 리서치 스레드 시작됨: task_id={task_id}")
+
+    return {"success": True, "message": "기업 리서치가 시작되었습니다."}
+
+
+async def run_super_research(task_id: str):
+    """기업 리서치 백그라운드 작업"""
+    import traceback
+
+    print(f"[SUPER_RESEARCH] 리서치 백그라운드 작업 시작: task_id={task_id}")
+
+    task = TASKS.get(task_id)
+    if not task:
+        print(f"[SUPER_RESEARCH ERROR] Task not found: {task_id}")
+        return
+
+    # 취소 체크 함수
+    def is_cancelled():
+        return task.get('super_research_status') == 'cancelled'
+
+    # 진행 상태 업데이트 콜백 (취소 체크 포함)
+    def update_progress(progress: int, message: str, step_result=None):
+        # 취소 확인
+        if is_cancelled():
+            raise Exception("사용자 이탈로 리서치 취소됨")
+        task['super_research_progress'] = progress
+        task['super_research_message'] = message
+        print(f"[SUPER_RESEARCH] Progress: {progress}% - {message}")
+
+    try:
+        # 취소 확인
+        if is_cancelled():
+            print(f"[SUPER_RESEARCH] 시작 전 취소됨: {task_id}")
+            return
+
+        print("[SUPER_RESEARCH] SuperResearchPipeline 임포트 중...")
+        from super_research_pipeline import SuperResearchPipeline
+
+        update_progress(5, '[Step 1/5] 기업 정보 준비 중')
+
+        pipeline = SuperResearchPipeline()
+
+        # 기업 정보 가져오기
+        company_info = task.get('company_info', {})
+        if not company_info:
+            company_info = {
+                'corp_code': task.get('corp_code', ''),
+                'corp_name': task.get('corp_name', '알 수 없음')
+            }
+
+        # 파이프라인 실행
+        result = await pipeline.run(company_info, update_progress)
+
+        # 결과 저장
+        task['super_research_status'] = 'completed'
+        task['super_research_progress'] = 100
+        task['super_research_message'] = '리서치 완료'
+        task['super_research_result'] = {
+            'success': result.success,
+            'report': result.report,
+            'keywords': result.keywords,
+            'competitors_domestic': [
+                {
+                    'name': c.name,
+                    'ticker': c.ticker,
+                    'business': c.business,
+                    'reason': c.reason,
+                    'detailed_business': c.detailed_business
+                } for c in result.competitors_domestic
+            ] if result.competitors_domestic else [],
+            'competitors_international': [
+                {
+                    'name': c.name,
+                    'ticker': c.ticker,
+                    'business': c.business,
+                    'reason': c.reason,
+                    'detailed_business': c.detailed_business
+                } for c in result.competitors_international
+            ] if result.competitors_international else [],
+            'mna_domestic': [
+                {
+                    'acquirer': m.acquirer,
+                    'target': m.target,
+                    'date': m.date,
+                    'price': m.price
+                } for m in result.mna_domestic
+            ] if result.mna_domestic else [],
+            'mna_international': [
+                {
+                    'acquirer': m.acquirer,
+                    'target': m.target,
+                    'date': m.date,
+                    'price': m.price
+                } for m in result.mna_international
+            ] if result.mna_international else [],
+            'business_summary': result.business.raw_business[:2000] if result.business and result.business.raw_business else '',
+            'major_news': result.major_news.raw_news if result.major_news else ''
+        }
+
+        print(f"[SUPER_RESEARCH] 리서치 완료: task_id={task_id}")
+
+        # 메모리 절약: 리서치 완료 후 preview_data 정리 (더 이상 불필요)
+        if 'preview_data' in task:
+            del task['preview_data']
+            print(f"[SUPER_RESEARCH] preview_data 메모리 해제: {task_id}")
+
+    except Exception as e:
+        print(f"[SUPER_RESEARCH ERROR] 리서치 실패: {e}")
+        traceback.print_exc()
+        task['super_research_status'] = 'error'
+        task['super_research_message'] = f'리서치 실패: {str(e)}'
+        task['super_research_result'] = None
+
+
+@app.get("/api/super-research-status/{task_id}")
+async def get_super_research_status(task_id: str):
+    """기업 리서치 상태 조회 API"""
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
+
+    # 마지막 접근 시간 업데이트
+    task['last_accessed'] = time.time()
+
+    return {
+        "success": True,
+        "status": task.get('super_research_status', 'not_started'),
+        "progress": task.get('super_research_progress', 0),
+        "message": task.get('super_research_message', ''),
+        "result": task.get('super_research_result')
     }
 
 
@@ -5804,6 +6017,285 @@ def apply_excel_formatting(filepath: str):
         return False
 
 
+def add_super_research_sheet(filepath: str, task: dict):
+    """기업 리서치 결과를 엑셀 시트로 추가"""
+    try:
+        from openpyxl import load_workbook
+        from openpyxl.styles import Alignment, PatternFill, Font
+
+        wb = load_workbook(filepath)
+
+        # 기존 기업 리서치 시트가 있으면 삭제
+        if '기업 리서치' in wb.sheetnames:
+            del wb['기업 리서치']
+
+        # 새 시트 생성
+        ws = wb.create_sheet('기업 리서치')
+
+        # 헤더 스타일
+        header_fill = PatternFill(start_color='131313', end_color='131313', fill_type='solid')
+        header_font = Font(color='FFFFFF', bold=True)
+
+        # 기업 리서치 상태 확인
+        super_research_status = task.get('super_research_status', 'not_started')
+        super_research_result = task.get('super_research_result')
+
+        if super_research_status == 'completed' and super_research_result:
+            # 완료된 경우: 보고서 내용 추가
+            ws.cell(row=1, column=1, value='기업 리서치 보고서')
+            ws.cell(row=1, column=1).fill = header_fill
+            ws.cell(row=1, column=1).font = header_font
+
+            # 보고서 내용을 줄 단위로 분리하여 저장
+            report = super_research_result.get('report', '')
+            row_idx = 2
+
+            # JSON 객체인 경우 텍스트로 변환
+            if isinstance(report, dict):
+                # 제목
+                if report.get('title'):
+                    ws.cell(row=row_idx, column=1, value=report['title'])
+                    ws.cell(row=row_idx, column=1).font = Font(bold=True, size=14)
+                    row_idx += 2
+
+                # 기업 개요
+                if report.get('overview'):
+                    ws.cell(row=row_idx, column=1, value='[기업 개요]')
+                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                    row_idx += 1
+                    for key, val in report['overview'].items():
+                        if val:
+                            ws.cell(row=row_idx, column=1, value=f"{key}: {val}")
+                            row_idx += 1
+                    row_idx += 1
+
+                # 사업 영역
+                if report.get('business'):
+                    ws.cell(row=row_idx, column=1, value='[사업 영역]')
+                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                    row_idx += 1
+                    if report['business'].get('summary'):
+                        ws.cell(row=row_idx, column=1, value=report['business']['summary'])
+                        row_idx += 1
+                    for area in report['business'].get('areas', []):
+                        ws.cell(row=row_idx, column=1, value=f"• {area.get('name', '')}: {area.get('description', '')}")
+                        ws.cell(row=row_idx, column=1).alignment = Alignment(wrap_text=True)
+                        row_idx += 1
+                    row_idx += 1
+
+                # 경쟁사 (국내)
+                if report.get('competitors', {}).get('domestic'):
+                    ws.cell(row=row_idx, column=1, value='[국내 경쟁사]')
+                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                    row_idx += 1
+                    for comp in report['competitors']['domestic']:
+                        name = comp.get('name', '')
+                        ticker = f"({comp.get('ticker')})" if comp.get('ticker') else ''
+                        ws.cell(row=row_idx, column=1, value=f"• {name} {ticker}")
+                        row_idx += 1
+                        if comp.get('field'):
+                            ws.cell(row=row_idx, column=1, value=f"  경쟁 분야: {comp['field']}")
+                            row_idx += 1
+                        if comp.get('reason'):
+                            ws.cell(row=row_idx, column=1, value=f"  경쟁 이유: {comp['reason']}")
+                            row_idx += 1
+                    row_idx += 1
+
+                # 경쟁사 (해외)
+                if report.get('competitors', {}).get('international'):
+                    ws.cell(row=row_idx, column=1, value='[해외 경쟁사]')
+                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                    row_idx += 1
+                    for comp in report['competitors']['international']:
+                        name = comp.get('name', '')
+                        ticker = f"({comp.get('ticker')})" if comp.get('ticker') else ''
+                        ws.cell(row=row_idx, column=1, value=f"• {name} {ticker}")
+                        row_idx += 1
+                        if comp.get('field'):
+                            ws.cell(row=row_idx, column=1, value=f"  경쟁 분야: {comp['field']}")
+                            row_idx += 1
+                        if comp.get('reason'):
+                            ws.cell(row=row_idx, column=1, value=f"  경쟁 이유: {comp['reason']}")
+                            row_idx += 1
+                    row_idx += 1
+
+                # M&A 사례 (국내)
+                if report.get('mna', {}).get('domestic'):
+                    ws.cell(row=row_idx, column=1, value='[국내 M&A 사례]')
+                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                    row_idx += 1
+                    for m in report['mna']['domestic']:
+                        ws.cell(row=row_idx, column=1, value=f"• {m.get('acquirer', '')} → {m.get('target', '')} ({m.get('date', 'N/A')}) {m.get('price', '')}")
+                        row_idx += 1
+                    row_idx += 1
+
+                # M&A 사례 (해외)
+                if report.get('mna', {}).get('international'):
+                    ws.cell(row=row_idx, column=1, value='[해외 M&A 사례]')
+                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                    row_idx += 1
+                    for m in report['mna']['international']:
+                        ws.cell(row=row_idx, column=1, value=f"• {m.get('acquirer', '')} → {m.get('target', '')} ({m.get('date', 'N/A')}) {m.get('price', '')}")
+                        row_idx += 1
+                    row_idx += 1
+
+                # 주요 뉴스
+                if report.get('news'):
+                    ws.cell(row=row_idx, column=1, value='[주요 뉴스/공시]')
+                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                    row_idx += 1
+                    ws.cell(row=row_idx, column=1, value=report['news'])
+                    ws.cell(row=row_idx, column=1).alignment = Alignment(wrap_text=True)
+
+            elif report:
+                # 문자열인 경우 (fallback)
+                lines = report.split('\n')
+                for i, line in enumerate(lines, start=2):
+                    ws.cell(row=i, column=1, value=line)
+                    ws.cell(row=i, column=1).alignment = Alignment(wrap_text=True)
+
+            # 컬럼 너비 설정
+            ws.column_dimensions['A'].width = 120
+
+            # 국내 경쟁사 정보 시트 추가
+            if '기업 리서치 - 국내 경쟁사' in wb.sheetnames:
+                del wb['기업 리서치 - 국내 경쟁사']
+
+            competitors_domestic = super_research_result.get('competitors_domestic', [])
+            if competitors_domestic:
+                ws_comp = wb.create_sheet('기업 리서치 - 국내 경쟁사')
+                ws_comp.cell(row=1, column=1, value='경쟁사').fill = header_fill
+                ws_comp.cell(row=1, column=1).font = header_font
+                ws_comp.cell(row=1, column=2, value='티커').fill = header_fill
+                ws_comp.cell(row=1, column=2).font = header_font
+                ws_comp.cell(row=1, column=3, value='사업분야').fill = header_fill
+                ws_comp.cell(row=1, column=3).font = header_font
+                ws_comp.cell(row=1, column=4, value='경쟁이유').fill = header_fill
+                ws_comp.cell(row=1, column=4).font = header_font
+                ws_comp.cell(row=1, column=5, value='상세사업내용').fill = header_fill
+                ws_comp.cell(row=1, column=5).font = header_font
+
+                for i, comp in enumerate(competitors_domestic, start=2):
+                    ws_comp.cell(row=i, column=1, value=comp.get('name', ''))
+                    ws_comp.cell(row=i, column=2, value=comp.get('ticker', ''))
+                    ws_comp.cell(row=i, column=3, value=comp.get('business', ''))
+                    ws_comp.cell(row=i, column=4, value=comp.get('reason', ''))
+                    ws_comp.cell(row=i, column=5, value=comp.get('detailed_business', ''))
+                    ws_comp.cell(row=i, column=5).alignment = Alignment(wrap_text=True)
+
+                # 컬럼 너비 설정
+                ws_comp.column_dimensions['A'].width = 20
+                ws_comp.column_dimensions['B'].width = 15
+                ws_comp.column_dimensions['C'].width = 30
+                ws_comp.column_dimensions['D'].width = 50
+                ws_comp.column_dimensions['E'].width = 80
+
+            # 해외 경쟁사 정보 시트 추가
+            if '기업 리서치 - 해외 경쟁사' in wb.sheetnames:
+                del wb['기업 리서치 - 해외 경쟁사']
+
+            competitors_international = super_research_result.get('competitors_international', [])
+            if competitors_international:
+                ws_comp_intl = wb.create_sheet('기업 리서치 - 해외 경쟁사')
+                ws_comp_intl.cell(row=1, column=1, value='경쟁사').fill = header_fill
+                ws_comp_intl.cell(row=1, column=1).font = header_font
+                ws_comp_intl.cell(row=1, column=2, value='티커').fill = header_fill
+                ws_comp_intl.cell(row=1, column=2).font = header_font
+                ws_comp_intl.cell(row=1, column=3, value='사업분야').fill = header_fill
+                ws_comp_intl.cell(row=1, column=3).font = header_font
+                ws_comp_intl.cell(row=1, column=4, value='경쟁이유').fill = header_fill
+                ws_comp_intl.cell(row=1, column=4).font = header_font
+                ws_comp_intl.cell(row=1, column=5, value='상세사업내용').fill = header_fill
+                ws_comp_intl.cell(row=1, column=5).font = header_font
+
+                for i, comp in enumerate(competitors_international, start=2):
+                    ws_comp_intl.cell(row=i, column=1, value=comp.get('name', ''))
+                    ws_comp_intl.cell(row=i, column=2, value=comp.get('ticker', ''))
+                    ws_comp_intl.cell(row=i, column=3, value=comp.get('business', ''))
+                    ws_comp_intl.cell(row=i, column=4, value=comp.get('reason', ''))
+                    ws_comp_intl.cell(row=i, column=5, value=comp.get('detailed_business', ''))
+                    ws_comp_intl.cell(row=i, column=5).alignment = Alignment(wrap_text=True)
+
+                # 컬럼 너비 설정
+                ws_comp_intl.column_dimensions['A'].width = 20
+                ws_comp_intl.column_dimensions['B'].width = 15
+                ws_comp_intl.column_dimensions['C'].width = 30
+                ws_comp_intl.column_dimensions['D'].width = 50
+                ws_comp_intl.column_dimensions['E'].width = 80
+
+            # M&A 정보 시트 추가
+            if '기업 리서치 - M&A' in wb.sheetnames:
+                del wb['기업 리서치 - M&A']
+
+            mna_domestic = super_research_result.get('mna_domestic', [])
+            mna_international = super_research_result.get('mna_international', [])
+
+            if mna_domestic or mna_international:
+                ws_mna = wb.create_sheet('기업 리서치 - M&A')
+                ws_mna.cell(row=1, column=1, value='구분').fill = header_fill
+                ws_mna.cell(row=1, column=1).font = header_font
+                ws_mna.cell(row=1, column=2, value='인수자').fill = header_fill
+                ws_mna.cell(row=1, column=2).font = header_font
+                ws_mna.cell(row=1, column=3, value='피인수자').fill = header_fill
+                ws_mna.cell(row=1, column=3).font = header_font
+                ws_mna.cell(row=1, column=4, value='일자').fill = header_fill
+                ws_mna.cell(row=1, column=4).font = header_font
+                ws_mna.cell(row=1, column=5, value='금액').fill = header_fill
+                ws_mna.cell(row=1, column=5).font = header_font
+
+                row_idx = 2
+                for mna in mna_domestic:
+                    ws_mna.cell(row=row_idx, column=1, value='국내')
+                    ws_mna.cell(row=row_idx, column=2, value=mna.get('acquirer', ''))
+                    ws_mna.cell(row=row_idx, column=3, value=mna.get('target', ''))
+                    ws_mna.cell(row=row_idx, column=4, value=mna.get('date', ''))
+                    ws_mna.cell(row=row_idx, column=5, value=mna.get('price', ''))
+                    row_idx += 1
+
+                for mna in mna_international:
+                    ws_mna.cell(row=row_idx, column=1, value='해외')
+                    ws_mna.cell(row=row_idx, column=2, value=mna.get('acquirer', ''))
+                    ws_mna.cell(row=row_idx, column=3, value=mna.get('target', ''))
+                    ws_mna.cell(row=row_idx, column=4, value=mna.get('date', ''))
+                    ws_mna.cell(row=row_idx, column=5, value=mna.get('price', ''))
+                    row_idx += 1
+
+                # 컬럼 너비 설정
+                ws_mna.column_dimensions['A'].width = 10
+                ws_mna.column_dimensions['B'].width = 30
+                ws_mna.column_dimensions['C'].width = 30
+                ws_mna.column_dimensions['D'].width = 15
+                ws_mna.column_dimensions['E'].width = 25
+
+            print(f"[Excel] 기업 리서치 시트 추가 완료 (결과 포함)")
+
+        else:
+            # 진행 중 또는 미시작인 경우: 안내 메시지 표시
+            ws.cell(row=1, column=1, value='기업 리서치')
+            ws.cell(row=1, column=1).fill = header_fill
+            ws.cell(row=1, column=1).font = header_font
+
+            if super_research_status == 'running':
+                progress = task.get('super_research_progress', 0)
+                message = f"기업 리서치가 진행 중입니다. ({progress}%)\n완료 후 다시 엑셀 다운로드를 시도하세요."
+            else:
+                message = "아직 슈퍼리서치 완료 전입니다.\n완료 이후 다시 엑셀 다운로드를 시도하세요."
+
+            ws.cell(row=2, column=1, value=message)
+            ws.cell(row=2, column=1).alignment = Alignment(wrap_text=True)
+            ws.column_dimensions['A'].width = 60
+            ws.row_dimensions[2].height = 40
+
+            print(f"[Excel] 기업 리서치 시트 추가 (대기 메시지)")
+
+        wb.save(filepath)
+
+    except Exception as e:
+        import traceback
+        print(f"[Excel] 기업 리서치 시트 추가 실패: {e}")
+        traceback.print_exc()
+
+
 @app.get("/api/download/{task_id}")
 async def download_file(task_id: str):
     """파일 다운로드 API"""
@@ -5819,6 +6311,9 @@ async def download_file(task_id: str):
     filepath = task.get('file_path')
     if not filepath or not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+
+    # 기업 리서치 시트 추가
+    add_super_research_sheet(filepath, task)
 
     # 다운로드 전 포맷팅 재적용 (서버 코드 변경사항 반영)
     apply_excel_formatting(filepath)
