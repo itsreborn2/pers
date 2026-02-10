@@ -46,7 +46,7 @@ TASKS_LOCK = threading.Lock()
 # 메모리 정리 설정
 TASK_IDLE_TIMEOUT = 120  # 진행 중 작업: 2분간 status 조회 없으면 취소
 TASK_COMPLETED_TTL = 300  # 완료된 작업: 5분 후 전체 삭제 (파일은 유지)
-PREVIEW_DATA_TTL = 60    # preview_data: AI분석 미시작 시 1분 후 정리
+PREVIEW_DATA_TTL = 300   # preview_data: AI분석 미시작 시 5분 후 정리 (VCM 생성에 60초+ 소요되므로 여유 확보)
 
 # 기업 리스트 캐시 (한 번만 로드)
 CORP_LIST = None
@@ -222,8 +222,10 @@ def background_cleanup_thread():
                                 print(f"[CLEANUP] 기업 리서치 취소: {task_id} (마지막 조회: {idle_seconds}초 전)")
 
                         # 메모리 절약: AI분석/리서치 시작 안 한 경우 preview_data 조기 정리
-                        completed_at = task.get('completed_at', last_accessed)
-                        if (current_time - completed_at > PREVIEW_DATA_TTL and
+                        # ★ completed_at이 설정되지 않았으면 (데이터 준비 중) 정리하지 않음
+                        completed_at = task.get('completed_at')
+                        if (completed_at and
+                            current_time - completed_at > PREVIEW_DATA_TTL and
                             'preview_data' in task and
                             task.get('analysis_status') != 'running' and
                             task.get('super_research_status') != 'running'):
@@ -950,7 +952,8 @@ async def extract_financial_data(
         task['message'] = '추출 완료! AI 분석을 진행해주세요.'
         task['file_path'] = None  # 아직 엑셀 없음
         task['filename'] = None
-        task['completed_at'] = time.time()  # 완료 시간 (TTL 계산용)
+        # ★ completed_at은 데이터 준비 완료 후 설정 (아래 VCM 생성 완료 후)
+        # task['completed_at']은 line 1279 부근에서 설정됨
 
         # 사용량 로깅 (로그인한 사용자인 경우)
         if task.get('user_id'):
@@ -1276,8 +1279,10 @@ async def extract_financial_data(
                 import traceback
                 print(f"[EXTRACT] VCM 오류 상세:\n{traceback.format_exc()}")
 
-        print(f"[EXTRACT] 추출 완료: {corp_name}")
-        
+        # ★ 모든 데이터 준비 완료 후 completed_at 설정 (TTL 카운트다운 시작점)
+        task['completed_at'] = time.time()
+        print(f"[EXTRACT] 추출 완료: {corp_name} (completed_at 설정)")
+
     except Exception as e:
         print(f"[EXTRACT ERROR] 추출 실패: {e}")
         print(f"[EXTRACT ERROR] Traceback:\n{traceback.format_exc()}")
@@ -5596,6 +5601,72 @@ async def run_financial_analysis(task_id: str):
         preview_data = task.get('preview_data', {})
         company_info = task.get('company_info', {})
 
+        print(f"[ANALYSIS] preview_data 키: {list(preview_data.keys()) if preview_data else '없음'}")
+        print(f"[ANALYSIS] file_path: {task.get('file_path')}")
+
+        # ★ preview_data가 비어있으면 복구 시도
+        if not preview_data or not preview_data.get('vcm_display'):
+            # 1차: Excel 파일에서 재로드
+            excel_filepath = task.get('file_path')
+            print(f"[ANALYSIS] preview_data 비어있음, Excel에서 재로드 시도: {excel_filepath}")
+            if excel_filepath and os.path.exists(excel_filepath):
+                try:
+                    # vcm_display (Financials 시트) 로드
+                    fin_df = pd.read_excel(excel_filepath, sheet_name='Financials', header=1, engine='openpyxl')
+                    # 좌우 병렬 구조를 상하 구조로 변환
+                    if '항목' in fin_df.columns and '항목.1' in fin_df.columns:
+                        left_cols = [col for col in fin_df.columns if not col.endswith('.1')]
+                        right_cols = [col for col in fin_df.columns if col.endswith('.1')]
+                        left_df = fin_df[left_cols].copy()
+                        right_df = fin_df[right_cols].copy()
+                        right_df.columns = [col.replace('.1', '') for col in right_df.columns]
+                        fin_df = pd.concat([left_df, right_df], ignore_index=True)
+                        fin_df = fin_df.dropna(subset=['항목'])
+                        fin_df = fin_df[fin_df['항목'].astype(str).str.strip() != '']
+                    preview_data['vcm_display'] = safe_dataframe_to_json(fin_df)
+                    print(f"[ANALYSIS] vcm_display Excel에서 로드 완료: {len(preview_data['vcm_display'])}개 행")
+
+                    # vcm (Frontdata 시트) 로드
+                    vcm_df = pd.read_excel(excel_filepath, sheet_name='Frontdata', engine='openpyxl')
+                    preview_data['vcm'] = safe_dataframe_to_json(vcm_df)
+                    print(f"[ANALYSIS] vcm Excel에서 로드 완료: {len(preview_data['vcm'])}개 행")
+
+                    # 현금흐름표 (cf) 로드
+                    try:
+                        cf_df = pd.read_excel(excel_filepath, sheet_name='현금흐름표', engine='openpyxl')
+                        preview_data['cf'] = safe_dataframe_to_json(cf_df)
+                        print(f"[ANALYSIS] cf Excel에서 로드 완료: {len(preview_data['cf'])}개 행")
+                    except Exception as cf_err:
+                        print(f"[ANALYSIS] 현금흐름표 로드 실패 (무시): {cf_err}")
+
+                except Exception as excel_err:
+                    print(f"[ANALYSIS ERROR] Excel에서 데이터 로드 실패: {excel_err}")
+                    raise Exception(f"재무 데이터를 불러올 수 없습니다. 재무제표를 다시 추출해주세요.")
+            else:
+                # 2차: Excel 파일 없음 - 추출 데이터에서 재생성 시도
+                fs_data = task.get('fs_data')
+                if fs_data:
+                    print(f"[ANALYSIS] Excel 없음, fs_data에서 VCM 재생성 시도...")
+                    try:
+                        vcm_result = create_vcm_format(fs_data, None)
+                        if isinstance(vcm_result, tuple):
+                            vcm_df, display_df = vcm_result
+                        else:
+                            vcm_df = vcm_result
+                            display_df = None
+
+                        if vcm_df is not None and not vcm_df.empty:
+                            preview_data['vcm'] = safe_dataframe_to_json(vcm_df)
+                        if display_df is not None and not display_df.empty:
+                            preview_data['vcm_display'] = safe_dataframe_to_json(display_df)
+                        print(f"[ANALYSIS] VCM 재생성 완료: vcm_display={len(preview_data.get('vcm_display', []))}행")
+                    except Exception as vcm_err:
+                        print(f"[ANALYSIS ERROR] VCM 재생성 실패: {vcm_err}")
+                        raise Exception(f"재무 데이터를 불러올 수 없습니다. 재무제표를 다시 추출해주세요.")
+                else:
+                    print(f"[ANALYSIS ERROR] Excel 파일 없고 fs_data도 없음")
+                    raise Exception(f"재무제표 파일을 찾을 수 없습니다. 재무제표를 다시 추출해주세요.")
+
         # company_info가 없으면 기본값 설정
         if not company_info:
             company_info = {
@@ -6018,256 +6089,235 @@ def apply_excel_formatting(filepath: str):
 
 
 def add_super_research_sheet(filepath: str, task: dict):
-    """기업 리서치 결과를 엑셀 시트로 추가"""
+    """기업 리서치 결과를 엑셀 시트로 추가 (프론트엔드와 동일한 형태로 통합)"""
     try:
         from openpyxl import load_workbook
-        from openpyxl.styles import Alignment, PatternFill, Font
+        from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 
         wb = load_workbook(filepath)
 
-        # 기존 기업 리서치 시트가 있으면 삭제
-        if '기업 리서치' in wb.sheetnames:
-            del wb['기업 리서치']
+        # 기존 기업 리서치 관련 시트들 모두 삭제
+        sheets_to_delete = ['기업 리서치', '기업 리서치 - 국내 경쟁사', '기업 리서치 - 해외 경쟁사', '기업 리서치 - M&A']
+        for sheet_name in sheets_to_delete:
+            if sheet_name in wb.sheetnames:
+                del wb[sheet_name]
 
         # 새 시트 생성
         ws = wb.create_sheet('기업 리서치')
 
-        # 헤더 스타일
+        # 스타일 정의
         header_fill = PatternFill(start_color='131313', end_color='131313', fill_type='solid')
-        header_font = Font(color='FFFFFF', bold=True)
+        header_font = Font(color='FFFFFF', bold=True, size=12)
+        section_font = Font(bold=True, size=11, color='1a1a1a')
+        subsection_font = Font(bold=True, size=10)
+        thin_border = Border(
+            left=Side(style='thin', color='cccccc'),
+            right=Side(style='thin', color='cccccc'),
+            top=Side(style='thin', color='cccccc'),
+            bottom=Side(style='thin', color='cccccc')
+        )
 
         # 기업 리서치 상태 확인
         super_research_status = task.get('super_research_status', 'not_started')
         super_research_result = task.get('super_research_result')
 
         if super_research_status == 'completed' and super_research_result:
-            # 완료된 경우: 보고서 내용 추가
-            ws.cell(row=1, column=1, value='기업 리서치 보고서')
-            ws.cell(row=1, column=1).fill = header_fill
-            ws.cell(row=1, column=1).font = header_font
-
-            # 보고서 내용을 줄 단위로 분리하여 저장
             report = super_research_result.get('report', '')
-            row_idx = 2
+            row_idx = 1
 
-            # JSON 객체인 경우 텍스트로 변환
             if isinstance(report, dict):
-                # 제목
+                # 1. 제목
                 if report.get('title'):
                     ws.cell(row=row_idx, column=1, value=report['title'])
-                    ws.cell(row=row_idx, column=1).font = Font(bold=True, size=14)
+                    ws.cell(row=row_idx, column=1).font = Font(bold=True, size=16)
+                    ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
                     row_idx += 2
 
-                # 기업 개요
+                # 2. 기업 개요 (테이블 형식)
                 if report.get('overview'):
-                    ws.cell(row=row_idx, column=1, value='[기업 개요]')
-                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                    ws.cell(row=row_idx, column=1, value='기업 개요')
+                    ws.cell(row=row_idx, column=1).font = section_font
+                    ws.cell(row=row_idx, column=1).fill = PatternFill(start_color='f5f5f5', end_color='f5f5f5', fill_type='solid')
+                    ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
                     row_idx += 1
                     for key, val in report['overview'].items():
                         if val:
-                            ws.cell(row=row_idx, column=1, value=f"{key}: {val}")
+                            ws.cell(row=row_idx, column=1, value=key)
+                            ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                            ws.cell(row=row_idx, column=1).border = thin_border
+                            ws.cell(row=row_idx, column=2, value=val)
+                            ws.cell(row=row_idx, column=2).border = thin_border
+                            ws.cell(row=row_idx, column=2).alignment = Alignment(wrap_text=True)
                             row_idx += 1
                     row_idx += 1
 
-                # 사업 영역
+                # 3. 사업 영역
                 if report.get('business'):
-                    ws.cell(row=row_idx, column=1, value='[사업 영역]')
-                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                    ws.cell(row=row_idx, column=1, value='사업 영역')
+                    ws.cell(row=row_idx, column=1).font = section_font
+                    ws.cell(row=row_idx, column=1).fill = PatternFill(start_color='f5f5f5', end_color='f5f5f5', fill_type='solid')
+                    ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
                     row_idx += 1
                     if report['business'].get('summary'):
                         ws.cell(row=row_idx, column=1, value=report['business']['summary'])
+                        ws.cell(row=row_idx, column=1).alignment = Alignment(wrap_text=True)
+                        ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
                         row_idx += 1
                     for area in report['business'].get('areas', []):
-                        ws.cell(row=row_idx, column=1, value=f"• {area.get('name', '')}: {area.get('description', '')}")
-                        ws.cell(row=row_idx, column=1).alignment = Alignment(wrap_text=True)
+                        ws.cell(row=row_idx, column=1, value=f"• {area.get('name', '')}")
+                        ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                        ws.cell(row=row_idx, column=2, value=area.get('description', ''))
+                        ws.cell(row=row_idx, column=2).alignment = Alignment(wrap_text=True)
                         row_idx += 1
                     row_idx += 1
 
-                # 경쟁사 (국내)
-                if report.get('competitors', {}).get('domestic'):
-                    ws.cell(row=row_idx, column=1, value='[국내 경쟁사]')
-                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                # 4. 경쟁사 분석
+                has_domestic = report.get('competitors', {}).get('domestic')
+                has_international = report.get('competitors', {}).get('international')
+                if has_domestic or has_international:
+                    ws.cell(row=row_idx, column=1, value='경쟁사 분석')
+                    ws.cell(row=row_idx, column=1).font = section_font
+                    ws.cell(row=row_idx, column=1).fill = PatternFill(start_color='f5f5f5', end_color='f5f5f5', fill_type='solid')
+                    ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
                     row_idx += 1
-                    for comp in report['competitors']['domestic']:
-                        name = comp.get('name', '')
-                        ticker = f"({comp.get('ticker')})" if comp.get('ticker') else ''
-                        ws.cell(row=row_idx, column=1, value=f"• {name} {ticker}")
+
+                    # 국내 경쟁사
+                    if has_domestic:
+                        ws.cell(row=row_idx, column=1, value='▶ 국내 경쟁사')
+                        ws.cell(row=row_idx, column=1).font = subsection_font
                         row_idx += 1
-                        if comp.get('field'):
-                            ws.cell(row=row_idx, column=1, value=f"  경쟁 분야: {comp['field']}")
+                        # 헤더
+                        headers = ['경쟁사', '티커', '경쟁 분야', '경쟁 이유']
+                        for col, h in enumerate(headers, 1):
+                            ws.cell(row=row_idx, column=col, value=h)
+                            ws.cell(row=row_idx, column=col).fill = header_fill
+                            ws.cell(row=row_idx, column=col).font = header_font
+                            ws.cell(row=row_idx, column=col).border = thin_border
+                        row_idx += 1
+                        for comp in report['competitors']['domestic']:
+                            ws.cell(row=row_idx, column=1, value=comp.get('name', ''))
+                            ws.cell(row=row_idx, column=1).border = thin_border
+                            ws.cell(row=row_idx, column=2, value=comp.get('ticker', ''))
+                            ws.cell(row=row_idx, column=2).border = thin_border
+                            ws.cell(row=row_idx, column=3, value=comp.get('field', ''))
+                            ws.cell(row=row_idx, column=3).border = thin_border
+                            ws.cell(row=row_idx, column=3).alignment = Alignment(wrap_text=True)
+                            ws.cell(row=row_idx, column=4, value=comp.get('reason', ''))
+                            ws.cell(row=row_idx, column=4).border = thin_border
+                            ws.cell(row=row_idx, column=4).alignment = Alignment(wrap_text=True)
                             row_idx += 1
-                        if comp.get('reason'):
-                            ws.cell(row=row_idx, column=1, value=f"  경쟁 이유: {comp['reason']}")
-                            row_idx += 1
-                    row_idx += 1
-
-                # 경쟁사 (해외)
-                if report.get('competitors', {}).get('international'):
-                    ws.cell(row=row_idx, column=1, value='[해외 경쟁사]')
-                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
-                    row_idx += 1
-                    for comp in report['competitors']['international']:
-                        name = comp.get('name', '')
-                        ticker = f"({comp.get('ticker')})" if comp.get('ticker') else ''
-                        ws.cell(row=row_idx, column=1, value=f"• {name} {ticker}")
                         row_idx += 1
-                        if comp.get('field'):
-                            ws.cell(row=row_idx, column=1, value=f"  경쟁 분야: {comp['field']}")
-                            row_idx += 1
-                        if comp.get('reason'):
-                            ws.cell(row=row_idx, column=1, value=f"  경쟁 이유: {comp['reason']}")
-                            row_idx += 1
-                    row_idx += 1
 
-                # M&A 사례 (국내)
-                if report.get('mna', {}).get('domestic'):
-                    ws.cell(row=row_idx, column=1, value='[국내 M&A 사례]')
-                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
-                    row_idx += 1
-                    for m in report['mna']['domestic']:
-                        ws.cell(row=row_idx, column=1, value=f"• {m.get('acquirer', '')} → {m.get('target', '')} ({m.get('date', 'N/A')}) {m.get('price', '')}")
+                    # 해외 경쟁사
+                    if has_international:
+                        ws.cell(row=row_idx, column=1, value='▶ 해외 경쟁사')
+                        ws.cell(row=row_idx, column=1).font = subsection_font
                         row_idx += 1
-                    row_idx += 1
-
-                # M&A 사례 (해외)
-                if report.get('mna', {}).get('international'):
-                    ws.cell(row=row_idx, column=1, value='[해외 M&A 사례]')
-                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
-                    row_idx += 1
-                    for m in report['mna']['international']:
-                        ws.cell(row=row_idx, column=1, value=f"• {m.get('acquirer', '')} → {m.get('target', '')} ({m.get('date', 'N/A')}) {m.get('price', '')}")
+                        # 헤더
+                        headers = ['경쟁사', '티커', '경쟁 분야', '경쟁 이유']
+                        for col, h in enumerate(headers, 1):
+                            ws.cell(row=row_idx, column=col, value=h)
+                            ws.cell(row=row_idx, column=col).fill = header_fill
+                            ws.cell(row=row_idx, column=col).font = header_font
+                            ws.cell(row=row_idx, column=col).border = thin_border
                         row_idx += 1
+                        for comp in report['competitors']['international']:
+                            ws.cell(row=row_idx, column=1, value=comp.get('name', ''))
+                            ws.cell(row=row_idx, column=1).border = thin_border
+                            ws.cell(row=row_idx, column=2, value=comp.get('ticker', ''))
+                            ws.cell(row=row_idx, column=2).border = thin_border
+                            ws.cell(row=row_idx, column=3, value=comp.get('field', ''))
+                            ws.cell(row=row_idx, column=3).border = thin_border
+                            ws.cell(row=row_idx, column=3).alignment = Alignment(wrap_text=True)
+                            ws.cell(row=row_idx, column=4, value=comp.get('reason', ''))
+                            ws.cell(row=row_idx, column=4).border = thin_border
+                            ws.cell(row=row_idx, column=4).alignment = Alignment(wrap_text=True)
+                            row_idx += 1
+                        row_idx += 1
+
+                # 5. M&A 사례
+                has_mna_domestic = report.get('mna', {}).get('domestic')
+                has_mna_international = report.get('mna', {}).get('international')
+                if has_mna_domestic or has_mna_international:
+                    ws.cell(row=row_idx, column=1, value='M&A 사례')
+                    ws.cell(row=row_idx, column=1).font = section_font
+                    ws.cell(row=row_idx, column=1).fill = PatternFill(start_color='f5f5f5', end_color='f5f5f5', fill_type='solid')
+                    ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
                     row_idx += 1
 
-                # 주요 뉴스
+                    # 국내 M&A
+                    if has_mna_domestic:
+                        ws.cell(row=row_idx, column=1, value='▶ 국내 M&A')
+                        ws.cell(row=row_idx, column=1).font = subsection_font
+                        row_idx += 1
+                        headers = ['인수기업', '피인수기업', '시기', '금액']
+                        for col, h in enumerate(headers, 1):
+                            ws.cell(row=row_idx, column=col, value=h)
+                            ws.cell(row=row_idx, column=col).fill = header_fill
+                            ws.cell(row=row_idx, column=col).font = header_font
+                            ws.cell(row=row_idx, column=col).border = thin_border
+                        row_idx += 1
+                        for m in report['mna']['domestic']:
+                            ws.cell(row=row_idx, column=1, value=m.get('acquirer', '-'))
+                            ws.cell(row=row_idx, column=1).border = thin_border
+                            ws.cell(row=row_idx, column=2, value=m.get('target', '-'))
+                            ws.cell(row=row_idx, column=2).border = thin_border
+                            ws.cell(row=row_idx, column=3, value=m.get('date', '-'))
+                            ws.cell(row=row_idx, column=3).border = thin_border
+                            ws.cell(row=row_idx, column=4, value=m.get('price', '-'))
+                            ws.cell(row=row_idx, column=4).border = thin_border
+                            row_idx += 1
+                        row_idx += 1
+
+                    # 해외 M&A
+                    if has_mna_international:
+                        ws.cell(row=row_idx, column=1, value='▶ 해외 M&A')
+                        ws.cell(row=row_idx, column=1).font = subsection_font
+                        row_idx += 1
+                        headers = ['인수기업', '피인수기업', '시기', '금액']
+                        for col, h in enumerate(headers, 1):
+                            ws.cell(row=row_idx, column=col, value=h)
+                            ws.cell(row=row_idx, column=col).fill = header_fill
+                            ws.cell(row=row_idx, column=col).font = header_font
+                            ws.cell(row=row_idx, column=col).border = thin_border
+                        row_idx += 1
+                        for m in report['mna']['international']:
+                            ws.cell(row=row_idx, column=1, value=m.get('acquirer', '-'))
+                            ws.cell(row=row_idx, column=1).border = thin_border
+                            ws.cell(row=row_idx, column=2, value=m.get('target', '-'))
+                            ws.cell(row=row_idx, column=2).border = thin_border
+                            ws.cell(row=row_idx, column=3, value=m.get('date', '-'))
+                            ws.cell(row=row_idx, column=3).border = thin_border
+                            ws.cell(row=row_idx, column=4, value=m.get('price', '-'))
+                            ws.cell(row=row_idx, column=4).border = thin_border
+                            row_idx += 1
+                        row_idx += 1
+
+                # 6. 주요 뉴스/공시
                 if report.get('news'):
-                    ws.cell(row=row_idx, column=1, value='[주요 뉴스/공시]')
-                    ws.cell(row=row_idx, column=1).font = Font(bold=True)
+                    ws.cell(row=row_idx, column=1, value='주요 뉴스/공시')
+                    ws.cell(row=row_idx, column=1).font = section_font
+                    ws.cell(row=row_idx, column=1).fill = PatternFill(start_color='f5f5f5', end_color='f5f5f5', fill_type='solid')
+                    ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
                     row_idx += 1
                     ws.cell(row=row_idx, column=1, value=report['news'])
                     ws.cell(row=row_idx, column=1).alignment = Alignment(wrap_text=True)
+                    ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
 
             elif report:
                 # 문자열인 경우 (fallback)
                 lines = report.split('\n')
-                for i, line in enumerate(lines, start=2):
+                for i, line in enumerate(lines, start=1):
                     ws.cell(row=i, column=1, value=line)
                     ws.cell(row=i, column=1).alignment = Alignment(wrap_text=True)
 
             # 컬럼 너비 설정
-            ws.column_dimensions['A'].width = 120
+            ws.column_dimensions['A'].width = 25
+            ws.column_dimensions['B'].width = 20
+            ws.column_dimensions['C'].width = 40
+            ws.column_dimensions['D'].width = 50
 
-            # 국내 경쟁사 정보 시트 추가
-            if '기업 리서치 - 국내 경쟁사' in wb.sheetnames:
-                del wb['기업 리서치 - 국내 경쟁사']
-
-            competitors_domestic = super_research_result.get('competitors_domestic', [])
-            if competitors_domestic:
-                ws_comp = wb.create_sheet('기업 리서치 - 국내 경쟁사')
-                ws_comp.cell(row=1, column=1, value='경쟁사').fill = header_fill
-                ws_comp.cell(row=1, column=1).font = header_font
-                ws_comp.cell(row=1, column=2, value='티커').fill = header_fill
-                ws_comp.cell(row=1, column=2).font = header_font
-                ws_comp.cell(row=1, column=3, value='사업분야').fill = header_fill
-                ws_comp.cell(row=1, column=3).font = header_font
-                ws_comp.cell(row=1, column=4, value='경쟁이유').fill = header_fill
-                ws_comp.cell(row=1, column=4).font = header_font
-                ws_comp.cell(row=1, column=5, value='상세사업내용').fill = header_fill
-                ws_comp.cell(row=1, column=5).font = header_font
-
-                for i, comp in enumerate(competitors_domestic, start=2):
-                    ws_comp.cell(row=i, column=1, value=comp.get('name', ''))
-                    ws_comp.cell(row=i, column=2, value=comp.get('ticker', ''))
-                    ws_comp.cell(row=i, column=3, value=comp.get('business', ''))
-                    ws_comp.cell(row=i, column=4, value=comp.get('reason', ''))
-                    ws_comp.cell(row=i, column=5, value=comp.get('detailed_business', ''))
-                    ws_comp.cell(row=i, column=5).alignment = Alignment(wrap_text=True)
-
-                # 컬럼 너비 설정
-                ws_comp.column_dimensions['A'].width = 20
-                ws_comp.column_dimensions['B'].width = 15
-                ws_comp.column_dimensions['C'].width = 30
-                ws_comp.column_dimensions['D'].width = 50
-                ws_comp.column_dimensions['E'].width = 80
-
-            # 해외 경쟁사 정보 시트 추가
-            if '기업 리서치 - 해외 경쟁사' in wb.sheetnames:
-                del wb['기업 리서치 - 해외 경쟁사']
-
-            competitors_international = super_research_result.get('competitors_international', [])
-            if competitors_international:
-                ws_comp_intl = wb.create_sheet('기업 리서치 - 해외 경쟁사')
-                ws_comp_intl.cell(row=1, column=1, value='경쟁사').fill = header_fill
-                ws_comp_intl.cell(row=1, column=1).font = header_font
-                ws_comp_intl.cell(row=1, column=2, value='티커').fill = header_fill
-                ws_comp_intl.cell(row=1, column=2).font = header_font
-                ws_comp_intl.cell(row=1, column=3, value='사업분야').fill = header_fill
-                ws_comp_intl.cell(row=1, column=3).font = header_font
-                ws_comp_intl.cell(row=1, column=4, value='경쟁이유').fill = header_fill
-                ws_comp_intl.cell(row=1, column=4).font = header_font
-                ws_comp_intl.cell(row=1, column=5, value='상세사업내용').fill = header_fill
-                ws_comp_intl.cell(row=1, column=5).font = header_font
-
-                for i, comp in enumerate(competitors_international, start=2):
-                    ws_comp_intl.cell(row=i, column=1, value=comp.get('name', ''))
-                    ws_comp_intl.cell(row=i, column=2, value=comp.get('ticker', ''))
-                    ws_comp_intl.cell(row=i, column=3, value=comp.get('business', ''))
-                    ws_comp_intl.cell(row=i, column=4, value=comp.get('reason', ''))
-                    ws_comp_intl.cell(row=i, column=5, value=comp.get('detailed_business', ''))
-                    ws_comp_intl.cell(row=i, column=5).alignment = Alignment(wrap_text=True)
-
-                # 컬럼 너비 설정
-                ws_comp_intl.column_dimensions['A'].width = 20
-                ws_comp_intl.column_dimensions['B'].width = 15
-                ws_comp_intl.column_dimensions['C'].width = 30
-                ws_comp_intl.column_dimensions['D'].width = 50
-                ws_comp_intl.column_dimensions['E'].width = 80
-
-            # M&A 정보 시트 추가
-            if '기업 리서치 - M&A' in wb.sheetnames:
-                del wb['기업 리서치 - M&A']
-
-            mna_domestic = super_research_result.get('mna_domestic', [])
-            mna_international = super_research_result.get('mna_international', [])
-
-            if mna_domestic or mna_international:
-                ws_mna = wb.create_sheet('기업 리서치 - M&A')
-                ws_mna.cell(row=1, column=1, value='구분').fill = header_fill
-                ws_mna.cell(row=1, column=1).font = header_font
-                ws_mna.cell(row=1, column=2, value='인수자').fill = header_fill
-                ws_mna.cell(row=1, column=2).font = header_font
-                ws_mna.cell(row=1, column=3, value='피인수자').fill = header_fill
-                ws_mna.cell(row=1, column=3).font = header_font
-                ws_mna.cell(row=1, column=4, value='일자').fill = header_fill
-                ws_mna.cell(row=1, column=4).font = header_font
-                ws_mna.cell(row=1, column=5, value='금액').fill = header_fill
-                ws_mna.cell(row=1, column=5).font = header_font
-
-                row_idx = 2
-                for mna in mna_domestic:
-                    ws_mna.cell(row=row_idx, column=1, value='국내')
-                    ws_mna.cell(row=row_idx, column=2, value=mna.get('acquirer', ''))
-                    ws_mna.cell(row=row_idx, column=3, value=mna.get('target', ''))
-                    ws_mna.cell(row=row_idx, column=4, value=mna.get('date', ''))
-                    ws_mna.cell(row=row_idx, column=5, value=mna.get('price', ''))
-                    row_idx += 1
-
-                for mna in mna_international:
-                    ws_mna.cell(row=row_idx, column=1, value='해외')
-                    ws_mna.cell(row=row_idx, column=2, value=mna.get('acquirer', ''))
-                    ws_mna.cell(row=row_idx, column=3, value=mna.get('target', ''))
-                    ws_mna.cell(row=row_idx, column=4, value=mna.get('date', ''))
-                    ws_mna.cell(row=row_idx, column=5, value=mna.get('price', ''))
-                    row_idx += 1
-
-                # 컬럼 너비 설정
-                ws_mna.column_dimensions['A'].width = 10
-                ws_mna.column_dimensions['B'].width = 30
-                ws_mna.column_dimensions['C'].width = 30
-                ws_mna.column_dimensions['D'].width = 15
-                ws_mna.column_dimensions['E'].width = 25
-
-            print(f"[Excel] 기업 리서치 시트 추가 완료 (결과 포함)")
+            print(f"[Excel] 기업 리서치 시트 추가 완료 (통합)")
 
         else:
             # 진행 중 또는 미시작인 경우: 안내 메시지 표시
@@ -6279,7 +6329,7 @@ def add_super_research_sheet(filepath: str, task: dict):
                 progress = task.get('super_research_progress', 0)
                 message = f"기업 리서치가 진행 중입니다. ({progress}%)\n완료 후 다시 엑셀 다운로드를 시도하세요."
             else:
-                message = "아직 슈퍼리서치 완료 전입니다.\n완료 이후 다시 엑셀 다운로드를 시도하세요."
+                message = "아직 기업 리서치 완료 전입니다.\n완료 이후 다시 엑셀 다운로드를 시도하세요."
 
             ws.cell(row=2, column=1, value=message)
             ws.cell(row=2, column=1).alignment = Alignment(wrap_text=True)
@@ -6287,6 +6337,21 @@ def add_super_research_sheet(filepath: str, task: dict):
             ws.row_dimensions[2].height = 40
 
             print(f"[Excel] 기업 리서치 시트 추가 (대기 메시지)")
+
+        # 시트 순서 정리: 재무분석AI(원본) 바로 다음에 기업 리서치 배치
+        base_idx = None
+        if '재무분석AI(원본)' in wb.sheetnames:
+            base_idx = wb.sheetnames.index('재무분석AI(원본)')
+        elif '재무분석AI(요약)' in wb.sheetnames:
+            base_idx = wb.sheetnames.index('재무분석AI(요약)')
+        elif 'Financials' in wb.sheetnames:
+            base_idx = wb.sheetnames.index('Financials')
+
+        if base_idx is not None and '기업 리서치' in wb.sheetnames:
+            target_idx = base_idx + 1
+            current_idx = wb.sheetnames.index('기업 리서치')
+            if current_idx != target_idx:
+                wb.move_sheet('기업 리서치', offset=target_idx - current_idx)
 
         wb.save(filepath)
 

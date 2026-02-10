@@ -409,8 +409,8 @@ class SuperResearchPipeline:
             context = ""
             if search_results and search_results.web:
                 for item in search_results.web[:5]:
-                    title = item.metadata.title if item.metadata else ''
-                    markdown = item.markdown or (item.metadata.og_description if item.metadata else '')
+                    title = getattr(item, 'title', None) or (item.metadata.title if hasattr(item, 'metadata') and item.metadata else '')
+                    markdown = getattr(item, 'markdown', None) or getattr(item, 'description', None) or (item.metadata.og_description if hasattr(item, 'metadata') and item.metadata else '')
                     # 마크다운이 너무 길면 자르기
                     if markdown and len(markdown) > 2000:
                         markdown = markdown[:2000] + "..."
@@ -474,8 +474,8 @@ class SuperResearchPipeline:
             context = ""
             if search_results and search_results.web:
                 for item in search_results.web[:10]:
-                    title = item.title if hasattr(item, 'title') else (item.metadata.title if item.metadata else '')
-                    desc = item.description if hasattr(item, 'description') else (item.metadata.og_description if item.metadata else '')
+                    title = getattr(item, 'title', None) or (item.metadata.title if hasattr(item, 'metadata') and item.metadata else '')
+                    desc = getattr(item, 'description', None) or (item.metadata.og_description if hasattr(item, 'metadata') and item.metadata else '')
                     context += f"- {title or ''}: {desc or ''}\n"
 
             print(f"  → Firecrawl 공시/뉴스 검색 완료: {len(context)}자")
@@ -743,11 +743,11 @@ class SuperResearchPipeline:
             seen_titles = set()
             context = ""
             for item in all_results:
-                title = item.metadata.title if item.metadata else ''
+                title = getattr(item, 'title', None) or (item.metadata.title if hasattr(item, 'metadata') and item.metadata else '')
                 if title in seen_titles:
                     continue
                 seen_titles.add(title)
-                markdown = item.markdown or (item.metadata.og_description if item.metadata else '')
+                markdown = getattr(item, 'markdown', None) or getattr(item, 'description', None) or (item.metadata.og_description if hasattr(item, 'metadata') and item.metadata else '')
                 if markdown and len(markdown) > 1500:
                     markdown = markdown[:1500] + "..."
                 context += f"\n### {title}\n{markdown or ''}\n"
@@ -808,8 +808,8 @@ JSON 배열만 반환하세요:"""
                         detail_context = ""
                         if detail_result and detail_result.web:
                             for item in detail_result.web[:3]:
-                                title = item.metadata.title if item.metadata else ''
-                                md = item.markdown or ''
+                                title = getattr(item, 'title', None) or (item.metadata.title if hasattr(item, 'metadata') and item.metadata else '')
+                                md = getattr(item, 'markdown', None) or getattr(item, 'description', None) or ''
                                 if len(md) > 1000:
                                     md = md[:1000] + "..."
                                 detail_context += f"### {title}\n{md}\n"
@@ -878,11 +878,11 @@ JSON 배열만 반환하세요:"""
             seen_titles = set()
             context = ""
             for item in all_results:
-                title = item.metadata.title if item.metadata else ''
+                title = getattr(item, 'title', None) or (item.metadata.title if hasattr(item, 'metadata') and item.metadata else '')
                 if title in seen_titles:
                     continue
                 seen_titles.add(title)
-                markdown = item.markdown or (item.metadata.og_description if item.metadata else '')
+                markdown = getattr(item, 'markdown', None) or getattr(item, 'description', None) or (item.metadata.og_description if hasattr(item, 'metadata') and item.metadata else '')
                 if markdown and len(markdown) > 1500:
                     markdown = markdown[:1500] + "..."
                 context += f"\n### {title}\n{markdown or ''}\n"
@@ -943,8 +943,8 @@ JSON 배열만 반환하세요:"""
                         detail_context = ""
                         if detail_result and detail_result.web:
                             for item in detail_result.web[:3]:
-                                title = item.metadata.title if item.metadata else ''
-                                md = item.markdown or ''
+                                title = getattr(item, 'title', None) or (item.metadata.title if hasattr(item, 'metadata') and item.metadata else '')
+                                md = getattr(item, 'markdown', None) or getattr(item, 'description', None) or ''
                                 if len(md) > 1000:
                                     md = md[:1000] + "..."
                                 detail_context += f"### {title}\n{md}\n"

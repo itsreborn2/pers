@@ -1328,6 +1328,36 @@
             border-color: #4b5563;
         }
 
+        /* 분석 진행 상태 메시지 */
+        .analysis-status-message {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            background: #f5f5f5;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            color: #333;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .analysis-status-message.completed {
+            background: #fafafa;
+            border-color: #ccc;
+            color: #1a1a1a;
+        }
+
+        .analysis-status-message .status-icon {
+            font-size: 1.1rem;
+        }
+
+        .analysis-status-message.completed .status-icon {
+            color: #b8860b;
+            font-weight: bold;
+        }
+
         /* 상위 탭 메뉴 (재무정보 / 재무분석 AI) */
         .main-tabs-container {
             display: flex;
@@ -2634,7 +2664,7 @@
     <header class="top-header">
         <div class="header-content">
             <div class="brand-section">
-                <h1>Valulens</h1>
+                <h1 onclick="location.reload()" style="cursor: pointer;">Valulens</h1>
                 <p class="subtitle">LLM & DART 기반 딥 리서치 플랫폼 밸류랜즈</p>
             </div>
             <div class="user-section" id="userSection">
@@ -2735,6 +2765,11 @@
     <div class="container-full" id="resultContainer">
         <!-- 완료 섹션 -->
         <div class="complete-section" id="completeSection">
+            <!-- 분석 진행 상태 메시지 -->
+            <div class="analysis-status-message" id="analysisStatusMessage" style="display: none;">
+                <span class="status-icon">⏳</span>
+                <span class="status-text" id="analysisStatusText">재무분석 AI는 평균 2~3분 이내, 기업 리서치는 최대 10분 내외 소요될 수 있습니다.</span>
+            </div>
             <!-- 상위 탭 메뉴 -->
             <div class="main-tabs-container">
                 <div class="main-tabs">
@@ -2742,7 +2777,7 @@
                     <button class="main-tab" data-main-tab="financial" onclick="showMainTab('financial')">재무 상세</button>
                     <span class="hover-tooltip-wrapper super-research-tab-wrapper" style="display: none;">
                         <button class="main-tab" data-main-tab="superResearch" id="superResearchTabBtn" onclick="showMainTab('superResearch')">기업 리서치</button>
-                        <div class="hover-tooltip hidden" id="superResearchTooltip">기업 리서치는 약 3~5분 정도 소요됩니다.</div>
+                        <div class="hover-tooltip hidden" id="superResearchTooltip">기업 리서치는 최대 10분 내외 소요될 수 있습니다.</div>
                     </span>
                 </div>
                 <div class="download-btn-wrapper" id="downloadBtnWrapper">
@@ -6431,6 +6466,16 @@
             statusEl.style.display = '';
             statusEl.className = 'analysis-status running';
 
+            // 상단 분석 진행 상태 메시지 표시
+            const analysisStatusMessage = document.getElementById('analysisStatusMessage');
+            const analysisStatusText = document.getElementById('analysisStatusText');
+            if (analysisStatusMessage && analysisStatusText) {
+                analysisStatusMessage.style.display = 'flex';
+                analysisStatusMessage.classList.remove('completed');
+                analysisStatusText.textContent = '재무분석 AI는 평균 2~3분 이내, 기업 리서치는 최대 10분 내외 소요될 수 있습니다.';
+                analysisStatusMessage.querySelector('.status-icon').textContent = '⏳';
+            }
+
             try {
                 const response = await fetch(`/api/analyze/${currentTaskId}`, {
                     method: 'POST'
@@ -6571,6 +6616,22 @@
             addInsightToExcel(result.report, result.summary_report);
 
             isAnalysisCompleted = true;
+
+            // 상단 분석 진행 상태 메시지 업데이트 (재무분석 AI 완료)
+            const analysisStatusMessage = document.getElementById('analysisStatusMessage');
+            const analysisStatusText = document.getElementById('analysisStatusText');
+            if (analysisStatusMessage && analysisStatusText) {
+                // 기업 리서치가 아직 안 끝났으면 메시지 업데이트
+                if (!isSuperResearchCompleted) {
+                    analysisStatusText.textContent = '재무분석 AI 분석이 완료되었습니다. 기업 리서치를 진행중입니다.';
+                    analysisStatusMessage.querySelector('.status-icon').textContent = '✔';
+                } else {
+                    // 기업 리서치도 이미 완료된 경우
+                    analysisStatusMessage.classList.add('completed');
+                    analysisStatusText.textContent = '기업 리서치가 완료되었습니다.';
+                    analysisStatusMessage.querySelector('.status-icon').textContent = '✔';
+                }
+            }
 
             // 결과 컨테이너 확장 (재무분석 완료 시)
             document.getElementById('resultContainer').classList.add('expanded');
@@ -6720,6 +6781,15 @@
 
             isSuperResearchCompleted = true;
             superResearchData = result;
+
+            // 상단 분석 진행 상태 메시지 업데이트 (기업 리서치 완료)
+            const analysisStatusMessage = document.getElementById('analysisStatusMessage');
+            const analysisStatusText = document.getElementById('analysisStatusText');
+            if (analysisStatusMessage && analysisStatusText) {
+                analysisStatusMessage.classList.add('completed');
+                analysisStatusText.textContent = '기업 리서치가 완료되었습니다.';
+                analysisStatusMessage.querySelector('.status-icon').textContent = '✔';
+            }
 
             // 진행 상태 숨기고 결과 및 헤더 표시
             document.getElementById('superResearchProgress').style.display = 'none';
