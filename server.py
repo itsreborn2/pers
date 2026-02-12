@@ -6309,9 +6309,25 @@ def add_super_research_sheet(filepath: str, task: dict):
                     ws.cell(row=row_idx, column=1).fill = PatternFill(start_color='f5f5f5', end_color='f5f5f5', fill_type='solid')
                     ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
                     row_idx += 1
-                    ws.cell(row=row_idx, column=1, value=report['news'])
-                    ws.cell(row=row_idx, column=1).alignment = Alignment(wrap_text=True)
-                    ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
+                    news_data = report['news']
+                    if isinstance(news_data, list):
+                        for news_item in news_data:
+                            date_str = news_item.get('date', '') if isinstance(news_item, dict) else ''
+                            title_str = news_item.get('title', '') if isinstance(news_item, dict) else str(news_item)
+                            url_str = news_item.get('url', '') if isinstance(news_item, dict) else ''
+                            ws.cell(row=row_idx, column=1, value=date_str)
+                            ws.cell(row=row_idx, column=1).border = thin_border
+                            ws.cell(row=row_idx, column=2, value=title_str)
+                            ws.cell(row=row_idx, column=2).border = thin_border
+                            ws.cell(row=row_idx, column=2).alignment = Alignment(wrap_text=True)
+                            ws.merge_cells(start_row=row_idx, start_column=2, end_row=row_idx, end_column=3)
+                            ws.cell(row=row_idx, column=4, value=url_str)
+                            ws.cell(row=row_idx, column=4).border = thin_border
+                            row_idx += 1
+                    else:
+                        ws.cell(row=row_idx, column=1, value=str(news_data))
+                        ws.cell(row=row_idx, column=1).alignment = Alignment(wrap_text=True)
+                        ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
 
             elif report:
                 # 문자열인 경우 (fallback)

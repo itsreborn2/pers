@@ -734,6 +734,48 @@
             white-space: pre-wrap;
         }
 
+        .news-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .news-item {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            font-size: 0.93rem;
+            color: #374151;
+            line-height: 1.6;
+            padding: 6px 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .news-item:last-child { border-bottom: none; }
+        .news-date {
+            flex-shrink: 0;
+            font-size: 0.82rem;
+            color: #6b7280;
+            background: #f3f4f6;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+            min-width: 65px;
+            text-align: center;
+        }
+        .news-title { flex: 1; }
+        .news-link {
+            flex-shrink: 0;
+            color: #2563eb;
+            text-decoration: none;
+            font-size: 0.85rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .news-link:hover {
+            background: #eff6ff;
+            text-decoration: none;
+        }
+
         .research-error {
             padding: 16px;
             background: #fef2f2;
@@ -7390,7 +7432,17 @@
             if (data.news) {
                 html += `<div class="research-section">`;
                 html += `<h3>주요 뉴스/공시</h3>`;
-                html += `<div class="news-content">${data.news}</div>`;
+                if (Array.isArray(data.news)) {
+                    html += `<div class="news-list">`;
+                    data.news.forEach(item => {
+                        const dateTag = item.date ? `<span class="news-date">${item.date}</span>` : '';
+                        const linkTag = item.url ? `<a href="${item.url}" target="_blank" class="news-link" title="${item.url}">↗</a>` : '';
+                        html += `<div class="news-item">${dateTag}<span class="news-title">${item.title || ''}</span>${linkTag}</div>`;
+                    });
+                    html += `</div>`;
+                } else {
+                    html += `<div class="news-content">${data.news}</div>`;
+                }
                 html += `</div>`;
             }
 

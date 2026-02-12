@@ -540,6 +540,8 @@ class SuperResearchPipeline:
                         # 제목이나 설명에 회사명이 포함된 것만
                         if title and (clean_name in title or clean_name in (desc or '')):
                             all_news.append(f"- {title}: {desc}")
+                            if url:
+                                all_news[-1] += f" [URL: {url}]"
             except Exception as e:
                 print(f"  → 뉴스 검색 실패: {e}")
 
@@ -577,8 +579,13 @@ class SuperResearchPipeline:
 - 사업 확장/축소
 - 기타 회사에 중요한 뉴스
 
-## 결과 형식
-- 날짜가 있으면 포함
+## 결과 형식 (★반드시 준수★)
+각 뉴스를 아래 형식으로 출력하세요:
+- (YYYY.MM) 뉴스 내용 요약 [URL: 원본URL]
+
+규칙:
+- 날짜는 기사에서 추출하여 (YYYY.MM) 형식으로 뉴스 앞에 표기. 날짜를 모르면 생략
+- URL은 검색 결과의 [URL: ...] 부분을 그대로 유지
 - 각 뉴스를 간결하게 한 줄씩 정리
 - 의견/코멘트 없이 사실만 나열
 - 뉴스 기사가 없으면 '해당 없음'"""
@@ -1350,7 +1357,13 @@ Return JSON array only (no comments):"""
       }}
     ]
   }},
-  "news": "주요 뉴스/공시 내용 (텍스트)"
+  "news": [
+      {{
+        "date": "YYYY.MM 또는 빈문자열",
+        "title": "뉴스 제목/요약",
+        "url": "원본 URL 또는 빈문자열"
+      }}
+    ]
 }}
 ```
 
