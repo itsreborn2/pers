@@ -391,26 +391,42 @@ class DartCompanyInfo:
             text = soup.get_text("\n", strip=True)
 
             # 대표자 패턴 검색
-            ceo_patterns = [
-                r'대표이사\s+([가-힣]{2,10})\s*$',  # "대표이사 신학철" (줄 끝)
-                r'대표이사\s+([가-힣]{2,10})\n',    # "대표이사 신학철\n"
-                r'대표이사[:\s]+([가-힣]{2,10})',
-                r'대\s*표\s*자[:\s]+([가-힣]{2,10})',
-                r'대표이사\s*성\s*명[:\s]+([가-힣]{2,10})',
-                r'대표이사\([^)]*\)[:\s]+([가-힣]{2,10})',
-            ]
             # 제외할 단어 (이름이 아닌 일반 단어)
-            excluded_words = {'등의', '등이', '외의', '기타', '성명', '이름', '직위', '직책', '대표', '이사', '사내', '사외', '상무', '전무', '부사장', '회장', '부회장', '확인'}
-            for pattern in ceo_patterns:
-                matches = re.findall(pattern, text, re.MULTILINE)
-                for ceo in matches:
-                    ceo = ceo.strip()
+            excluded_words = {'등의', '등이', '외의', '기타', '성명', '이름', '직위', '직책', '대표', '이사', '사내', '사외', '상무', '전무', '부사장', '회장', '부회장', '확인', '사장'}
+
+            # 1단계: 표지 패턴 우선 검색 (띄어쓰기 포함된 표지 형식)
+            cover_patterns = [
+                r'대\s*표\s*이\s*사\s*[:：]\s*([가-힣]{2,10})',  # "대 표 이 사 : 김진국"
+                r'대\s*표\s*자\s*[:：]\s*([가-힣]{2,10})',       # "대 표 자 : 김진국"
+            ]
+            for pattern in cover_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    ceo = match.group(1).strip()
                     if 2 <= len(ceo) <= 10 and ceo not in excluded_words:
-                        print(f"사업보고서 대표자 추출 성공: {ceo}")
+                        print(f"사업보고서 표지 대표자 추출 성공: {ceo}")
                         result['ceo'] = ceo
                         break
-                if result['ceo']:
-                    break
+
+            # 2단계: 표지에서 못 찾은 경우 기존 패턴으로 폴백
+            if not result['ceo']:
+                ceo_patterns = [
+                    r'대표이사\s+([가-힣]{2,10})\s*$',  # "대표이사 신학철" (줄 끝)
+                    r'대표이사\s+([가-힣]{2,10})\n',    # "대표이사 신학철\n"
+                    r'대표이사[:\s]+([가-힣]{2,10})',
+                    r'대표이사\s*성\s*명[:\s]+([가-힣]{2,10})',
+                    r'대표이사\([^)]*\)[:\s]+([가-힣]{2,10})',
+                ]
+                for pattern in ceo_patterns:
+                    matches = re.findall(pattern, text, re.MULTILINE)
+                    for ceo in matches:
+                        ceo = ceo.strip()
+                        if 2 <= len(ceo) <= 10 and ceo not in excluded_words:
+                            print(f"사업보고서 대표자 추출 성공: {ceo}")
+                            result['ceo'] = ceo
+                            break
+                    if result['ceo']:
+                        break
 
             # 본점소재지 패턴 검색 (더 정교한 패턴)
             # 시/도 목록 (약어 + 전체 이름)
@@ -432,6 +448,10 @@ class DartCompanyInfo:
                     address = match.group(1).strip()
                     address = re.sub(r'입니다.*$', '', address).strip()
                     address = re.sub(r'이며.*$', '', address).strip()
+                    # 전화번호/홈페이지/팩스 등 주소 이후 정보 제거
+                    address = re.sub(r'\s*(?:전화|TEL|tel|Tel|팩스|FAX|fax|Fax|홈페이지|http|www\.).*$', '', address, flags=re.IGNORECASE).strip()
+                    # 끝에 남은 하이픈/특수문자 정리
+                    address = re.sub(r'[\s\-–—]+$', '', address)
                     address = re.sub(r'\s+', ' ', address)
                     if len(address) >= 10 and re.search(r'[시구군]', address):
                         print(f"사업보고서 주소 추출 성공: {address}")

@@ -514,6 +514,15 @@ async def update_user(user_id: int, request: UpdateUserRequest, admin: Dict = De
     return {"success": True, "message": "회원 정보가 수정되었습니다"}
 
 
+@app.get("/api/admin/users/{user_id}/history")
+async def get_user_history(user_id: int, admin: Dict = Depends(require_admin)):
+    """회원 활동 이력 조회 (관리자 전용)"""
+    result = db.get_user_activity_history(user_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+    return result
+
+
 @app.post("/api/admin/users/{user_id}/reset-usage")
 async def reset_user_usage(user_id: int, admin: Dict = Depends(require_admin)):
     """회원 사용량 초기화 (관리자 전용)"""

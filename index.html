@@ -4018,7 +4018,7 @@
                     ['설립일', info.est_dt_formatted || '-'],
                     ['결산월', info.acc_mt_formatted || '-'],
                     ['주소', (info.adres || '-') + pendingNote],
-                    ['홈페이지', info.hm_url ? `<a href="${info.hm_url}" target="_blank">${info.hm_url}</a>` : '-'],
+                    ['홈페이지', info.hm_url ? `<a href="${info.hm_url.startsWith('http') ? info.hm_url : 'https://' + info.hm_url}" target="_blank">${info.hm_url}</a>` : '-'],
                 ];
 
                 bodyEl.innerHTML = rows

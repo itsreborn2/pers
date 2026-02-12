@@ -488,6 +488,160 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* 이메일 링크 */
+        .email-link {
+            color: #2563eb;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .email-link:hover {
+            text-decoration: underline;
+        }
+
+        /* 회원 이력 섹션 */
+        .history-section {
+            display: none;
+        }
+
+        .history-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: #fff;
+            color: #374151;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 20px;
+        }
+        .history-back-btn:hover {
+            background: #f3f4f6;
+        }
+
+        .history-user-info {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            padding: 20px 24px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 32px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .history-user-info .info-item {
+            font-size: 0.9rem;
+            color: #374151;
+        }
+        .history-user-info .info-label {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            margin-bottom: 2px;
+        }
+        .history-user-info .info-value {
+            font-weight: 600;
+        }
+
+        /* 탭 */
+        .history-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 0;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        .history-tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #6b7280;
+            cursor: pointer;
+            position: relative;
+            transition: color 0.2s;
+        }
+        .history-tab:hover {
+            color: #374151;
+        }
+        .history-tab.active {
+            color: #2563eb;
+            font-weight: 600;
+        }
+        .history-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #2563eb;
+        }
+        .history-tab .tab-count {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 7px;
+            border-radius: 10px;
+            background: #e5e7eb;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #6b7280;
+        }
+        .history-tab.active .tab-count {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+
+        .history-tab-content {
+            background: #fff;
+            border-radius: 0 0 12px 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .history-table th,
+        .history-table td {
+            padding: 14px 20px;
+            text-align: left;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 0.85rem;
+        }
+        .history-table th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.8rem;
+        }
+        .history-table tbody tr:hover {
+            background: #f9fafb;
+        }
+        .history-table td {
+            color: #374151;
+        }
+        .history-table .empty-row td {
+            text-align: center;
+            padding: 40px;
+            color: #9ca3af;
+        }
+        .history-table .market-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .market-kospi { background: #dbeafe; color: #2563eb; }
+        .market-kosdaq { background: #d1fae5; color: #059669; }
+        .market-etc { background: #e5e7eb; color: #6b7280; }
     </style>
 </head>
 <body>
@@ -624,6 +778,28 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- 회원 이력 상세 -->
+        <div class="history-section" id="userHistorySection">
+            <button class="history-back-btn" onclick="backToUserList()">← 회원 목록으로</button>
+
+            <div class="history-user-info" id="historyUserInfo"></div>
+
+            <div>
+                <div class="history-tabs">
+                    <button class="history-tab active" onclick="showHistoryTab('searches')" id="tabSearches">
+                        기업 검색 <span class="tab-count" id="countSearches">0</span>
+                    </button>
+                    <button class="history-tab" onclick="showHistoryTab('extractions')" id="tabExtractions">
+                        재무 추출 <span class="tab-count" id="countExtractions">0</span>
+                    </button>
+                    <button class="history-tab" onclick="showHistoryTab('analyses')" id="tabAnalyses">
+                        AI 분석 <span class="tab-count" id="countAnalyses">0</span>
+                    </button>
+                </div>
+                <div class="history-tab-content" id="historyTabContent"></div>
+            </div>
+        </div>
     </main>
 
     <div class="no-access" id="noAccess" style="display: none;">
@@ -736,7 +912,7 @@
                         <tr>
                             <td>${user.id}</td>
                             <td>
-                                ${user.email}
+                                <a href="#" class="email-link" onclick="showUserHistory(${user.id}, '${user.email}'); return false;">${user.email}</a>
                                 ${isAdmin ? '<span class="badge badge-admin">Admin</span>' : ''}
                             </td>
                             <td>
@@ -830,6 +1006,132 @@
             } catch (err) {
                 alert('오류: ' + err.message);
             }
+        }
+
+        // ==================== 회원 이력 상세 ====================
+
+        let currentHistoryData = null;
+
+        async function showUserHistory(userId, email) {
+            try {
+                const response = await fetch(`/api/admin/users/${userId}/history`);
+                if (!response.ok) throw new Error('이력 조회 실패');
+                currentHistoryData = await response.json();
+
+                const user = currentHistoryData.user;
+                const tierLabel = { free: 'Free', basic: 'Basic', pro: 'Pro' };
+                const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString('ko-KR') : '-';
+
+                document.getElementById('historyUserInfo').innerHTML = `
+                    <div class="info-item">
+                        <div class="info-label">이메일</div>
+                        <div class="info-value">${user.email}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">등급</div>
+                        <div class="info-value"><span class="badge badge-${user.tier}">${tierLabel[user.tier] || user.tier}</span></div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">가입일</div>
+                        <div class="info-value">${createdAt}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">검색</div>
+                        <div class="info-value">${currentHistoryData.searches.length}건</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">추출</div>
+                        <div class="info-value">${currentHistoryData.extractions.length}건</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">AI 분석</div>
+                        <div class="info-value">${currentHistoryData.analyses.length}건</div>
+                    </div>
+                `;
+
+                // 카운트 배지 업데이트
+                document.getElementById('countSearches').textContent = currentHistoryData.searches.length;
+                document.getElementById('countExtractions').textContent = currentHistoryData.extractions.length;
+                document.getElementById('countAnalyses').textContent = currentHistoryData.analyses.length;
+
+                // 기본 탭 표시
+                showHistoryTab('searches');
+
+                // 회원 목록 숨기고 이력 섹션 표시
+                document.querySelector('.stats-grid').style.display = 'none';
+                document.querySelector('.analytics-container').style.display = 'none';
+                document.querySelector('.table-container').style.display = 'none';
+                document.querySelector('.page-title').style.display = 'none';
+                document.getElementById('userHistorySection').style.display = 'block';
+
+            } catch (err) {
+                alert('오류: ' + err.message);
+            }
+        }
+
+        function showHistoryTab(tabName) {
+            // 탭 활성화 토글
+            document.querySelectorAll('.history-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.add('active');
+
+            const content = document.getElementById('historyTabContent');
+
+            if (tabName === 'searches') {
+                const rows = currentHistoryData.searches;
+                if (rows.length === 0) {
+                    content.innerHTML = '<table class="history-table"><tbody><tr class="empty-row"><td>검색 기록이 없습니다</td></tr></tbody></table>';
+                    return;
+                }
+                content.innerHTML = `
+                    <table class="history-table">
+                        <thead><tr><th>일시</th><th>기업명</th><th>시장</th></tr></thead>
+                        <tbody>${rows.map(r => {
+                            const dt = r.searched_at ? new Date(r.searched_at).toLocaleString('ko-KR') : '-';
+                            const marketClass = (r.market || '').includes('코스피') ? 'market-kospi' :
+                                                (r.market || '').includes('코스닥') ? 'market-kosdaq' : 'market-etc';
+                            return `<tr><td>${dt}</td><td>${r.corp_name || '-'}</td><td><span class="market-badge ${marketClass}">${r.market || '-'}</span></td></tr>`;
+                        }).join('')}</tbody>
+                    </table>`;
+            } else if (tabName === 'extractions') {
+                const rows = currentHistoryData.extractions;
+                if (rows.length === 0) {
+                    content.innerHTML = '<table class="history-table"><tbody><tr class="empty-row"><td>추출 기록이 없습니다</td></tr></tbody></table>';
+                    return;
+                }
+                content.innerHTML = `
+                    <table class="history-table">
+                        <thead><tr><th>일시</th><th>기업명</th><th>기간</th></tr></thead>
+                        <tbody>${rows.map(r => {
+                            const dt = r.created_at ? new Date(r.created_at).toLocaleString('ko-KR') : '-';
+                            const period = r.start_year && r.end_year ? `${r.start_year} - ${r.end_year}` : '-';
+                            return `<tr><td>${dt}</td><td>${r.corp_name || '-'}</td><td>${period}</td></tr>`;
+                        }).join('')}</tbody>
+                    </table>`;
+            } else if (tabName === 'analyses') {
+                const rows = currentHistoryData.analyses;
+                if (rows.length === 0) {
+                    content.innerHTML = '<table class="history-table"><tbody><tr class="empty-row"><td>AI 분석 기록이 없습니다</td></tr></tbody></table>';
+                    return;
+                }
+                content.innerHTML = `
+                    <table class="history-table">
+                        <thead><tr><th>일시</th><th>기업명</th><th>모델</th><th>토큰</th><th>비용</th></tr></thead>
+                        <tbody>${rows.map(r => {
+                            const dt = r.created_at ? new Date(r.created_at).toLocaleString('ko-KR') : '-';
+                            const tokens = r.total_tokens ? r.total_tokens.toLocaleString() : '0';
+                            const cost = r.cost ? '$' + r.cost.toFixed(4) : '-';
+                            return `<tr><td>${dt}</td><td>${r.corp_name || '-'}</td><td>${r.model_name || '-'}</td><td>${tokens}</td><td>${cost}</td></tr>`;
+                        }).join('')}</tbody>
+                    </table>`;
+            }
+        }
+
+        function backToUserList() {
+            document.getElementById('userHistorySection').style.display = 'none';
+            document.querySelector('.stats-grid').style.display = '';
+            document.querySelector('.analytics-container').style.display = '';
+            document.querySelector('.table-container').style.display = '';
+            document.querySelector('.page-title').style.display = '';
         }
     </script>
 </body>

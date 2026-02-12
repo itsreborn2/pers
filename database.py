@@ -441,6 +441,59 @@ def get_user_stats(user_id: int) -> Dict:
         }
 
 
+def get_user_activity_history(user_id: int, limit: int = 200) -> Optional[Dict]:
+    """회원 활동 이력 조회 (관리자용)"""
+    user = get_user_by_id(user_id)
+    if not user:
+        return None
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # 검색 기록
+        cursor.execute('''
+            SELECT corp_name, market, searched_at
+            FROM search_history
+            WHERE user_id = ?
+            ORDER BY searched_at DESC
+            LIMIT ?
+        ''', (user_id, limit))
+        searches = [dict(row) for row in cursor.fetchall()]
+
+        # 추출 기록
+        cursor.execute('''
+            SELECT corp_name, start_year, end_year, created_at
+            FROM extraction_history
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        ''', (user_id, limit))
+        extractions = [dict(row) for row in cursor.fetchall()]
+
+        # AI 분석 기록
+        cursor.execute('''
+            SELECT corp_name, model_name, total_tokens, cost, created_at
+            FROM llm_usage
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        ''', (user_id, limit))
+        analyses = [dict(row) for row in cursor.fetchall()]
+
+    return {
+        'user': {
+            'id': user['id'],
+            'email': user['email'],
+            'role': user['role'],
+            'tier': user['tier'],
+            'created_at': user['created_at'],
+        },
+        'searches': searches,
+        'extractions': extractions,
+        'analyses': analyses,
+    }
+
+
 def get_popular_companies(limit: int = 10) -> List[Dict]:
     """인기 검색 종목"""
     with get_db() as conn:
