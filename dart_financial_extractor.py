@@ -577,15 +577,19 @@ class DartFinancialExtractor:
         self,
         corp_code: str,
         year: int = None,
-        report_type: str = 'annual'
+        report_type: str = 'annual',
+        start_year: int = None,
+        end_year: int = None
     ) -> Dict[str, Any]:
         """
         사업보고서에서 재무제표 주석 추출
 
         Args:
             corp_code: DART 고유번호 (8자리)
-            year: 대상 연도 (None이면 최근 연도)
+            year: 대상 연도 (None이면 최근 연도) — 단일 연도 호환용
             report_type: 보고서 유형 ('annual': 사업보고서)
+            start_year: 분석 시작 연도 (사용자 설정 기간)
+            end_year: 분석 종료 연도 (사용자 설정 기간)
 
         Returns:
             {
@@ -605,15 +609,25 @@ class DartFinancialExtractor:
                 return {'error': f'기업을 찾을 수 없습니다: {corp_code}'}
 
             # 사업보고서 검색 (pblntf_detail_ty='a001' = 사업보고서)
-            if year:
+            # 우선순위: start_year/end_year 범위 > year 단일 연도 > 기본값(최근 2년)
+            if start_year and end_year:
+                # 사용자 설정 기간 사용 (extract_financial_data와 동일한 패턴)
+                # end_year의 사업보고서는 다음 해 초(3~4월)에 공시되므로 +1년 확장
+                bgn_de = f'{start_year}0101'
+                search_end_year = end_year + 1
+                end_de = f'{search_end_year}1231'
+                print(f"  [주석] 사용자 설정 기간 사용: {bgn_de} ~ {end_de} (요청: ~FY{end_year}, 검색: ~{search_end_year})")
+            elif year:
                 bgn_de = f'{year}0101'
                 end_de = f'{year}1231'
+                print(f"  [주석] 단일 연도 사용: {bgn_de} ~ {end_de}")
             else:
-                # 최근 2년 검색
+                # 최근 2년 검색 (기본값)
                 from datetime import datetime
                 current_year = datetime.now().year
                 bgn_de = f'{current_year - 2}0101'
                 end_de = datetime.now().strftime('%Y%m%d')
+                print(f"  [주석] 기본값(최근 2년) 사용: {bgn_de} ~ {end_de}")
 
             # 사업보고서 검색 시도
             reports = None

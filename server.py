@@ -568,7 +568,10 @@ async def index():
     """메인 페이지"""
     html_path = os.path.join(os.path.dirname(__file__), "index.html")
     with open(html_path, "r", encoding="utf-8") as f:
-        return HTMLResponse(content=f.read())
+        return HTMLResponse(
+            content=f.read(),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+        )
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -4687,8 +4690,17 @@ def create_vcm_format(fs_data, excel_filepath=None):
         else:
             print(f"[VCM] 빈 행 제거: {row.get('항목')}")
 
+    # 손익계산서 빈 행 필터링 (모든 연도에서 값이 없는 행 제거)
+    filtered_is_rows = []
+    for row in rows:
+        has_value = any(row.get(y) is not None and row.get(y) != 0 for y in year_cols)
+        if has_value:
+            filtered_is_rows.append(row)
+        else:
+            print(f"[VCM] IS 빈 행 제거: {row.get('항목')}")
+
     # 재무상태표 + 손익계산서 순서로 결합
-    all_rows = filtered_bs_rows + rows
+    all_rows = filtered_bs_rows + filtered_is_rows
 
     # ========== 타입 컬럼 추가 ==========
     # 하위항목 표시 대상 섹션 (BS + IS)
@@ -4816,7 +4828,12 @@ def create_vcm_format(fs_data, excel_filepath=None):
             else:
                 display_row[col] = ''
 
-        display_rows.append(display_row)
+        # 2차 필터: 백만원 변환 후 모든 연도가 빈 칸이면 제거
+        has_display_value = any(display_row.get(col) not in (None, '', 0) for col in year_cols)
+        if has_display_value:
+            display_rows.append(display_row)
+        else:
+            print(f"[VCM] Financials 빈 행 제거 (변환 후): {item_name}")
 
     # 컬럼 순서 정리: 항목, 타입, 부모, FY연도들...
     vcm_df = pd.DataFrame(all_rows)
@@ -5680,8 +5697,21 @@ async def run_financial_analysis(task_id: str):
         if not company_info:
             company_info = {
                 'corp_name': task.get('corp_name', '알 수 없음'),
+                'corp_code': task.get('corp_code', ''),
                 'induty_code': ''
             }
+        # company_info에 corp_code가 없으면 task에서 보충
+        if not company_info.get('corp_code'):
+            company_info['corp_code'] = task.get('corp_code', '')
+
+        # 사용자 설정 기간을 company_info에 추가 (AI 분석 시 DART 주석 추출에 사용)
+        analysis_start_year = task.get('start_year')
+        analysis_end_year = task.get('end_year')
+        if analysis_start_year:
+            company_info['analysis_start_year'] = analysis_start_year
+        if analysis_end_year:
+            company_info['analysis_end_year'] = analysis_end_year
+        print(f"[ANALYSIS] 분석 기간: {analysis_start_year} ~ {analysis_end_year}")
 
         # 분석 실행 (콜백 전달)
         result = await analyzer.analyze(preview_data, company_info, update_progress)
@@ -6312,12 +6342,17 @@ def add_super_research_sheet(filepath: str, task: dict):
                     news_data = report['news']
                     if isinstance(news_data, list):
                         for news_item in news_data:
+                            type_str = news_item.get('type', '') if isinstance(news_item, dict) else ''
                             date_str = news_item.get('date', '') if isinstance(news_item, dict) else ''
                             title_str = news_item.get('title', '') if isinstance(news_item, dict) else str(news_item)
+                            desc_str = news_item.get('description', '') if isinstance(news_item, dict) else ''
                             url_str = news_item.get('url', '') if isinstance(news_item, dict) else ''
-                            ws.cell(row=row_idx, column=1, value=date_str)
+                            label = f"[{type_str}] {date_str}" if type_str else date_str
+                            # 제목 + 설명 합쳐서 표시
+                            full_title = f"{title_str}\n{desc_str}" if desc_str else title_str
+                            ws.cell(row=row_idx, column=1, value=label)
                             ws.cell(row=row_idx, column=1).border = thin_border
-                            ws.cell(row=row_idx, column=2, value=title_str)
+                            ws.cell(row=row_idx, column=2, value=full_title)
                             ws.cell(row=row_idx, column=2).border = thin_border
                             ws.cell(row=row_idx, column=2).alignment = Alignment(wrap_text=True)
                             ws.merge_cells(start_row=row_idx, start_column=2, end_row=row_idx, end_column=3)

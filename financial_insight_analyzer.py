@@ -469,6 +469,11 @@ class FinancialInsightAnalyzer:
             print("  → 주석 추출 실패: corp_code 없음")
             return {'notes': [], 'notes_text': '', 'notes_count': 0}
 
+        # 사용자 설정 기간 추출
+        analysis_start_year = company_info.get('analysis_start_year')
+        analysis_end_year = company_info.get('analysis_end_year')
+        print(f"  → 주석 추출 기간: {analysis_start_year} ~ {analysis_end_year}")
+
         try:
             # DART API로 주석 추출 (별도 스레드에서 실행)
             loop = asyncio.get_event_loop()
@@ -476,7 +481,11 @@ class FinancialInsightAnalyzer:
 
             notes_data = await loop.run_in_executor(
                 None,
-                lambda: extractor.extract_notes(corp_code)
+                lambda: extractor.extract_notes(
+                    corp_code,
+                    start_year=analysis_start_year,
+                    end_year=analysis_end_year
+                )
             )
 
             if notes_data.get('error'):

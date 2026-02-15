@@ -741,15 +741,29 @@
         }
         .news-item {
             display: flex;
+            flex-wrap: wrap;
             align-items: baseline;
-            gap: 10px;
+            gap: 8px 10px;
             font-size: 0.93rem;
             color: #374151;
             line-height: 1.6;
-            padding: 6px 0;
+            padding: 8px 0;
             border-bottom: 1px solid #f3f4f6;
         }
         .news-item:last-child { border-bottom: none; }
+        .news-header {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            width: 100%;
+        }
+        .news-description {
+            width: 100%;
+            font-size: 0.85rem;
+            color: #6b7280;
+            padding-left: 2px;
+            line-height: 1.5;
+        }
         .news-date {
             flex-shrink: 0;
             font-size: 0.82rem;
@@ -760,6 +774,23 @@
             font-weight: 500;
             min-width: 65px;
             text-align: center;
+        }
+        .news-type {
+            flex-shrink: 0;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 4px;
+            min-width: 32px;
+            text-align: center;
+        }
+        .news-type.type-news {
+            color: #1d4ed8;
+            background: #dbeafe;
+        }
+        .news-type.type-disclosure {
+            color: #b45309;
+            background: #fef3c7;
         }
         .news-title { flex: 1; }
         .news-link {
@@ -5445,6 +5476,16 @@
                     if (itemName.includes('[NWC]') || itemName.includes('[NetDebt]')) continue;
 
                     const itemType = getItemType(itemName);
+
+                    // 표시 연도에 값이 하나도 없는 하위항목은 스킵 (최근 5년 기준)
+                    if (itemType === 'subitem' || itemType === 'item') {
+                        const hasDisplayValue = years.some(y => {
+                            const v = row[y];
+                            return v !== null && v !== undefined && v !== '' && v !== 0;
+                        });
+                        if (!hasDisplayValue) continue;
+                    }
+
                     const rowClass = getRowClass(itemType);
                     const tdClass = getTdClass(itemType);
 
@@ -5531,6 +5572,16 @@
                     if (itemName.includes('[NWC]') || itemName.includes('[NetDebt]')) continue;
 
                     const itemType = getItemType(itemName);
+
+                    // 표시 연도에 값이 하나도 없는 하위항목은 스킵 (최근 5년 기준)
+                    if (itemType === 'subitem' || itemType === 'item') {
+                        const hasDisplayValue = years.some(y => {
+                            const v = row[y];
+                            return v !== null && v !== undefined && v !== '' && v !== 0;
+                        });
+                        if (!hasDisplayValue) continue;
+                    }
+
                     const rowClass = getRowClass(itemType);
                     const tdClass = getTdClass(itemType);
 
@@ -7432,16 +7483,29 @@
             if (data.news) {
                 html += `<div class="research-section">`;
                 html += `<h3>주요 뉴스/공시</h3>`;
-                if (Array.isArray(data.news)) {
+                // 배열 또는 배열-like 객체 모두 안전하게 처리
+                let newsArr = data.news;
+                if (!Array.isArray(newsArr)) {
+                    try { newsArr = Array.from(newsArr); } catch(e) { newsArr = null; }
+                }
+                if (newsArr && newsArr.length > 0 && typeof newsArr[0] === 'object') {
                     html += `<div class="news-list">`;
-                    data.news.forEach(item => {
-                        const dateTag = item.date ? `<span class="news-date">${item.date}</span>` : '';
-                        const linkTag = item.url ? `<a href="${item.url}" target="_blank" class="news-link" title="${item.url}">↗</a>` : '';
-                        html += `<div class="news-item">${dateTag}<span class="news-title">${item.title || ''}</span>${linkTag}</div>`;
+                    newsArr.forEach(item => {
+                        if (typeof item === 'object' && item !== null) {
+                            const isDisclosure = item.type === '공시';
+                            const typeTag = item.type ? `<span class="news-type ${isDisclosure ? 'type-disclosure' : 'type-news'}">${item.type}</span>` : '';
+                            const dateTag = item.date ? `<span class="news-date">${item.date}</span>` : '';
+                            const linkTag = item.url ? `<a href="${item.url}" target="_blank" class="news-link" title="${item.url}">↗</a>` : '';
+                            const descTag = item.description ? `<div class="news-description">${item.description}</div>` : '';
+                            html += `<div class="news-item"><div class="news-header">${typeTag}${dateTag}<span class="news-title">${item.title || ''}</span>${linkTag}</div>${descTag}</div>`;
+                        }
                     });
                     html += `</div>`;
-                } else {
+                } else if (typeof data.news === 'string') {
                     html += `<div class="news-content">${data.news}</div>`;
+                } else {
+                    // 최종 fallback: JSON.stringify로 확인 가능하게
+                    html += `<div class="news-content">${JSON.stringify(data.news)}</div>`;
                 }
                 html += `</div>`;
             }

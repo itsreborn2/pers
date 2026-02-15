@@ -481,7 +481,7 @@ class SuperResearchPipeline:
             print(f"  → Firecrawl 공시/뉴스 검색 완료: {len(context)}자")
 
             # Gemini로 요약
-            prompt = f"""다음 검색 결과에서 중요한 공시/뉴스만 추출해주세요.
+            prompt = f"""다음 검색 결과에서 중요한 공시/뉴스를 추출하고, 각 항목의 **핵심 내용**을 구체적으로 정리해주세요.
 
 기업명: {company.corp_name}
 검색 기간: {current_year - 2}년 ~ {current_year}년 (최근 2년)
@@ -490,16 +490,30 @@ class SuperResearchPipeline:
 {context}
 
 ## 추출 대상
-1. 이사진 및 임원 관련 소식
-2. 지배구조 관련 변동
-3. 주요 사업 변동 (인수, 매각 등)
+1. 이사진 및 임원 관련 소식 (누가, 어떤 직책에, 선임/해임)
+2. 지배구조 관련 변동 (최대주주 변경, 지분율 변동 등)
+3. 주요 사업 변동 (인수, 매각, 합병 등)
 4. 대규모 투자/계약
+5. 실적 공시 (매출/이익 변동)
+6. 법적 이슈 (소송, 과징금 등)
 
 ## 제외 대상
 - 홍보성 기사
 - 단순 주가 뉴스
 
-결과만 나열하세요 (의견/코멘트 없이):"""
+## 출력 형식 (★반드시 준수★)
+각 항목을 아래 형식으로 출력하세요:
+- (YYYY.MM) 제목 요약 | 상세: 구체적 내용 1-2문장 [URL: 원본URL]
+
+예시:
+- (2024.03) 사외이사 신규 선임 | 상세: 구예원 사외이사 선임, 감사위원회 위원 겸임. 제38기 정기주주총회 결의 [URL: https://...]
+- (2024.06) 대표이사 변경 | 상세: 김진국 대표이사 사임, 후임 박민수 선임. 경영전략 변화 예상 [URL: https://...]
+
+규칙:
+- 제목은 간결하게 (10자 이내), "| 상세:" 뒤에 구체적 내용 (누가/무엇을/왜/얼마나)
+- URL은 검색 결과의 URL을 그대로 유지
+- 의견/코멘트 없이 사실만 나열
+- 최대 10건"""
 
             response = generate_with_retry(self.gemini, MODEL_FLASH, prompt)
             summary = response.text.strip()
@@ -511,7 +525,7 @@ class SuperResearchPipeline:
             return DisclosureResult()
 
     async def _search_major_news(self, company: CompanyInput) -> MajorNewsResult:
-        """Firecrawl 뉴스 검색으로 주요 뉴스 파악 (최근 2년)"""
+        """Firecrawl 뉴스 검색으로 주요 뉴스 파악 (최근 2년) — PE DD 기준 20개 카테고리 병렬 검색"""
         try:
             all_news = []
 
@@ -524,28 +538,79 @@ class SuperResearchPipeline:
             # 회사명에서 (주), ㈜ 제거
             clean_name = company.corp_name.replace('(주)', '').replace('㈜', '').strip()
 
-            # 회사명만으로 검색 (최대한 많이 수집)
-            try:
-                search_results = self.firecrawl.search(
-                    query=clean_name,
-                    limit=30,  # 많이 가져오기
-                    tbs=date_range
-                )
-
+            def _collect_results(search_results):
+                """검색 결과에서 뉴스 항목 수집"""
+                items = []
                 if search_results and search_results.web:
                     for item in search_results.web:
                         title = getattr(item, 'title', None) or (item.metadata.title if hasattr(item, 'metadata') and item.metadata else '')
                         desc = getattr(item, 'description', None) or (item.metadata.og_description if hasattr(item, 'metadata') and item.metadata else '')
                         url = getattr(item, 'url', '') or ''
-                        # 제목이나 설명에 회사명이 포함된 것만
                         if title and (clean_name in title or clean_name in (desc or '')):
-                            all_news.append(f"- {title}: {desc}")
+                            entry = f"- {title}: {desc}"
                             if url:
-                                all_news[-1] += f" [URL: {url}]"
-            except Exception as e:
-                print(f"  → 뉴스 검색 실패: {e}")
+                                entry += f" [URL: {url}]"
+                            items.append(entry)
+                return items
 
-            print(f"  → Firecrawl 주요뉴스 검색 완료: {len(all_news)}건 수집")
+            def _search_one(query, limit):
+                """단일 검색 실행 (동기)"""
+                try:
+                    results = self.firecrawl.search(query=query, limit=limit, tbs=date_range)
+                    return _collect_results(results)
+                except Exception as e:
+                    print(f"  → 검색 실패 ({query[:40]}...): {e}")
+                    return []
+
+            # PE Due Diligence 기준 검색 쿼리 (20개 카테고리 + 기본 1개)
+            search_tasks = [
+                # 기본 검색
+                (clean_name, 20),
+                # A. Corporate Action & Governance
+                (f'"{clean_name}" 인수 합병 매각 M&A 분할', 5),
+                (f'"{clean_name}" 대표이사 경영진 이사회 사임 선임', 5),
+                (f'"{clean_name}" 최대주주 지분 매각 자사주 배당 주주', 5),
+                (f'"{clean_name}" 자회사 계열사 분할 합병 설립 편입', 5),
+                # B. Financial Events
+                (f'"{clean_name}" 실적 매출 영업이익 적자 흑자전환', 5),
+                (f'"{clean_name}" 유상증자 회사채 자금조달 차입 IPO', 5),
+                (f'"{clean_name}" 신용등급 워크아웃 기업회생 부도 자본잠식', 5),
+                (f'"{clean_name}" 감사의견 한정 거절 회계오류 재무제표 정정', 5),
+                # C. Legal & Regulatory
+                (f'"{clean_name}" 소송 과징금 공정위 제재 벌금 판결', 5),
+                (f'"{clean_name}" 세무조사 추징금 조세소송 국세청', 5),
+                (f'"{clean_name}" 인허가 면허 규제 허가취소 행정처분', 5),
+                (f'"{clean_name}" 관계사거래 특수관계자 내부거래 일감몰아주기', 5),
+                # D. Operational
+                (f'"{clean_name}" 대규모 계약 수주 납품 장기계약 해지', 5),
+                (f'"{clean_name}" 공장 증설 설비투자 부동산 매입 매각', 5),
+                (f'"{clean_name}" 구조조정 감원 파업 노조 핵심인력 이탈', 5),
+                (f'"{clean_name}" 주요거래처 고객 납품업체 공급망 거래중단', 5),
+                # E. External Risk
+                (f'"{clean_name}" 환경오염 산업재해 중대재해 제품리콜 안전', 5),
+                (f'"{clean_name}" 해외진출 수출 해외법인 글로벌 철수 관세', 5),
+                (f'"{clean_name}" 특허 기술이전 R&D 핵심기술 라이선스 침해', 5),
+                (f'"{clean_name}" 채무보증 우발채무 담보 연대보증 약정', 5),
+                # F. Growth & Strategy
+                (f'"{clean_name}" 최대실적 사상최대 매출성장 영업이익증가 실적개선', 5),
+                (f'"{clean_name}" 신사업 신시장 진출 해외확장 동남아 미국 유럽', 5),
+                (f'"{clean_name}" 업무협약 MOU 전략적제휴 합작 JV 파트너십', 5),
+                (f'"{clean_name}" 시장점유율 업계1위 경쟁력 수주잔고 수요증가', 5),
+            ]
+
+            # 전체 병렬 실행 (asyncio.to_thread로 동기 → 비동기 변환)
+            import asyncio
+            loop = asyncio.get_event_loop()
+            tasks = [loop.run_in_executor(None, _search_one, q, lim) for q, lim in search_tasks]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    print(f"  → 병렬 검색 #{i} 예외: {result}")
+                elif isinstance(result, list):
+                    all_news.extend(result)
+
+            print(f"  → Firecrawl 주요뉴스 병렬검색 완료: {len(search_tasks)}개 쿼리, {len(all_news)}건 수집")
 
             if not all_news:
                 return MajorNewsResult(news_items=[], raw_news="관련 뉴스 없음")
@@ -554,40 +619,46 @@ class SuperResearchPipeline:
             unique_news = list(set(all_news))
             context = "\n".join(unique_news)
 
-            # Gemini로 정리 (중복 제거 + 주요 이슈만 추출)
-            prompt = f"""다음은 {company.corp_name}에 대한 검색 결과입니다. 뉴스 기사만 추출해주세요.
+            # Gemini로 정리 (중복 제거 + 비즈니스 크리티컬 뉴스만 추출)
+            prompt = f"""다음은 {company.corp_name}에 대한 검색 결과입니다. 기업 분석에 중요한 뉴스만 추출해주세요.
 
 ## 검색 결과
 {context}
 
-## 제외 대상 (반드시 제외)
+## 제외 대상 (★반드시 제외★)
 - 채용공고, 구인광고
-- 회사 홈페이지, 회사소개
-- 기업정보 사이트 (잡코리아, 사람인, 크레딧잡 등)
-- 광고/홍보성 기사
-- 단순 주가/시황 뉴스
+- 회사 홈페이지, 회사소개, 기업정보 사이트 (잡코리아, 사람인, 크레딧잡 등)
+- 광고/홍보성 기사, 보도자료형 홍보
+- 단순 주가/시황 뉴스 (52주 신고가, 상한가 등)
 - 중복된 내용
+- ★ 단순 상품/서비스 출시 (예: 여행 패키지, 신메뉴, 신상품, 앱 업데이트)
+- ★ 프로모션/이벤트/할인행사/기획전
+- ★ 마케팅 캠페인/브랜드 콜라보/광고 모델 선정
+- ★ SNS/유튜브 마케팅, 인플루언서 협업
+- ★ 일반적인 CSR 활동 (기부, 봉사활동, 후원)
 
-## 추출 대상 (뉴스 기사만)
-- 인수/합병/매각
-- 신규 사업/제품 개발/출시
-- 대규모 계약/수주
-- 경영진 변동
-- 실적 발표, 매출/영업이익 변화
-- 법적 이슈/소송/과징금
-- 투자 유치/자금 조달
-- 사업 확장/축소
-- 기타 회사에 중요한 뉴스
+## 추출 대상 (PE 실사 관점에서 중요한 뉴스만)
+[Corporate Action] 인수/합병/매각/분할, 경영진 변동, 최대주주/지분 변동, 자회사/계열사 구조 변경
+[Financial Events] 실적 발표 (매출/이익 증감), 자금 조달 (유상증자/회사채/IPO), 신용등급/워크아웃/기업회생, 감사의견/회계 이슈
+[Legal & Regulatory] 소송/과징금/제재, 세무조사/추징금, 인허가/규제 변화, 관계사/특수관계자 거래
+[Operational] 대규모 계약/수주/해지, 설비투자/부동산/CAPEX, 구조조정/파업/핵심인력 이탈, 주요 거래처/공급망 변동
+[External Risk] 환경/안전/중대재해, 해외사업 진출/철수, 특허/기술/IP, 채무보증/우발채무
+[Growth & Strategy] 최대실적/실적개선, 신시장/해외확장, 전략적 제휴/MOU/JV, 시장점유율/경쟁력/수요증가
 
 ## 결과 형식 (★반드시 준수★)
 각 뉴스를 아래 형식으로 출력하세요:
-- (YYYY.MM) 뉴스 내용 요약 [URL: 원본URL]
+- (YYYY.MM) 뉴스 제목 요약 | 상세: 구체적 내용 1-2문장 [URL: 원본URL]
+
+예시:
+- (2024.05) 일본 패키지 여행 사업 확대 | 상세: 오사카·후쿠오카 노선 신규 개설, 전년 대비 일본 매출 40% 성장 목표 설정 [URL: https://...]
+- (2024.08) 3분기 실적 발표 | 상세: 매출 1,200억원(+15% YoY), 영업이익 80억원으로 흑자전환 [URL: https://...]
 
 규칙:
+- 제목은 간결하게 (15자 이내), "| 상세:" 뒤에 구체적 수치·인명·금액 등 핵심 정보 포함
 - 날짜는 기사에서 추출하여 (YYYY.MM) 형식으로 뉴스 앞에 표기. 날짜를 모르면 생략
 - URL은 검색 결과의 [URL: ...] 부분을 그대로 유지
-- 각 뉴스를 간결하게 한 줄씩 정리
 - 의견/코멘트 없이 사실만 나열
+- 최대 20건까지 추출 (중요도 높은 순, 카테고리별 균형있게)
 - 뉴스 기사가 없으면 '해당 없음'"""
 
             response = generate_with_retry(self.gemini, MODEL_FLASH, prompt)
@@ -1292,10 +1363,10 @@ Return JSON array only (no comments):"""
 ### 해외 M&A 사례
 {mna_intl_text if mna_intl_text else ''}
 
-### 최근 공시/뉴스 (2년)
+### 최근 공시 (2년) — type: "공시"
 {disclosure_text if disclosure_text else ''}
 
-### 주요 뉴스 (2년)
+### 주요 뉴스 (2년) — type: "뉴스"
 {major_news_text if major_news_text else ''}
 
 ---
@@ -1359,8 +1430,10 @@ Return JSON array only (no comments):"""
   }},
   "news": [
       {{
+        "type": "뉴스 또는 공시",
         "date": "YYYY.MM 또는 빈문자열",
-        "title": "뉴스 제목/요약",
+        "title": "간결한 제목 (15자 이내)",
+        "description": "핵심 내용 1-2문장 (구체적 수치·인명·금액 포함)",
         "url": "원본 URL 또는 빈문자열"
       }}
     ]
