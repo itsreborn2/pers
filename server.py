@@ -588,43 +588,32 @@ async def search_company(request: SearchRequest):
     import traceback
     
     try:
-        print(f"[DEBUG] 검색 요청: company_name='{request.company_name}', market='{request.market}'")
-        
         corp_list = get_corp_list()
-        print(f"[DEBUG] corp_list 로드 완료, 타입: {type(corp_list)}")
-        
+
         # market이 None이거나 'None' 문자열이면 전체 시장 검색 ('YKNE')
         # Y: 코스피, K: 코스닥, N: 코넥스, E: 기타(비상장)
         market_filter = request.market
         if market_filter is None or market_filter == 'None' or market_filter == '':
             market_filter = 'YKNE'  # 전체 시장 (상장+비상장 모두)
-        print(f"[DEBUG] market_filter 변환 후: {market_filter}")
-        
+
         # 회사명으로 검색 (market=None이면 상장/비상장 모두 검색)
         companies = corp_list.find_by_corp_name(
-            request.company_name, 
-            exactly=False, 
+            request.company_name,
+            exactly=False,
             market=market_filter  # None이면 전체 검색 (기타법인 포함)
         )
-        print(f"[DEBUG] 검색 결과 타입: {type(companies)}, 값: {companies}")
-        
+
         # None 체크 및 리스트로 변환
         if companies is None:
-            print("[DEBUG] companies가 None입니다")
             companies = []
         elif not isinstance(companies, list):
-            print(f"[DEBUG] companies를 리스트로 변환: {type(companies)}")
             companies = [companies]
-        
-        print(f"[DEBUG] 처리할 기업 수: {len(companies)}")
-        
+
         # 결과 포맷팅
         results = []
         for i, corp in enumerate(companies[:50]):  # 최대 50개
             if corp is None:
-                print(f"[DEBUG] companies[{i}]가 None, 스킵")
                 continue
-            print(f"[DEBUG] 처리 중: {corp.corp_name}, corp_code={corp.corp_code}")
             results.append({
                 "corp_code": corp.corp_code,
                 "corp_name": corp.corp_name,
@@ -632,7 +621,6 @@ async def search_company(request: SearchRequest):
                 "market": _get_market_name(corp)
             })
         
-        print(f"[DEBUG] 최종 결과 수: {len(results)}")
         return {"success": True, "data": results, "count": len(results)}
     
     except ValueError as e:
@@ -1169,6 +1157,52 @@ async def extract_financial_data(
                         except Exception as e:
                             pass
                     task['preview_data']['bs'] = merged_bs_data
+
+        # ★ 주석 데이터를 별도로 preview_data에 저장 (프론트엔드 주석 탭용)
+        notes_for_preview = []
+        seen_note_signatures = set()  # 중복 제거용
+        if notes and isinstance(notes, dict):
+            import re as _re_notes
+            for note_type, type_label in [('is_notes', '손익계산서'), ('bs_notes', '재무상태표'), ('cf_notes', '현금흐름표')]:
+                for note in notes.get(note_type, []):
+                    try:
+                        note_df = note.get('df')
+                        if note_df is not None and not note_df.empty:
+                            # 컬럼 정규화
+                            note_df_clean = normalize_xbrl_columns(note_df)
+                            # 계정과목 + FY컬럼만 유지
+                            _keep_cols = [c for c in note_df_clean.columns if c == '계정과목' or (isinstance(c, str) and _re_notes.match(r'^FY\d{4}', c))]
+                            # 계정과목 컬럼 필수 + FY 컬럼 최소 1개
+                            fy_cols = [c for c in _keep_cols if c != '계정과목']
+                            if '계정과목' not in _keep_cols or len(fy_cols) == 0:
+                                continue  # 계정과목 또는 FY 컬럼 없는 테이블은 스킵
+                            note_df_clean = note_df_clean[_keep_cols]
+                            # 최소 2행 이상 (의미 있는 데이터)
+                            if len(note_df_clean) < 2:
+                                continue
+                            note_json = safe_dataframe_to_json(note_df_clean)
+                            if not note_json:
+                                continue
+                            # 중복 제거: (제목, 첫 행 계정과목, FY컬럼 목록, 행 수) 기준
+                            note_title = note.get('name', note.get('title', '주석'))
+                            first_acc = note_json[0].get('계정과목', '') if note_json else ''
+                            sig = (note_title, first_acc, tuple(sorted(fy_cols)), len(note_json))
+                            if sig in seen_note_signatures:
+                                continue
+                            seen_note_signatures.add(sig)
+                            is_consolidated = note.get('consolidated', False)
+                            notes_for_preview.append({
+                                'title': note_title,
+                                'type': type_label,
+                                'consolidated': is_consolidated,
+                                'source': f"{'연결' if is_consolidated else '별도'}재무제표 주석 — {type_label} 관련",
+                                'data': note_json
+                            })
+                    except Exception as e:
+                        print(f"[EXTRACT] 주석 preview 변환 실패: {e}")
+            if notes_for_preview:
+                print(f"[EXTRACT] 주석 preview_data 생성: {len(notes_for_preview)}개 테이블 (중복/불량 제거 후)")
+        task['preview_data']['notes'] = notes_for_preview
 
         # ★ 주석 병합 후 컬럼 정제 (주석 테이블이 본문에 concat되면서 불필요 컬럼 유입 방지)
         import re as _re2
@@ -2520,10 +2554,6 @@ def normalize_yearly_data(yearly_data: dict, fs_type: str):
                 if pd.notna(val) and str(val).strip() not in ['', '-', 'nan', 'NaN']:
                     value = val
                     break
-            
-            # 디버깅: 법인세 관련 행 출력
-            if '법인세' in account and fs_type == 'is':
-                print(f"[DEBUG 법인세] period={period}, account={account}, value={value}, cols_checked={candidate_cols}")
             
             if account not in all_accounts:
                 all_accounts[account] = {}
@@ -4801,16 +4831,13 @@ def create_vcm_format(fs_data, excel_filepath=None):
             if val is not None and val != 0:
                 if item_type == 'percent':
                     # 퍼센트는 소수점 형태를 % 형식으로 변환 (0.127 → "12.7%", 1.5 → "150.0%")
-                    print(f"[DEBUG] 퍼센트 변환: item={item_name}, col={col}, val={val}, type={type(val)}")
                     if isinstance(val, (int, float)):
                         # 소수점 값이면 % 형식으로 변환 (절대값이 10 이하면 소수점 형태로 간주)
                         if abs(val) <= 10:
                             display_row[col] = f"{val * 100:.1f}%"
-                            print(f"[DEBUG] 변환 결과: {display_row[col]}")
                         else:
                             # 이미 100을 곱한 값이면 그대로 % 추가
                             display_row[col] = f"{val:.1f}%"
-                            print(f"[DEBUG] 변환 결과 (100+): {display_row[col]}")
                     elif isinstance(val, str) and '%' in val:
                         # 이미 % 형식 문자열이면 그대로 사용
                         display_row[col] = val
@@ -5184,10 +5211,6 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
 
             if display_df is not None and not display_df.empty:
                 print(f"[VCM] Financials 저장 중... ({len(display_df)}행)")
-                # 디버그: display_df의 % of Sales 값 확인
-                for idx, row in display_df.iterrows():
-                    if '% of Sales' in str(row.get('항목', '')):
-                        print(f"[DEBUG] display_df row: {dict(row)}")
 
                 # 타입 정보는 vcm_df에서 가져옴
                 item_names = display_df['항목'].tolist() if '항목' in display_df.columns else []
@@ -5217,11 +5240,6 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                 is_types = type_info[is_start_idx:]
 
                 print(f"[VCM] 재무상태표: {len(bs_rows)}행, 손익계산서: {len(is_rows)}행")
-
-                # 디버그: is_rows에서 % of Sales 확인
-                for idx, row in is_rows.iterrows():
-                    if '% of Sales' in str(row.get('항목', '')):
-                        print(f"[DEBUG] is_rows row: {dict(row)}")
 
                 # 빈 시트 생성 후 좌우 배치
                 from openpyxl import Workbook
@@ -5722,37 +5740,21 @@ async def run_financial_analysis(task_id: str):
             from dart_company_info import DartCompanyInfo
             dart_info = DartCompanyInfo()
             corp_code = task.get('corp_code', '')
-            print(f"[ANALYSIS] corp_code 확인: '{corp_code}'")
             if corp_code:
                 latest_info = dart_info.get_company_info_from_report(corp_code)
-                print(f"[ANALYSIS] latest_info 결과: {latest_info}")
                 if latest_info:
                     # 정기보고서가 없는 경우, 기업개황정보를 최신으로 사용
                     if latest_info.get('no_report'):
-                        print(f"[ANALYSIS] 정기보고서 없음 - 기업개황정보를 최신으로 사용")
-                        # 기업개황정보에서 대표자/주소 가져오기
                         if company_info and company_info.get('ceo_nm'):
                             result['current_ceo'] = company_info['ceo_nm']
-                            print(f"[ANALYSIS] 기업개황 대표자 사용: {company_info['ceo_nm']}")
                         if company_info and company_info.get('adres'):
                             result['current_address'] = company_info['adres']
-                            print(f"[ANALYSIS] 기업개황 주소 사용: {company_info['adres']}")
                         result['no_report'] = True  # 프론트엔드에 알림
                     else:
                         if latest_info.get('ceo'):
                             result['current_ceo'] = latest_info['ceo']
-                            print(f"[ANALYSIS] 최신 대표자: {latest_info['ceo']}")
-                        else:
-                            print(f"[ANALYSIS] latest_info에 ceo 없음")
                         if latest_info.get('address'):
                             result['current_address'] = latest_info['address']
-                            print(f"[ANALYSIS] 최신 주소: {latest_info['address']}")
-                        else:
-                            print(f"[ANALYSIS] latest_info에 address 없음")
-                else:
-                    print(f"[ANALYSIS] latest_info가 None 또는 빈 값")
-            else:
-                print(f"[ANALYSIS] corp_code가 비어있음")
         except Exception as info_err:
             print(f"[ANALYSIS] 최신 기업정보 추출 실패: {info_err}")
             import traceback
@@ -5931,6 +5933,26 @@ async def run_super_research(task_id: str):
                     'detailed_business': c.detailed_business
                 } for c in result.competitors_international
             ] if result.competitors_international else [],
+            'partners_domestic': [
+                {
+                    'name': p.name,
+                    'ticker': p.ticker,
+                    'business': p.business,
+                    'reason': p.reason,
+                    'relationship_type': p.relationship_type,
+                    'detailed_business': p.detailed_business
+                } for p in result.partners_domestic
+            ] if result.partners_domestic else [],
+            'partners_international': [
+                {
+                    'name': p.name,
+                    'ticker': p.ticker,
+                    'business': p.business,
+                    'reason': p.reason,
+                    'relationship_type': p.relationship_type,
+                    'detailed_business': p.detailed_business
+                } for p in result.partners_international
+            ] if result.partners_international else [],
             'mna_domestic': [
                 {
                     'acquirer': m.acquirer,
@@ -6276,6 +6298,74 @@ def add_super_research_sheet(filepath: str, task: dict):
                             row_idx += 1
                         row_idx += 1
 
+                # 4-1. 협력사 분석
+                has_partners_domestic = report.get('partners', {}).get('domestic')
+                has_partners_international = report.get('partners', {}).get('international')
+                if has_partners_domestic or has_partners_international:
+                    ws.cell(row=row_idx, column=1, value='협력사 분석')
+                    ws.cell(row=row_idx, column=1).font = section_font
+                    ws.cell(row=row_idx, column=1).fill = PatternFill(start_color='f5f5f5', end_color='f5f5f5', fill_type='solid')
+                    ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=5)
+                    row_idx += 1
+
+                    # 국내 협력사
+                    if has_partners_domestic:
+                        ws.cell(row=row_idx, column=1, value='▶ 국내 협력사')
+                        ws.cell(row=row_idx, column=1).font = subsection_font
+                        row_idx += 1
+                        headers = ['기업명', '티커', '관계 유형', '사업 분야', '관계 설명']
+                        for col, h in enumerate(headers, 1):
+                            ws.cell(row=row_idx, column=col, value=h)
+                            ws.cell(row=row_idx, column=col).fill = header_fill
+                            ws.cell(row=row_idx, column=col).font = header_font
+                            ws.cell(row=row_idx, column=col).border = thin_border
+                        row_idx += 1
+                        rel_labels = {'partner': '제휴', 'supplier': '공급업체', 'customer': '고객사'}
+                        for p in report['partners']['domestic']:
+                            ws.cell(row=row_idx, column=1, value=p.get('name', ''))
+                            ws.cell(row=row_idx, column=1).border = thin_border
+                            ws.cell(row=row_idx, column=2, value=p.get('ticker', ''))
+                            ws.cell(row=row_idx, column=2).border = thin_border
+                            ws.cell(row=row_idx, column=3, value=rel_labels.get(p.get('relationship_type', ''), p.get('relationship_type', '')))
+                            ws.cell(row=row_idx, column=3).border = thin_border
+                            ws.cell(row=row_idx, column=4, value=p.get('field', ''))
+                            ws.cell(row=row_idx, column=4).border = thin_border
+                            ws.cell(row=row_idx, column=4).alignment = Alignment(wrap_text=True)
+                            ws.cell(row=row_idx, column=5, value=p.get('reason', ''))
+                            ws.cell(row=row_idx, column=5).border = thin_border
+                            ws.cell(row=row_idx, column=5).alignment = Alignment(wrap_text=True)
+                            row_idx += 1
+                        row_idx += 1
+
+                    # 해외 협력사
+                    if has_partners_international:
+                        ws.cell(row=row_idx, column=1, value='▶ 해외 협력사')
+                        ws.cell(row=row_idx, column=1).font = subsection_font
+                        row_idx += 1
+                        headers = ['기업명', '티커', '관계 유형', '사업 분야', '관계 설명']
+                        for col, h in enumerate(headers, 1):
+                            ws.cell(row=row_idx, column=col, value=h)
+                            ws.cell(row=row_idx, column=col).fill = header_fill
+                            ws.cell(row=row_idx, column=col).font = header_font
+                            ws.cell(row=row_idx, column=col).border = thin_border
+                        row_idx += 1
+                        rel_labels = {'partner': '제휴', 'supplier': '공급업체', 'customer': '고객사'}
+                        for p in report['partners']['international']:
+                            ws.cell(row=row_idx, column=1, value=p.get('name', ''))
+                            ws.cell(row=row_idx, column=1).border = thin_border
+                            ws.cell(row=row_idx, column=2, value=p.get('ticker', ''))
+                            ws.cell(row=row_idx, column=2).border = thin_border
+                            ws.cell(row=row_idx, column=3, value=rel_labels.get(p.get('relationship_type', ''), p.get('relationship_type', '')))
+                            ws.cell(row=row_idx, column=3).border = thin_border
+                            ws.cell(row=row_idx, column=4, value=p.get('field', ''))
+                            ws.cell(row=row_idx, column=4).border = thin_border
+                            ws.cell(row=row_idx, column=4).alignment = Alignment(wrap_text=True)
+                            ws.cell(row=row_idx, column=5, value=p.get('reason', ''))
+                            ws.cell(row=row_idx, column=5).border = thin_border
+                            ws.cell(row=row_idx, column=5).alignment = Alignment(wrap_text=True)
+                            row_idx += 1
+                        row_idx += 1
+
                 # 5. M&A 사례
                 has_mna_domestic = report.get('mna', {}).get('domestic')
                 has_mna_international = report.get('mna', {}).get('international')
@@ -6340,9 +6430,9 @@ def add_super_research_sheet(filepath: str, task: dict):
                             row_idx += 1
                         row_idx += 1
 
-                # 6. 주요 뉴스/공시
+                # 6. 주요 뉴스
                 if report.get('news'):
-                    ws.cell(row=row_idx, column=1, value='주요 뉴스/공시')
+                    ws.cell(row=row_idx, column=1, value='주요 뉴스')
                     ws.cell(row=row_idx, column=1).font = section_font
                     ws.cell(row=row_idx, column=1).fill = PatternFill(start_color='f5f5f5', end_color='f5f5f5', fill_type='solid')
                     ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=4)
