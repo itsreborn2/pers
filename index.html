@@ -7644,7 +7644,7 @@
                         for (const m of data.mna.domestic) {
                             const sourceUrl = m.source_url || '';
                             const sourceCell = sourceUrl
-                                ? `<a href="${sourceUrl}" target="_blank" class="mna-source-link" title="${sourceUrl}">↗ 출처</a>`
+                                ? `<a href="${sourceUrl}" target="_blank" class="mna-source-link" title="${sourceUrl}">↗</a>`
                                 : `<span class="badge-unverified">미검증</span>`;
                             html += `<tr>`;
                             html += `<td>${m.acquirer || '-'}</td>`;
@@ -7666,7 +7666,7 @@
                         for (const m of data.mna.international) {
                             const sourceUrl = m.source_url || '';
                             const sourceCell = sourceUrl
-                                ? `<a href="${sourceUrl}" target="_blank" class="mna-source-link" title="${sourceUrl}">↗ 출처</a>`
+                                ? `<a href="${sourceUrl}" target="_blank" class="mna-source-link" title="${sourceUrl}">↗</a>`
                                 : `<span class="badge-unverified">미검증</span>`;
                             html += `<tr>`;
                             html += `<td>${m.acquirer || '-'}</td>`;
