@@ -172,6 +172,7 @@ class MnACase:
     conditions: Optional[str] = None
     details: Optional[str] = None
     region: str = "domestic"  # domestic or international
+    source_url: str = ""  # 원본 기사 URL (출처 추적용)
 
 
 @dataclass
@@ -1089,7 +1090,7 @@ JSON 배열만 반환하세요:"""
                     print(f"  → 국내 M&A 검색 실패 ({query[:30]}): {e}")
                     continue
 
-            # 검색 결과 컨텍스트 구성 (중복 제거)
+            # 검색 결과 컨텍스트 구성 (중복 제거, URL 포함)
             seen_titles = set()
             context = ""
             for item in all_results:
@@ -1098,7 +1099,11 @@ JSON 배열만 반환하세요:"""
                     continue
                 seen_titles.add(title)
                 desc = getattr(item, 'description', None) or (item.metadata.og_description if hasattr(item, 'metadata') and item.metadata else '')
-                context += f"- {title}: {desc or ''}\n"
+                url = getattr(item, 'url', '') or ''
+                context += f"- {title}: {desc or ''}"
+                if url:
+                    context += f" [URL: {url}]"
+                context += "\n"
 
             print(f"  → Firecrawl 국내 M&A 검색 완료: {len(all_results)}건, {len(context)}자")
 
@@ -1112,6 +1117,7 @@ JSON 배열만 반환하세요:"""
 
 ## 요청
 위 키워드 관련 사업을 영위하는 국내 기업의 M&A 사례를 추출해주세요.
+각 사례의 출처 URL을 반드시 포함하세요 (검색 결과의 [URL: ...] 부분).
 
 ## 결과 형식 (JSON)
 [
@@ -1122,7 +1128,8 @@ JSON 배열만 반환하세요:"""
     "price": "인수가격",
     "stake": "인수지분",
     "conditions": "인수조건",
-    "details": "기타 내용"
+    "details": "기타 내용",
+    "source_url": "원본 기사 URL"
   }}
 ]
 
@@ -1147,7 +1154,8 @@ JSON 배열만 반환하세요 (의견/코멘트 없이):"""
                         stake=c.get('stake'),
                         conditions=c.get('conditions'),
                         details=c.get('details'),
-                        region='domestic'
+                        region='domestic',
+                        source_url=c.get('source_url', '')
                     )
                     for c in data if isinstance(c, dict) and c.get('acquirer')
                 ]
@@ -1204,7 +1212,7 @@ JSON 배열만 반환하세요 (의견/코멘트 없이):"""
                     print(f"  → 해외 M&A 검색 실패 ({query[:30]}): {e}")
                     continue
 
-            # 검색 결과 컨텍스트 구성 (중복 제거)
+            # 검색 결과 컨텍스트 구성 (중복 제거, URL 포함)
             seen_titles = set()
             context = ""
             for item in all_results:
@@ -1213,7 +1221,11 @@ JSON 배열만 반환하세요 (의견/코멘트 없이):"""
                     continue
                 seen_titles.add(title)
                 desc = getattr(item, 'description', None) or (item.metadata.og_description if hasattr(item, 'metadata') and item.metadata else '')
-                context += f"- {title}: {desc or ''}\n"
+                url = getattr(item, 'url', '') or ''
+                context += f"- {title}: {desc or ''}"
+                if url:
+                    context += f" [URL: {url}]"
+                context += "\n"
 
             print(f"  → Firecrawl 해외 M&A 검색 완료: {len(all_results)}건, {len(context)}자")
 
@@ -1227,6 +1239,7 @@ Keywords: {english_keywords}
 
 ## Request
 Extract M&A cases of international companies in the above business areas.
+Include the source URL for each case (from [URL: ...] in search results).
 
 ## Result Format (JSON)
 [
@@ -1237,7 +1250,8 @@ Extract M&A cases of international companies in the above business areas.
     "price": "Deal value",
     "stake": "Stake acquired",
     "conditions": "Deal conditions",
-    "details": "Additional details"
+    "details": "Additional details",
+    "source_url": "Source article URL"
   }}
 ]
 
@@ -1262,7 +1276,8 @@ Return JSON array only (no comments):"""
                         stake=c.get('stake'),
                         conditions=c.get('conditions'),
                         details=c.get('details'),
-                        region='international'
+                        region='international',
+                        source_url=c.get('source_url', '')
                     )
                     for c in data if isinstance(c, dict) and c.get('acquirer')
                 ]
@@ -1309,20 +1324,20 @@ Return JSON array only (no comments):"""
                 comp_lines.append(comp_line)
             competitors_intl_text = "\n".join(comp_lines)
 
-        # 국내 M&A 섹션
+        # 국내 M&A 섹션 (출처 URL 포함)
         mna_domestic_text = ""
         if step4.mna_domestic:
             mna_domestic_text = "\n".join([
-                f"- {m.acquirer} → {m.target} ({m.date or 'N/A'}): {m.price or 'N/A'}"
+                f"- {m.acquirer} → {m.target} ({m.date or 'N/A'}): {m.price or 'N/A'}" + (f" [URL: {m.source_url}]" if m.source_url else "")
                 for m in step4.mna_domestic
             ])
         # M&A 없으면 빈 문자열 (LLM이 섹션 생략하도록)
 
-        # 해외 M&A 섹션
+        # 해외 M&A 섹션 (출처 URL 포함)
         mna_intl_text = ""
         if step4.mna_international:
             mna_intl_text = "\n".join([
-                f"- {m.acquirer} → {m.target} ({m.date or 'N/A'}): {m.price or 'N/A'}"
+                f"- {m.acquirer} → {m.target} ({m.date or 'N/A'}): {m.price or 'N/A'}" + (f" [URL: {m.source_url}]" if m.source_url else "")
                 for m in step4.mna_international
             ])
         # M&A 없으면 빈 문자열 (LLM이 섹션 생략하도록)
@@ -1416,7 +1431,8 @@ Return JSON array only (no comments):"""
         "acquirer": "인수기업",
         "target": "피인수기업",
         "date": "시기",
-        "price": "금액"
+        "price": "금액",
+        "source_url": "원본 기사 URL (있으면)"
       }}
     ],
     "international": [
@@ -1424,7 +1440,8 @@ Return JSON array only (no comments):"""
         "acquirer": "인수기업",
         "target": "피인수기업",
         "date": "시기",
-        "price": "금액"
+        "price": "금액",
+        "source_url": "원본 기사 URL (있으면)"
       }}
     ]
   }},
@@ -1446,6 +1463,7 @@ Return JSON array only (no comments):"""
 3. 정보가 없는 항목은 빈 배열 `[]` 또는 빈 문자열 `""`
 4. **JSON만 출력** - 서두 인사말, 설명, ```json 블록 없이 순수 JSON만
 5. 모든 문자열은 이스케이프 처리 (특히 따옴표, 줄바꿈)
+6. **출처 URL 보존** - M&A의 source_url, 뉴스의 url 필드에 원본 데이터의 [URL: ...] 값을 반드시 포함하라. URL이 없으면 빈 문자열
 
 JSON:"""
 

@@ -792,6 +792,25 @@
             color: #b45309;
             background: #fef3c7;
         }
+        .badge-unverified {
+            display: inline-block;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #dc2626;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            padding: 1px 6px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+        .mna-source-link {
+            color: #2563eb;
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+        .mna-source-link:hover {
+            text-decoration: underline;
+        }
         .news-title { flex: 1; }
         .news-link {
             flex-shrink: 0;
@@ -1547,6 +1566,40 @@
         
         .preview-table tr:hover {
             background: #f9fafb;
+        }
+
+        /* 주석 구분선 */
+        .preview-table .notes-separator td {
+            text-align: center !important;
+            padding: 10px 0;
+            color: #9ca3af;
+            font-size: 0.72rem;
+            border-top: 2px solid #d1d5db;
+            background: #f9fafb;
+            letter-spacing: 3px;
+            font-weight: 500;
+        }
+
+        /* 주석 그룹 헤더 (FY에 텍스트가 있는 섹션 헤더) */
+        .preview-table .note-group-header td {
+            font-weight: 600 !important;
+            background: #f3f4f6;
+            color: #6b7280 !important;
+            text-align: left !important;
+            font-size: 0.75rem;
+            border-top: 1px solid #d1d5db;
+        }
+
+        /* 주석 영역 일반 행 */
+        .preview-table .note-row td {
+            color: #9ca3af;
+        }
+        .preview-table .note-row td:first-child {
+            color: #6b7280 !important;
+            padding-left: 24px;
+        }
+        .preview-table .note-row:hover {
+            background: #f3f4f6;
         }
         
         .preview-placeholder {
@@ -4597,20 +4650,17 @@
                 return `<div class="preview-box"><div class="preview-title">${tabNames[tabName]}</div><p class="preview-placeholder">데이터가 없습니다.</p></div>`;
             }
 
-            // 테이블 생성 - 필요한 컬럼만 표시 (계정과목 + 분류2~4 + FY 연도)
+            // 테이블 생성 - 필요한 컬럼만 표시 (계정과목 + FY 연도, 분류 컬럼은 엑셀에만 저장)
             const allHeaders = Object.keys(data[0]);
-            // 계정과목, 분류2~4, FY 연도 컬럼만 필터링 (분류1 제외)
+            // 계정과목, FY 연도 컬럼만 필터링 (분류1~4 제외 - 프론트에선 불필요)
             const headers = allHeaders.filter(h =>
                 h === '계정과목' ||
-                (h.startsWith('분류') && h !== '분류1') ||
                 h.startsWith('FY')
             );
-            // 정렬: 계정과목 -> 분류1~4 -> FY 연도(오름차순, 최신이 우측)
+            // 정렬: 계정과목 -> FY 연도(오름차순, 최신이 우측)
             headers.sort((a, b) => {
                 if (a === '계정과목') return -1;
                 if (b === '계정과목') return 1;
-                if (a.startsWith('분류') && !b.startsWith('분류')) return -1;
-                if (!a.startsWith('분류') && b.startsWith('분류')) return 1;
                 return a.localeCompare(b);
             });
 
@@ -4627,8 +4677,77 @@
             });
             tableHtml += '</tr></thead><tbody>';
 
-            data.forEach(row => {
-                tableHtml += '<tr>';
+            // FY 컬럼만 추출 (섹션 헤더 행 판별용)
+            const fyHeaders = headers.filter(h => h.startsWith('FY'));
+
+            // ========== 주석 경계 감지 ==========
+            // 방법1: 분류1 컬럼 — 본문 행은 분류1이 있고, 주석 행은 null
+            let noteStartIdx = data.length;
+            const has분류1 = data.some(r => r['분류1'] && String(r['분류1']).trim());
+            if (has분류1) {
+                for (let i = data.length - 1; i >= 0; i--) {
+                    const cls1 = data[i]['분류1'];
+                    if (cls1 && String(cls1).trim()) {
+                        noteStartIdx = i + 1;
+                        break;
+                    }
+                }
+            } else {
+                // 방법2: 키워드 기반 종료 항목 감지
+                const terminalPatterns = {
+                    'is': /주당|총포괄이익|총포괄손익/,
+                    'cis': /주당|총포괄이익|총포괄손익/,
+                    'bs': /부채및자본총계|부채와자본총계/,
+                    'cf': /기말현금|기말의현금|현금및현금성자산의증감/
+                };
+                const pattern = terminalPatterns[tabName];
+                if (pattern) {
+                    for (let i = data.length - 1; i >= 0; i--) {
+                        const name = (data[i]['계정과목'] || '').replace(/\s/g, '');
+                        if (pattern.test(name)) {
+                            noteStartIdx = i + 1;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            let notesSeparatorInserted = false;
+
+            data.forEach((row, idx) => {
+                const accountName = (row['계정과목'] || '');
+
+                // 주석 구분선 삽입
+                if (idx === noteStartIdx && noteStartIdx < data.length && !notesSeparatorInserted) {
+                    notesSeparatorInserted = true;
+                    tableHtml += `<tr class="notes-separator"><td colspan="${headers.length}">────── 주석 상세 ──────</td></tr>`;
+                }
+
+                const isNoteRow = idx >= noteStartIdx;
+
+                // 섹션 헤더 행 감지: FY 컬럼에 숫자가 아닌 텍스트가 있는 행
+                const hasTextInFY = fyHeaders.some(fy => {
+                    const v = row[fy];
+                    if (v === null || v === undefined || v === '' || v === 'nan' || v === 'NaN') return false;
+                    if (typeof v === 'number') return false;
+                    if (typeof v === 'string') {
+                        const cleaned = v.replace(/,/g, '').trim();
+                        if (cleaned === '' || cleaned === '-') return false;
+                        return !/^-?[\d.]+$/.test(cleaned);
+                    }
+                    return false;
+                });
+
+                // 섹션 헤더 → 주석 영역에서는 그룹 헤더로 렌더링, 본문에서는 스킵
+                if (hasTextInFY) {
+                    if (isNoteRow) {
+                        tableHtml += `<tr class="note-group-header"><td colspan="${headers.length}">${accountName.trim()}</td></tr>`;
+                    }
+                    return;
+                }
+
+                // 일반 행 렌더링
+                tableHtml += `<tr class="${isNoteRow ? 'note-row' : ''}">`;
                 headers.forEach((h, idx) => {
                     let value = row[h];
                     // 숫자 포맷팅 (첫번째 열(계정과목)은 제외)
@@ -7294,6 +7413,10 @@
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 // 기울임 (단독 * 만 - 리스트는 이미 위에서 처리됨)
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                // [미검증] 태그를 빨간 배지로 변환
+                .replace(/\[미검증[^\]]*\]/g, '<span class="badge-unverified">$&</span>')
+                // 마크다운 링크를 HTML 링크로 변환 (출처 URL용)
+                .replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank" class="mna-source-link" title="$2">$1</a>')
                 // 불릿 리스트 (- 로 통일됨)
                 .replace(/^- (.*$)/gm, '<li>$1</li>')
                 .replace(/^\s+- (.*$)/gm, '<li>$1</li>')
@@ -7445,14 +7568,19 @@
                     if (hasDomestic) {
                         html += `<h4>국내 M&A</h4>`;
                         html += `<table class="mna-table">`;
-                        html += `<thead><tr><th>인수기업</th><th>피인수기업</th><th>시기</th><th>금액</th></tr></thead>`;
+                        html += `<thead><tr><th>인수기업</th><th>피인수기업</th><th>시기</th><th>금액</th><th>출처</th></tr></thead>`;
                         html += `<tbody>`;
                         for (const m of data.mna.domestic) {
+                            const sourceUrl = m.source_url || '';
+                            const sourceCell = sourceUrl
+                                ? `<a href="${sourceUrl}" target="_blank" class="mna-source-link" title="${sourceUrl}">↗ 출처</a>`
+                                : `<span class="badge-unverified">미검증</span>`;
                             html += `<tr>`;
                             html += `<td>${m.acquirer || '-'}</td>`;
                             html += `<td>${m.target || '-'}</td>`;
                             html += `<td>${m.date || '-'}</td>`;
                             html += `<td>${m.price || '-'}</td>`;
+                            html += `<td>${sourceCell}</td>`;
                             html += `</tr>`;
                         }
                         html += `</tbody></table>`;
@@ -7462,14 +7590,19 @@
                     if (hasInternational) {
                         html += `<h4>해외 M&A</h4>`;
                         html += `<table class="mna-table">`;
-                        html += `<thead><tr><th>인수기업</th><th>피인수기업</th><th>시기</th><th>금액</th></tr></thead>`;
+                        html += `<thead><tr><th>인수기업</th><th>피인수기업</th><th>시기</th><th>금액</th><th>출처</th></tr></thead>`;
                         html += `<tbody>`;
                         for (const m of data.mna.international) {
+                            const sourceUrl = m.source_url || '';
+                            const sourceCell = sourceUrl
+                                ? `<a href="${sourceUrl}" target="_blank" class="mna-source-link" title="${sourceUrl}">↗ 출처</a>`
+                                : `<span class="badge-unverified">미검증</span>`;
                             html += `<tr>`;
                             html += `<td>${m.acquirer || '-'}</td>`;
                             html += `<td>${m.target || '-'}</td>`;
                             html += `<td>${m.date || '-'}</td>`;
                             html += `<td>${m.price || '-'}</td>`;
+                            html += `<td>${sourceCell}</td>`;
                             html += `</tr>`;
                         }
                         html += `</tbody></table>`;

@@ -5936,7 +5936,8 @@ async def run_super_research(task_id: str):
                     'acquirer': m.acquirer,
                     'target': m.target,
                     'date': m.date,
-                    'price': m.price
+                    'price': m.price,
+                    'source_url': getattr(m, 'source_url', '')
                 } for m in result.mna_domestic
             ] if result.mna_domestic else [],
             'mna_international': [
@@ -5944,7 +5945,8 @@ async def run_super_research(task_id: str):
                     'acquirer': m.acquirer,
                     'target': m.target,
                     'date': m.date,
-                    'price': m.price
+                    'price': m.price,
+                    'source_url': getattr(m, 'source_url', '')
                 } for m in result.mna_international
             ] if result.mna_international else [],
             'business_summary': result.business.raw_business[:2000] if result.business and result.business.raw_business else '',
@@ -6289,7 +6291,7 @@ def add_super_research_sheet(filepath: str, task: dict):
                         ws.cell(row=row_idx, column=1, value='▶ 국내 M&A')
                         ws.cell(row=row_idx, column=1).font = subsection_font
                         row_idx += 1
-                        headers = ['인수기업', '피인수기업', '시기', '금액']
+                        headers = ['인수기업', '피인수기업', '시기', '금액', '출처']
                         for col, h in enumerate(headers, 1):
                             ws.cell(row=row_idx, column=col, value=h)
                             ws.cell(row=row_idx, column=col).fill = header_fill
@@ -6305,6 +6307,9 @@ def add_super_research_sheet(filepath: str, task: dict):
                             ws.cell(row=row_idx, column=3).border = thin_border
                             ws.cell(row=row_idx, column=4, value=m.get('price', '-'))
                             ws.cell(row=row_idx, column=4).border = thin_border
+                            source_url = m.get('source_url', '')
+                            ws.cell(row=row_idx, column=5, value=source_url if source_url else '[미검증]')
+                            ws.cell(row=row_idx, column=5).border = thin_border
                             row_idx += 1
                         row_idx += 1
 
@@ -6313,7 +6318,7 @@ def add_super_research_sheet(filepath: str, task: dict):
                         ws.cell(row=row_idx, column=1, value='▶ 해외 M&A')
                         ws.cell(row=row_idx, column=1).font = subsection_font
                         row_idx += 1
-                        headers = ['인수기업', '피인수기업', '시기', '금액']
+                        headers = ['인수기업', '피인수기업', '시기', '금액', '출처']
                         for col, h in enumerate(headers, 1):
                             ws.cell(row=row_idx, column=col, value=h)
                             ws.cell(row=row_idx, column=col).fill = header_fill
@@ -6329,6 +6334,9 @@ def add_super_research_sheet(filepath: str, task: dict):
                             ws.cell(row=row_idx, column=3).border = thin_border
                             ws.cell(row=row_idx, column=4, value=m.get('price', '-'))
                             ws.cell(row=row_idx, column=4).border = thin_border
+                            source_url = m.get('source_url', '')
+                            ws.cell(row=row_idx, column=5, value=source_url if source_url else '[미검증]')
+                            ws.cell(row=row_idx, column=5).border = thin_border
                             row_idx += 1
                         row_idx += 1
 

@@ -314,6 +314,8 @@ class SearchResult:
     task: SearchTask
     result: str
     sources: List[str]
+    is_grounded: bool = False
+    source_chunks: List[Dict[str, str]] = None
 
 
 def format_period(period: str) -> str:
@@ -954,16 +956,10 @@ JSON 배열로 반환:
 ### 원인 분석 작성 방법
 **3가지 소스(주석, 웹검색, 재무제표)를 모두 활용하여 분석하라.**
 
-**★★★ 출처 표기 금지 ★★★**
-다음과 같은 출처 표기 문구를 사용하지 마라:
-- ❌ "재무제표 분석 결과,", "손익계산서에 따르면", "현금흐름표상"
-- ❌ "주석에 따르면", "주석 X번에 따르면"
-- ❌ "웹 검색 결과", "언론 보도에 따르면"
-
-**출력 예시 (출처 표기 없이 바로 내용):**
-"손익계산서 유형자산처분이익 248억원이 발생했으며, 재무상태표 유형자산이 감소하고 현금흐름표에 토지/건물 처분이 기록되어 부동산 처분에 따른 순이익 증가로 확인됩니다."
-
-**웹 검색 결과 없으면 언급하지 마라** - 웹 검색에 대해 아무 말도 하지 마라.
+**★★★ 출처 표기 규칙 ★★★**
+- 재무제표 데이터 기반 분석: 출처 문구 없이 바로 사실 기술 (예: "유형자산처분이익 248억원이 발생했으며...")
+- 웹 검색에서 발견한 정보: 반드시 출처 URL을 함께 기재하라 (예: "2024년 본사 부동산 매각 완료 (출처: URL)")
+- 웹 검색 결과가 없는 항목은 [미검증] 태그를 붙여라
 
 **모두 없는 경우에만**: "특별한 내용을 찾지 못했습니다."
 
@@ -1532,18 +1528,23 @@ JSON 배열로 반환:
 
         모든 이상 패턴은 병렬로 처리됨
         """
-        def extract_sources(response) -> List[str]:
-            """응답에서 소스 URL 추출"""
-            sources = []
+        def extract_sources(response) -> dict:
+            """응답에서 소스 URL + 그라운딩 메타데이터 추출"""
+            result = {'urls': [], 'is_grounded': False, 'chunks': []}
             if hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
-                if hasattr(candidate, 'grounding_metadata'):
+                if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
                     metadata = candidate.grounding_metadata
+                    result['is_grounded'] = True
                     if hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
                         for chunk in metadata.grounding_chunks:
                             if hasattr(chunk, 'web') and hasattr(chunk.web, 'uri'):
-                                sources.append(chunk.web.uri)
-            return sources
+                                result['urls'].append(chunk.web.uri)
+                                result['chunks'].append({
+                                    'uri': chunk.web.uri,
+                                    'title': getattr(chunk.web, 'title', ''),
+                                })
+            return result
 
         def build_fallback_prompt(anomaly: Anomaly) -> str:
             """소스 없을 때 사용할 대체 검색 프롬프트"""
@@ -1626,18 +1627,21 @@ Write content immediately after the colon
                     step_name=f"리서치:{anomaly.item}"
                 )
 
-                # 소스 URL 추출
-                sources = extract_sources(response)
+                # 소스 URL + 그라운딩 메타데이터 추출
+                source_info = extract_sources(response)
+                sources = source_info['urls']
+                is_grounded = source_info['is_grounded']
+                source_chunks = source_info['chunks']
                 result_text = response.text if response.text else "결과 없음"
 
                 # 웹 소스 없어도 1차 응답(주석/재무제표 기반 분석) 유지
                 if not sources:
-                    print(f"    [웹 소스 없음] {anomaly.period} {anomaly.item} - 재무제표/주석 기반 분석 유지")
+                    print(f"    [웹 소스 없음] {anomaly.period} {anomaly.item} - 재무제표/주석 기반 분석 유지, is_grounded={is_grounded}")
 
                 print(f"    [웹 리서치 완료] {anomaly.period} {anomaly.item}")
                 print(f"    ┌─────────────────────────────────────────────────────────")
                 print(f"    │ [리서치 결과] {anomaly.period} {anomaly.item}")
-                print(f"    │ 소스: {sources[:3]}")
+                print(f"    │ 소스: {sources[:3]} (grounded: {is_grounded})")
                 print(f"    │ 내용 (앞 500자):")
                 for line in result_text[:500].split('\n'):
                     print(f"    │   {line}")
@@ -1646,7 +1650,9 @@ Write content immediately after the colon
                 return SearchResult(
                     task=task,
                     result=result_text,
-                    sources=sources[:5]  # 최대 5개 소스
+                    sources=sources[:5],  # 최대 5개 소스
+                    is_grounded=is_grounded,
+                    source_chunks=source_chunks[:5]
                 )
 
             except Exception as e:
@@ -1655,7 +1661,9 @@ Write content immediately after the colon
                 return SearchResult(
                     task=task,
                     result=f"**현상**: {anomaly.finding}\n\n**원인 분석**: 웹 검색에서 관련 정보를 찾지 못했습니다. 재무제표 데이터에 기반한 추가 분석이 필요합니다.",
-                    sources=[]
+                    sources=[],
+                    is_grounded=False,
+                    source_chunks=[]
                 )
 
         # 모든 이상 패턴에 대해 완전 병렬 실행 (ThreadPoolExecutor 사용)
@@ -1698,24 +1706,60 @@ Write content immediately after the colon
         company_name = sanitize_for_prompt(company_info.get('corp_name', ''), max_length=100)
 
         # 이상 패턴 + 리서치 결과 통합 (중복 제거)
-        # anomaly와 해당 search_result를 매칭
+        # anomaly와 해당 search_result를 매칭 (출처 정보 포함)
         search_map = {}
         for sr in search_results:
             key = (sr.task.anomaly.period, sr.task.anomaly.item)
-            search_map[key] = sr.result
+            search_map[key] = {
+                'text': sr.result,
+                'sources': sr.sources,
+                'is_grounded': sr.is_grounded,
+                'source_chunks': sr.source_chunks or []
+            }
 
         combined_findings = ""
         for i, a in enumerate(anomalies, 1):
             key = (a.period, a.item)
-            research = search_map.get(key, "**현상**: " + a.finding + "\n\n**원인 분석**: 보고서와 웹 검색에서 특별한 내용을 찾지 못했습니다.")
+            sr_data = search_map.get(key)
+            if sr_data:
+                research = sr_data['text']
+                sources = sr_data['sources']
+                is_grounded = sr_data['is_grounded']
+                source_chunks = sr_data['source_chunks']
+            else:
+                research = "**현상**: " + a.finding + "\n\n**원인 분석**: 보고서와 웹 검색에서 특별한 내용을 찾지 못했습니다."
+                sources = []
+                is_grounded = False
+                source_chunks = []
             # P1: 리서치 실패/에러 메시지가 보고서에 누출되지 않도록 이중 필터링
             if research and any(err_sig in research for err_sig in ["리서치 실패:", "RESOURCE_EXHAUSTED", "Exception:", "Traceback", "Error:"]):
                 print(f"  [P1 필터] 리서치 에러 메시지 제거됨: {a.period} {a.item}")
                 research = f"**현상**: {a.finding}\n\n**원인 분석**: 웹 검색에서 관련 정보를 찾지 못했습니다. 재무제표 데이터에 기반한 추가 분석이 필요합니다."
+                sources = []
+                is_grounded = False
+
+            # 출처 정보 태그 추가
+            source_tag = ""
+            if sources:
+                # 출처 URL이 있으면 각 URL을 (출처: URL) 형태로 첨부
+                source_urls = []
+                for sc in source_chunks[:3]:
+                    title = sc.get('title', '')
+                    uri = sc.get('uri', '')
+                    if title and uri:
+                        source_urls.append(f"[{title}]({uri})")
+                    elif uri:
+                        source_urls.append(uri)
+                if source_urls:
+                    source_tag = "\n\n**출처**: " + " | ".join(source_urls)
+            elif not is_grounded:
+                # Google Search 결과 없이 LLM이 자체 생성한 경우
+                source_tag = "\n\n[미검증 - 웹 검색 결과 없음]"
+
             period_display = format_period(a.period)
             combined_findings += f"""
 ### {i}. [{period_display}] {a.item}
-{research}
+{research}{source_tag}
 """
 
         # 업종 분석 결과를 간결하게 포맷
@@ -1760,9 +1804,9 @@ Write content immediately after the colon
 3. 당신의 역할은 포맷 정리뿐. 내용 수정/추가 금지
 4. **주석은 숫자를 그대로 나열** - 추론/해석 절대 금지
 5. 주석에 없는 내용 작성 금지
-6. **출처 표기 문구 제거** - "재무제표 분석 결과,", "주석에 따르면", "웹 검색 결과" 등의 출처 표기 문구는 모두 삭제하라
+6. **재무제표 출처 문구 간결화** - "재무제표 분석 결과,", "주석에 따르면" 같은 장황한 출처 문구는 제거하되, **웹 검색 출처 URL과 [미검증] 태그는 반드시 유지**하라
 7. 금지 표현: "~로 분석됩니다", "~로 추정됩니다"
-8. **웹 검색 결과 없으면 언급 금지** - 웹 검색에 대해 아무 말도 하지 마라
+8. **[미검증] 태그 유지** - 원본에 "[미검증 - 웹 검색 결과 없음]" 태그가 있으면 그대로 유지하라. **출처** URL이 있으면 그대로 유지하라
 9. **주석 요약 섹션 필수** - "## 주석 요약" 섹션은 반드시 포함하라. 주석 데이터가 있으면 해당 내용을 정리하고, 없으면 "주석 데이터가 없습니다"라고 작성
 10. **★ 숫자 정확성 최우선 ★** - 재무제표에 없는 숫자를 절대 만들지 마라. 모든 수치는 원본 데이터에서 직접 검증 가능해야 한다. 유사한 항목의 숫자를 혼동하지 마라 (예: 비품의처분 18을 17,931으로 쓰지 마라).
 11. **★ 잔액 vs 변동액 혼동 절대 금지 ★** - "증가", "감소", "변동" 등의 표현 뒤에는 반드시 YoY 변동액(두 시점의 차이)을 써라. 해당 연도의 잔액(Balance)을 변동액처럼 쓰지 마라. 예: 매출채권 FY2024 잔액 97,477 → "매출채권 증가 97,477" (❌ 틀림). 매출채권 FY2023 86,337 → FY2024 97,477, 차이 11,140 → "매출채권 증가 11,140" (✅ 맞음)
