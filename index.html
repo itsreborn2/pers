@@ -7555,6 +7555,77 @@
                 html += `</div>`;
             }
 
+            // 4-1. 협력사 분석
+            if (data.partners) {
+                const hasDomestic = data.partners.domestic && data.partners.domestic.length > 0;
+                const hasInternational = data.partners.international && data.partners.international.length > 0;
+
+                if (hasDomestic || hasInternational) {
+                    html += `<div class="research-section">`;
+                    html += `<h3>협력사 분석</h3>`;
+
+                    const relLabels = {partner: '제휴', supplier: '공급업체', customer: '고객사'};
+
+                    // 국내 협력사
+                    if (hasDomestic) {
+                        html += `<h4>국내 협력사</h4>`;
+                        html += `<div class="competitors-list">`;
+                        for (const p of data.partners.domestic) {
+                            const relLabel = relLabels[p.relationship_type] || p.relationship_type || '협력사';
+                            html += `<div class="competitor-card">`;
+                            html += `<div class="competitor-header">`;
+                            html += `<span class="competitor-name">${p.name}</span>`;
+                            html += `<span class="competitor-ticker" style="background:#e8f5e9;color:#2e7d32;">${relLabel}</span>`;
+                            if (p.ticker) {
+                                html += `<span class="competitor-ticker">(${p.ticker})</span>`;
+                            }
+                            html += `</div>`;
+                            if (p.field) {
+                                html += `<div class="competitor-field"><strong>사업 분야:</strong> ${p.field}</div>`;
+                            }
+                            if (p.reason) {
+                                html += `<div class="competitor-reason"><strong>관계:</strong> ${p.reason}</div>`;
+                            }
+                            if (p.details) {
+                                html += `<div class="competitor-details">${p.details}</div>`;
+                            }
+                            html += `</div>`;
+                        }
+                        html += `</div>`;
+                    }
+
+                    // 해외 협력사
+                    if (hasInternational) {
+                        html += `<h4>해외 협력사</h4>`;
+                        html += `<div class="competitors-list">`;
+                        for (const p of data.partners.international) {
+                            const relLabel = relLabels[p.relationship_type] || p.relationship_type || '협력사';
+                            html += `<div class="competitor-card">`;
+                            html += `<div class="competitor-header">`;
+                            html += `<span class="competitor-name">${p.name}</span>`;
+                            html += `<span class="competitor-ticker" style="background:#e8f5e9;color:#2e7d32;">${relLabel}</span>`;
+                            if (p.ticker) {
+                                html += `<span class="competitor-ticker">(${p.ticker})</span>`;
+                            }
+                            html += `</div>`;
+                            if (p.field) {
+                                html += `<div class="competitor-field"><strong>사업 분야:</strong> ${p.field}</div>`;
+                            }
+                            if (p.reason) {
+                                html += `<div class="competitor-reason"><strong>관계:</strong> ${p.reason}</div>`;
+                            }
+                            if (p.details) {
+                                html += `<div class="competitor-details">${p.details}</div>`;
+                            }
+                            html += `</div>`;
+                        }
+                        html += `</div>`;
+                    }
+
+                    html += `</div>`;
+                }
+            }
+
             // 5. M&A 사례
             if (data.mna) {
                 const hasDomestic = data.mna.domestic && data.mna.domestic.length > 0;
@@ -7615,13 +7686,22 @@
             // 6. 주요 뉴스/공시
             if (data.news) {
                 html += `<div class="research-section">`;
-                html += `<h3>주요 뉴스/공시</h3>`;
+                html += `<h3>주요 뉴스 <span style="font-size:12px;font-weight:normal;color:#888;margin-left:8px;">최근 2년 이내 검색 결과.</span></h3>`;
                 // 배열 또는 배열-like 객체 모두 안전하게 처리
                 let newsArr = data.news;
                 if (!Array.isArray(newsArr)) {
                     try { newsArr = Array.from(newsArr); } catch(e) { newsArr = null; }
                 }
                 if (newsArr && newsArr.length > 0 && typeof newsArr[0] === 'object') {
+                    // 최신 날짜순 정렬 (YYYY.MM → 역순)
+                    newsArr.sort((a, b) => {
+                        const da = (a.date || '').replace(/[^0-9.]/g, '');
+                        const db = (b.date || '').replace(/[^0-9.]/g, '');
+                        if (!da && !db) return 0;
+                        if (!da) return 1;
+                        if (!db) return -1;
+                        return db.localeCompare(da);
+                    });
                     html += `<div class="news-list">`;
                     newsArr.forEach(item => {
                         if (typeof item === 'object' && item !== null) {
