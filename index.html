@@ -3217,8 +3217,26 @@
             cursor: pointer;
             transition: all 0.15s;
             font-family: 'Pretendard', sans-serif;
-            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            max-width: 280px;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
+        .suggestion-btn .q-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        .suggestion-btn .remove-btn {
+            font-size: 0.6rem;
+            opacity: 0.3;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .suggestion-btn .remove-btn:hover { opacity: 1; }
 
         .suggestion-btn:hover {
             background: var(--primary);
@@ -8687,7 +8705,7 @@
                     appendChatMessage('assistant', `안녕하세요! **${data.company_name}**의 재무 데이터를 분석할 준비가 되었습니다. PE 관점의 분석이 필요하시면 무엇이든 물어보세요.`);
 
                     // 추천 질문 렌더링
-                    renderSuggestions(data.suggestions || []);
+                    renderRecentQuestions(data.recent_questions || []);
 
                     // 챗봇 활성화
                     const wrapper = document.getElementById('companyInfoWrapper');
@@ -8759,17 +8777,33 @@
             if (chatbotInitialized) syncWrapperWidth();
         });
 
-        function renderSuggestions(suggestions) {
+        function renderRecentQuestions(questions) {
             const container = document.getElementById('chatbotSuggestions');
             container.innerHTML = '';
-            suggestions.forEach(text => {
+            if (!questions || !questions.length) return;
+            questions.forEach(q => {
                 const btn = document.createElement('button');
                 btn.className = 'suggestion-btn';
-                btn.textContent = text;
-                btn.onclick = () => {
-                    document.getElementById('chatInput').value = text;
+
+                const text = document.createElement('span');
+                text.className = 'q-text';
+                text.textContent = q.question;
+                text.onclick = () => {
+                    document.getElementById('chatInput').value = q.question;
                     sendChatMessage();
                 };
+
+                const x = document.createElement('span');
+                x.className = 'remove-btn';
+                x.textContent = '✕';
+                x.onclick = async (e) => {
+                    e.stopPropagation();
+                    await fetch(`/api/chat/recent-question/${q.id}`, { method: 'DELETE' });
+                    btn.remove();
+                };
+
+                btn.appendChild(text);
+                btn.appendChild(x);
                 container.appendChild(btn);
             });
         }
@@ -8964,6 +8998,15 @@
                 chatbotSending = false;
                 document.getElementById('chatSendBtn').disabled = false;
                 document.getElementById('chatbotStatus').textContent = '준비 완료';
+
+                // 최근 질문 목록 갱신
+                if (currentTaskId) {
+                    try {
+                        const rResp = await fetch(`/api/chat/init/${currentTaskId}`, { method: 'POST' });
+                        const rData = await rResp.json();
+                        if (rData.recent_questions) renderRecentQuestions(rData.recent_questions);
+                    } catch (e) { /* ignore */ }
+                }
             }
         }
 
@@ -8973,8 +9016,8 @@
             try {
                 const resp = await fetch(`/api/chat/update-context/${currentTaskId}`, { method: 'POST' });
                 const data = await resp.json();
-                if (data.success && data.suggestions) {
-                    renderSuggestions(data.suggestions);
+                if (data.success && data.recent_questions) {
+                    renderRecentQuestions(data.recent_questions);
                 }
             } catch (e) {
                 console.error('[Chatbot] 컨텍스트 업데이트 실패:', e);

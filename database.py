@@ -149,6 +149,18 @@ def init_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_extraction_user ON extraction_history(user_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_user ON llm_usage(user_id)')
 
+        # 챗봇 최근 질문 테이블
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_recent_questions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                question TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_recent_q_user ON chat_recent_questions(user_id)')
+
         print("[DB] 데이터베이스 초기화 완료")
 
 
@@ -771,6 +783,40 @@ def get_admin_analytics() -> Dict:
         ]
 
         return analytics
+
+
+# ==================== 챗봇 최근 질문 관리 ====================
+
+def save_recent_question(user_id, question, max_count=4):
+    """최근 질문 저장 (중복 시 최신으로, 최대 max_count개)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # 동일 질문 있으면 삭제 (최신으로 올림)
+        cursor.execute('DELETE FROM chat_recent_questions WHERE user_id=? AND question=?', (user_id, question))
+        # 새로 삽입
+        cursor.execute('INSERT INTO chat_recent_questions (user_id, question) VALUES (?, ?)', (user_id, question))
+        # max_count 초과 시 오래된 것 삭제
+        cursor.execute('''
+            DELETE FROM chat_recent_questions WHERE user_id=? AND id NOT IN (
+                SELECT id FROM chat_recent_questions WHERE user_id=? ORDER BY id DESC LIMIT ?
+            )
+        ''', (user_id, user_id, max_count))
+
+
+def get_recent_questions(user_id, limit=4):
+    """최근 질문 조회 (최신순, [{id, question}])"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, question FROM chat_recent_questions WHERE user_id=? ORDER BY id DESC LIMIT ?', (user_id, limit))
+        return [{'id': row[0], 'question': row[1]} for row in cursor.fetchall()]
+
+
+def delete_recent_question(user_id, question_id):
+    """특정 질문 삭제"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM chat_recent_questions WHERE id=? AND user_id=?', (question_id, user_id))
+        return cursor.rowcount > 0
 
 
 # 초기화

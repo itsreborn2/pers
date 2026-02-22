@@ -5062,10 +5062,33 @@ def cleanup_old_excel_files(output_dir='output', days=7):
         print(f"[Cleanup] 파일 정리 실패: {e}")
 
 
-def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]] = None):
+def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]] = None, start_year: int = None, end_year: int = None):
     """재무제표를 엑셀 파일로 저장 (주석 테이블 포함)"""
     # 엑셀 저장 전 오래된 파일 삭제
     cleanup_old_excel_files()
+
+    def filter_fy_columns_df(df):
+        """DataFrame에서 요청 범위 밖의 FY 컬럼 제거"""
+        if df is None or df.empty or not start_year or not end_year:
+            return df
+        import re as _re_fy
+        cols_to_keep = []
+        for col in df.columns:
+            col_str = str(col)
+            m = _re_fy.match(r'^FY(\d{4})', col_str)
+            if m:
+                yr = int(m.group(1))
+                if start_year <= yr <= end_year:
+                    cols_to_keep.append(col)
+            else:
+                cols_to_keep.append(col)
+        if len(cols_to_keep) < len(df.columns):
+            print(f"[Excel] FY 컬럼 필터링: {len(df.columns)}열 → {len(cols_to_keep)}열 (FY{start_year}~FY{end_year})")
+            return df[cols_to_keep]
+        return df
+
+    if start_year and end_year:
+        print(f"[Excel] 년도 필터링 적용: FY{start_year}~FY{end_year}")
 
     sheet_names = {
         'bs': '재무상태표',
@@ -5148,6 +5171,8 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                 if df is not None and not df.empty:
                     # XBRL 형식인 경우 컬럼 정규화
                     df_normalized = normalize_xbrl_columns(df)
+                    # ★ 년도 필터링 적용
+                    df_normalized = filter_fy_columns_df(df_normalized)
                     df_normalized.to_excel(writer, sheet_name=name, index=False)
                     # 헤더 스타일 적용
                     apply_header_style(writer.book[name])
@@ -5174,13 +5199,14 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                     note_df = note['df']
                     if note_df is not None and not note_df.empty:
                         note_df_normalized = normalize_xbrl_columns(note_df)
+                        note_df_normalized = filter_fy_columns_df(note_df_normalized)
                         sheet_name = f'손익주석{idx+1}'
                         note_df_normalized.to_excel(writer, sheet_name=sheet_name, index=False)
                         apply_note_header_style(writer.book[sheet_name])
                         print(f"[Excel] 주석 저장: {sheet_name}")
                 except Exception as e:
                     print(f"[Excel] 손익주석 저장 실패: {e}")
-            
+
             # 재무상태표 관련 주석들
             bs_notes = notes.get('bs_notes', [])
             for idx, note in enumerate(bs_notes[:5]):  # 최대 5개
@@ -5188,6 +5214,7 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                     note_df = note['df']
                     if note_df is not None and not note_df.empty:
                         note_df_normalized = normalize_xbrl_columns(note_df)
+                        note_df_normalized = filter_fy_columns_df(note_df_normalized)
                         sheet_name = f'재무주석{idx+1}'
                         note_df_normalized.to_excel(writer, sheet_name=sheet_name, index=False)
                         apply_note_header_style(writer.book[sheet_name])
@@ -5202,6 +5229,7 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                     note_df = note['df']
                     if note_df is not None and not note_df.empty:
                         note_df_normalized = normalize_xbrl_columns(note_df)
+                        note_df_normalized = filter_fy_columns_df(note_df_normalized)
                         sheet_name = f'현금주석{idx+1}'
                         note_df_normalized.to_excel(writer, sheet_name=sheet_name, index=False)
                         apply_note_header_style(writer.book[sheet_name])
@@ -5222,6 +5250,12 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                 display_df = None
 
             print(f"[VCM] create_vcm_format 완료: {len(vcm_df) if vcm_df is not None else 0}개 항목")
+
+            # ★ VCM DataFrame에 년도 필터링 적용
+            if vcm_df is not None and not vcm_df.empty:
+                vcm_df = filter_fy_columns_df(vcm_df)
+            if display_df is not None and not display_df.empty:
+                display_df = filter_fy_columns_df(display_df)
 
             # preview_data 직접 저장 (엑셀 형식과 무관하게 원본 데이터 유지)
             vcm_preview_data = None
@@ -6119,9 +6153,12 @@ async def init_chatbot(task_id: str):
 
         task['chatbot'] = chatbot
 
+        user_id = task.get('user_id')
+        recent = db.get_recent_questions(user_id) if user_id else []
+
         return {
             "success": True,
-            "suggestions": chatbot.get_suggestions(),
+            "recent_questions": recent,
             "company_name": chatbot.company_name
         }
 
@@ -6148,6 +6185,11 @@ async def chat_message(task_id: str, request: ChatMessageRequest):
     message = request.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="메시지가 비어있습니다.")
+
+    # 최근 질문 저장
+    user_id = task.get('user_id')
+    if user_id:
+        db.save_recent_question(user_id, message)
 
     # AI 분석/리서치 결과 업데이트 (완료된 경우)
     analysis_result = task.get('analysis_result')
@@ -6202,12 +6244,15 @@ async def get_chat_history(task_id: str):
 
     chatbot = task.get('chatbot')
     if not chatbot:
-        return {"success": True, "messages": [], "suggestions": []}
+        return {"success": True, "messages": [], "recent_questions": []}
+
+    user_id = task.get('user_id')
+    recent = db.get_recent_questions(user_id) if user_id else []
 
     return {
         "success": True,
         "messages": chatbot.get_history(),
-        "suggestions": chatbot.get_suggestions()
+        "recent_questions": recent
     }
 
 
@@ -6227,10 +6272,22 @@ async def update_chat_context(task_id: str):
         research_result=task.get('super_research_result')
     )
 
+    user_id = task.get('user_id')
+    recent = db.get_recent_questions(user_id) if user_id else []
+
     return {
         "success": True,
-        "suggestions": chatbot.get_suggestions()
+        "recent_questions": recent
     }
+
+
+@app.delete("/api/chat/recent-question/{question_id}")
+async def delete_recent_question(question_id: int, user: Optional[Dict] = Depends(get_current_user)):
+    """최근 질문 개별 삭제"""
+    if not user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    db.delete_recent_question(user['user_id'], question_id)
+    return {"success": True}
 
 
 def apply_excel_formatting(filepath: str):
@@ -6833,10 +6890,12 @@ async def add_insight_to_excel(task_id: str, request: Request):
             filepath = os.path.join(output_dir, filename)
 
             # 엑셀 파일 생성 (동기 함수를 스레드에서 실행)
+            req_start = task.get('start_year')
+            req_end = task.get('end_year')
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
-                lambda: save_to_excel(fs_data, filepath, company_info)
+                lambda: save_to_excel(fs_data, filepath, company_info, start_year=req_start, end_year=req_end)
             )
 
             # task에 파일 경로 저장
