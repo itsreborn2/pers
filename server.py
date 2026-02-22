@@ -228,7 +228,8 @@ def background_cleanup_thread():
                             current_time - completed_at > PREVIEW_DATA_TTL and
                             'preview_data' in task and
                             task.get('analysis_status') != 'running' and
-                            task.get('super_research_status') != 'running'):
+                            task.get('super_research_status') != 'running' and
+                            'chatbot' not in task):
                             del task['preview_data']
                             print(f"[CLEANUP] preview_data 조기 정리: {task_id} (AI 미시작, {int(current_time - completed_at)}초 경과)")
 
@@ -395,7 +396,7 @@ async def get_me(user: Optional[Dict] = Depends(get_current_user)):
             "email": user['email'],
             "role": user['role'],
             "tier": user['tier'],
-            "tokens": user.get('tokens', 5),
+            "search_count": user.get('search_count', 5),
             "search_limit": user['search_limit'],
             "search_used": user['search_used'],
             "extract_limit": user['extract_limit'],
@@ -430,7 +431,7 @@ class UpdateUserRequest(BaseModel):
     tier: Optional[str] = None
     subscription_start: Optional[str] = None  # 유료 시작일
     expires_at: Optional[str] = None  # 유료 만료일
-    tokens: Optional[int] = None  # 검색 토큰
+    search_count: Optional[int] = None  # 검색횟수
     search_limit: Optional[int] = None
     extract_limit: Optional[int] = None
     ai_limit: Optional[int] = None
@@ -453,19 +454,19 @@ async def update_user(user_id: int, request: UpdateUserRequest, admin: Dict = De
             updates.append("tier = ?")
             params.append(request.tier)
 
-            # 티어에 따른 기본 한도 및 토큰 설정
+            # 티어에 따른 기본 한도 및 검색횟수 설정
             from datetime import datetime, timedelta
             today = datetime.now().strftime('%Y-%m-%d')
 
             tier_config = {
-                'free': {'search': 10, 'extract': 5, 'ai': 3, 'tokens': 5, 'duration_months': 0},
-                'basic': {'search': 100, 'extract': 50, 'ai': 20, 'tokens': 300, 'duration_months': 1},
-                'pro': {'search': 9999, 'extract': 9999, 'ai': 100, 'tokens': 4000, 'duration_months': 12}
+                'free': {'search': 10, 'extract': 5, 'ai': 3, 'search_count': 5, 'duration_months': 0},
+                'basic': {'search': 100, 'extract': 50, 'ai': 20, 'search_count': 300, 'duration_months': 1},
+                'pro': {'search': 9999, 'extract': 9999, 'ai': 100, 'search_count': 4000, 'duration_months': 12}
             }
             if request.tier in tier_config:
                 config = tier_config[request.tier]
-                updates.extend(["search_limit = ?", "extract_limit = ?", "ai_limit = ?", "tokens = ?"])
-                params.extend([config['search'], config['extract'], config['ai'], config['tokens']])
+                updates.extend(["search_limit = ?", "extract_limit = ?", "ai_limit = ?", "search_count = ?"])
+                params.extend([config['search'], config['extract'], config['ai'], config['search_count']])
 
                 # 유료 등급인 경우 시작일/만료일 자동 설정
                 if request.tier in ['basic', 'pro']:
@@ -500,9 +501,9 @@ async def update_user(user_id: int, request: UpdateUserRequest, admin: Dict = De
             updates.append("ai_limit = ?")
             params.append(request.ai_limit)
 
-        if request.tokens is not None:
-            updates.append("tokens = ?")
-            params.append(request.tokens)
+        if request.search_count is not None:
+            updates.append("search_count = ?")
+            params.append(request.search_count)
 
         if updates:
             updates.append("updated_at = CURRENT_TIMESTAMP")
@@ -749,14 +750,14 @@ async def start_extraction(
     user: Optional[Dict] = Depends(get_current_user)
 ):
     """재무제표 추출 시작 API"""
-    # 토큰 확인 및 차감 (관리자는 무제한)
+    # 검색횟수 확인 및 차감 (관리자는 무제한)
     if user and user.get('role') != 'admin':
-        user_tokens = user.get('tokens', 0)
-        if user_tokens is not None and user_tokens <= 0:
-            raise HTTPException(status_code=403, detail="토큰이 부족합니다. 유료 결제를 진행해 주세요.")
-        # 토큰 차감
-        if not db.use_token(user['user_id']):
-            raise HTTPException(status_code=403, detail="토큰 차감에 실패했습니다.")
+        user_search_count = user.get('search_count', 0)
+        if user_search_count is not None and user_search_count <= 0:
+            raise HTTPException(status_code=403, detail="검색횟수가 부족합니다. 유료 결제를 진행해 주세요.")
+        # 검색횟수 차감
+        if not db.use_search(user['user_id']):
+            raise HTTPException(status_code=403, detail="검색횟수 차감에 실패했습니다.")
 
     # 작업 ID 생성
     task_id = str(uuid.uuid4())
@@ -4035,9 +4036,13 @@ def create_vcm_format(fs_data, excel_filepath=None):
         총계 = sections['총계']
 
         # 섹션 경계 밖의 항목을 find_bs_val로 찾아 섹션에 추가하는 헬퍼 함수
-        def add_fallback_to_section(section_items, item_name, keywords, excludes=[]):
-            """섹션에 없는 항목을 find_bs_val로 찾아서 추가"""
+        def add_fallback_to_section(section_items, item_name, keywords, excludes=[], other_sections=[]):
+            """섹션에 없는 항목을 find_bs_val로 찾아서 추가 (다른 섹션 중복 방지)"""
             if not find_in_section(section_items, keywords, excludes):
+                # 다른 섹션에 이미 있으면 추가하지 않음 (cross-section contamination 방지)
+                for other in other_sections:
+                    if find_in_section(other, keywords, excludes):
+                        return None
                 val = find_bs_val(keywords, year, excludes)
                 if val and val != 0:
                     section_items.append({'name': item_name, 'value': val})
@@ -4045,31 +4050,45 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     return val
             return None
 
-        # 유동자산 fallback 항목 추가 (섹션 경계 밖 데이터 보완)
-        add_fallback_to_section(유동자산_items, '단기금융상품', ['단기금융상품'])
-        add_fallback_to_section(유동자산_items, '매출채권', ['매출채권'], ['장기', '손실', '처분'])
-        add_fallback_to_section(유동자산_items, '단기대여금', ['단기대여금'])
+        # 유동자산 fallback 항목 추가 (섹션 경계 밖 데이터 보완, 비유동자산과 cross-check)
+        add_fallback_to_section(유동자산_items, '단기금융상품', ['단기금융상품'], [],
+                                other_sections=[비유동자산_items])
+        add_fallback_to_section(유동자산_items, '매출채권', ['매출채권'], ['장기', '손실', '처분'],
+                                other_sections=[비유동자산_items])
+        add_fallback_to_section(유동자산_items, '단기대여금', ['단기대여금'], [],
+                                other_sections=[비유동자산_items])
 
-        # 유동부채 fallback 항목 추가
-        add_fallback_to_section(유동부채_items, '단기차입금', ['단기차입금'])
-        add_fallback_to_section(유동부채_items, '매입채무', ['매입채무'], ['장기'])
-        add_fallback_to_section(유동부채_items, '미지급금', ['미지급금'], ['장기'])
+        # 유동부채 fallback 항목 추가 (비유동부채와 cross-check)
+        add_fallback_to_section(유동부채_items, '단기차입금', ['단기차입금'], [],
+                                other_sections=[비유동부채_items])
+        add_fallback_to_section(유동부채_items, '매입채무', ['매입채무'], ['장기'],
+                                other_sections=[비유동부채_items])
+        add_fallback_to_section(유동부채_items, '미지급금', ['미지급금'], ['장기'],
+                                other_sections=[비유동부채_items])
 
-        # 비유동자산 fallback 항목 추가 (섹션 경계 밖 데이터 보완)
-        add_fallback_to_section(비유동자산_items, '유형자산', ['유형자산'], ['무형', '처분', '사용권'])
-        add_fallback_to_section(비유동자산_items, '장기금융상품', ['장기금융상품', '장기투자자산'])
-        add_fallback_to_section(비유동자산_items, '무형자산', ['무형자산'], ['상각', '손상'])
-        add_fallback_to_section(비유동자산_items, '기타의투자자산', ['기타의투자자산', '기타투자자산'])
-        add_fallback_to_section(비유동자산_items, '보증금', ['보증금', '임차보증금'])
+        # 비유동자산 fallback 항목 추가 (섹션 경계 밖 데이터 보완, 유동자산과 cross-check)
+        add_fallback_to_section(비유동자산_items, '유형자산', ['유형자산'], ['무형', '처분', '사용권'],
+                                other_sections=[유동자산_items])
+        add_fallback_to_section(비유동자산_items, '장기금융상품', ['장기금융상품', '장기투자자산'], [],
+                                other_sections=[유동자산_items])
+        add_fallback_to_section(비유동자산_items, '무형자산', ['무형자산'], ['상각', '손상'],
+                                other_sections=[유동자산_items])
+        add_fallback_to_section(비유동자산_items, '기타의투자자산', ['기타의투자자산', '기타투자자산'], [],
+                                other_sections=[유동자산_items])
+        add_fallback_to_section(비유동자산_items, '보증금', ['보증금', '임차보증금'], [],
+                                other_sections=[유동자산_items])
 
-        # 비유동부채 fallback 항목 추가 (유동성, 유동, 전환 등 유동 항목 제외)
-        add_fallback_to_section(비유동부채_items, '장기차입금', ['장기차입금'], ['유동성', '유동'])
-        add_fallback_to_section(비유동부채_items, '사채', ['사채'], ['유동성', '유동', '전환'])
-        add_fallback_to_section(비유동부채_items, '장기미지급금', ['장기미지급금'])
-        add_fallback_to_section(비유동부채_items, '임대보증금', ['임대보증금'])
+        # 비유동부채 fallback 항목 추가 (유동성, 유동, 전환 등 유동 항목 제외, 유동부채와 cross-check)
+        add_fallback_to_section(비유동부채_items, '장기차입금', ['장기차입금'], ['유동성', '유동'],
+                                other_sections=[유동부채_items])
+        add_fallback_to_section(비유동부채_items, '사채', ['사채'], ['유동성', '유동', '전환'],
+                                other_sections=[유동부채_items])
+        add_fallback_to_section(비유동부채_items, '장기미지급금', ['장기미지급금'], [],
+                                other_sections=[유동부채_items])
+        add_fallback_to_section(비유동부채_items, '임대보증금', ['임대보증금'], [],
+                                other_sections=[유동부채_items])
 
-        # 유동자산 총계: 총계 우선, 그 다음 find_bs_val (BS에서 직접 추출), 마지막으로 items 합계
-        # items 합계는 소계 항목 중복 포함 시 과대계상될 수 있으므로 find_bs_val 우선
+        # 유동자산 총계: 총계 우선, find_bs_val, 마지막으로 items합
         유동자산_from_bs = find_bs_val(['유동자산'], year, ['비유동']) or 0
         유동자산_from_items = sum(item['value'] for item in 유동자산_items) if 유동자산_items else 0
         유동자산 = 총계.get('유동자산') or 유동자산_from_bs or 유동자산_from_items or 0
@@ -4100,15 +4119,16 @@ def create_vcm_format(fs_data, excel_filepath=None):
             ['현금및현금성자산', '현금'], ['단기금융상품'], ['당기손익-공정가치측정금융자산', '당기손익공정가치측정금융자산'],
             ['기타포괄손익-공정가치측정금융자산'], ['재고자산'],
             ['매출채권'], ['미수금'], ['미수수익'], ['선급금'], ['선급비용'], ['계약자산'], ['기타금융자산'],
-            ['법인세'], ['매각예정']
+            ['법인세'], ['매각예정'],
+            ['파생상품자산', '파생상품'],  # 파생상품자산이 재고자산으로 오분류되지 않도록
+            ['기타자산'],  # 기타자산 누락 방지
         ]
         기타유동자산_items = get_unmatched_items(유동자산_items, matched_유동자산_keywords)
         기타비금융자산 = sum(item['value'] for item in 기타유동자산_items) if 기타유동자산_items else (find_bs_val(['기타유동자산', '기타비금융자산'], year) or 0)
 
         # ========== 비유동자산 항목 (섹션 기반) ==========
-        # 비유동자산: 총계 우선, 그 다음 find_bs_val (BS에서 직접 추출), 마지막으로 items 합계
-        # items 합계는 소계 항목 중복 포함 시 과대계상될 수 있으므로 find_bs_val 우선
-        비유동자산_from_bs = find_bs_val(['비유동자산'], year) or 0
+        # 비유동자산 총계: 총계 우선, find_bs_val (매각예정 제외), 마지막으로 items합
+        비유동자산_from_bs = find_bs_val(['비유동자산'], year, ['매각예정']) or 0
         비유동자산_from_items = sum(item['value'] for item in 비유동자산_items) if 비유동자산_items else 0
         비유동자산 = 총계.get('비유동자산') or 비유동자산_from_bs or 비유동자산_from_items or 0
         유형자산 = find_in_section(비유동자산_items, ['유형자산'], ['무형', '처분', '사용권']) or find_bs_val(['유형자산'], year, ['무형', '처분']) or 0
@@ -4128,7 +4148,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
         자산총계 = 총계.get('자산총계') or find_bs_val(['자산총계'], year) or 0
 
         # ========== 부채 항목 (섹션 기반) ==========
-        유동부채 = 총계.get('유동부채') or sum(item['value'] for item in 유동부채_items) or find_bs_val(['유동부채'], year, ['비유동']) or 0
+        # 유동부채 총계: 총계 우선, find_bs_val, 마지막으로 items합
+        유동부채_from_bs = find_bs_val(['유동부채'], year, ['비유동']) or 0
+        유동부채_from_items = sum(item['value'] for item in 유동부채_items) if 유동부채_items else 0
+        유동부채 = 총계.get('유동부채') or 유동부채_from_bs or 유동부채_from_items or 0
 
         # 유동 매입채무및기타채무 세부항목 (섹션 기반)
         매입채무 = find_in_section(유동부채_items, ['매입채무'], ['장기']) or find_bs_val(['매입채무'], year, ['장기']) or 0
@@ -4180,7 +4203,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
         기타유동부채 = 미지급법인세 + 기타유동부채_기타 + 충당부채_유동 + 기타금융부채_합계
 
         # ========== 비유동부채 항목 (섹션 기반) ==========
-        비유동부채 = 총계.get('비유동부채') or sum(item['value'] for item in 비유동부채_items) or find_bs_val(['비유동부채'], year) or 0
+        # 비유동부채 총계: 총계 우선, find_bs_val (매각예정 제외), 마지막으로 items합
+        비유동부채_from_bs = find_bs_val(['비유동부채'], year, ['매각예정']) or 0
+        비유동부채_from_items = sum(item['value'] for item in 비유동부채_items) if 비유동부채_items else 0
+        비유동부채 = 총계.get('비유동부채') or 비유동부채_from_bs or 비유동부채_from_items or 0
 
         # 비유동 매입채무및기타채무 세부항목 (섹션 기반)
         장기매입채무 = find_in_section(비유동부채_items, ['장기매입채무', '매입채무']) or find_bs_val(['장기매입채무'], year) or 0
@@ -4195,10 +4221,13 @@ def create_vcm_format(fs_data, excel_filepath=None):
         비유동매입채무및기타채무 = 장기매입채무 + 장기미지급금 + 장기미지급비용 + 장기선수금 + 장기선수수익 + 장기예수금 + 임대보증금 + 예수보증금_비유동 + 계약부채_비유동
 
         # 비유동 사채: '유동성', '유동', '전환' 제외 (유동전환사채 등 유동 항목 제외)
-        사채 = find_in_section(비유동부채_items, ['사채'], ['유동성', '유동', '전환']) or find_bs_val(['사채'], year, ['유동성', '유동', '전환']) or 0
-        # 사채가 섹션에 없지만 find_bs_val로 찾았으면 비유동부채_items에 추가 (동적 분류용)
-        if 사채 and not find_in_section(비유동부채_items, ['사채'], ['유동성', '유동', '전환']):
-            비유동부채_items.append({'name': '사채', 'value': 사채})
+        사채 = find_in_section(비유동부채_items, ['사채'], ['유동성', '유동', '전환']) or 0
+        # find_bs_val fallback 시에도 cross-section check — 유동부채에 이미 있으면 비유동에 추가하지 않음
+        if not 사채:
+            if not find_in_section(유동부채_items, ['사채'], ['유동성', '유동', '전환']):
+                사채 = find_bs_val(['사채'], year, ['유동성', '유동', '전환']) or 0
+                if 사채:
+                    비유동부채_items.append({'name': '사채', 'value': 사채})
         장기차입금 = find_in_section(비유동부채_items, ['장기차입금', '비유동차입부채'], ['유동성']) or find_bs_val(['장기차입금'], year, ['유동성']) or 0
         퇴직급여채무 = find_in_section(비유동부채_items, ['퇴직급여충당부채', '퇴직급여채무', '확정급여채무', '순확정급여부채']) or find_bs_val(['퇴직급여충당부채', '퇴직급여채무', '확정급여채무'], year) or 0
         기타금융부채_비유동 = find_in_section(비유동부채_items, ['기타금융부채', '금융리스부채', '리스부채']) or 0
@@ -4253,7 +4282,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 elif any(k in name_norm for k in ['매출채권', '미수금', '미수수익', '선급금', '선급비용',
                                                    '계약자산', '기타금융자산']):
                     return '매출채권및기타채권'
-                elif any(k in name_norm for k in ['재고자산', '상품', '제품', '원재료']):
+                elif any(k in name_norm for k in ['재고자산', '상품', '제품', '원재료']) and '파생' not in name_norm:
                     return '재고자산'
                 elif any(k in name_norm for k in ['법인세자산', '당기법인세자산']):
                     return '당기법인세자산'
@@ -5765,8 +5794,22 @@ async def run_financial_analysis(task_id: str):
         task['analysis_message'] = '분석 완료'
         task['analysis_result'] = result
 
-        # 메모리 절약: AI 분석 완료 후 preview_data 정리 (더 이상 불필요)
+        # 메모리 절약: AI 분석 완료 후 preview_data 정리
+        # 챗봇이 아직 초기화되지 않은 경우 경량 컨텍스트를 보존
         if 'preview_data' in task:
+            if 'chatbot' not in task:
+                # 챗봇 미초기화 → 재무 컨텍스트 보존 (엑셀에 포함되는 모든 데이터)
+                pd = task['preview_data']
+                task['chatbot_context'] = {
+                    'vcm_display': pd.get('vcm_display'),
+                    'vcm': pd.get('vcm'),
+                    'is': pd.get('is'),
+                    'bs': pd.get('bs'),
+                    'cis': pd.get('cis'),
+                    'cf': pd.get('cf'),
+                    'notes': pd.get('notes'),
+                }
+                print(f"[ANALYSIS] 챗봇용 재무 컨텍스트 보존: {task_id}")
             del task['preview_data']
             print(f"[ANALYSIS] preview_data 메모리 해제: {task_id}")
 
@@ -5977,8 +6020,8 @@ async def run_super_research(task_id: str):
 
         print(f"[SUPER_RESEARCH] 리서치 완료: task_id={task_id}")
 
-        # 메모리 절약: 리서치 완료 후 preview_data 정리 (더 이상 불필요)
-        if 'preview_data' in task:
+        # 메모리 절약: 리서치 완료 후 preview_data 정리 (챗봇 활성화 시 유지)
+        if 'preview_data' in task and 'chatbot' not in task:
             del task['preview_data']
             print(f"[SUPER_RESEARCH] preview_data 메모리 해제: {task_id}")
 
@@ -6006,6 +6049,154 @@ async def get_super_research_status(task_id: str):
         "progress": task.get('super_research_progress', 0),
         "message": task.get('super_research_message', ''),
         "result": task.get('super_research_result')
+    }
+
+
+# ============================================================
+# PE 챗봇 API
+# ============================================================
+
+class ChatMessageRequest(BaseModel):
+    message: str
+
+
+@app.post("/api/chat/init/{task_id}")
+async def init_chatbot(task_id: str):
+    """챗봇 세션 초기화"""
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
+
+    task['last_accessed'] = time.time()
+
+    try:
+        from pe_chatbot import PEChatbot
+
+        company_info = task.get('company_info', {})
+        preview_data = task.get('preview_data') or task.get('chatbot_context') or {}
+        analysis_result = task.get('analysis_result')
+        research_result = task.get('super_research_result')
+
+        chatbot = PEChatbot(
+            company_info=company_info,
+            preview_data=preview_data,
+            analysis_result=analysis_result,
+            research_result=research_result
+        )
+
+        task['chatbot'] = chatbot
+
+        return {
+            "success": True,
+            "suggestions": chatbot.get_suggestions(),
+            "company_name": chatbot.company_name
+        }
+
+    except Exception as e:
+        print(f"[CHAT] 챗봇 초기화 실패: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"챗봇 초기화 실패: {str(e)}")
+
+
+@app.post("/api/chat/message/{task_id}")
+async def chat_message(task_id: str, request: ChatMessageRequest):
+    """채팅 메시지 전송 (SSE 스트리밍)"""
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
+
+    task['last_accessed'] = time.time()
+
+    chatbot = task.get('chatbot')
+    if not chatbot:
+        raise HTTPException(status_code=400, detail="챗봇이 초기화되지 않았습니다. /api/chat/init을 먼저 호출하세요.")
+
+    message = request.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="메시지가 비어있습니다.")
+
+    # AI 분석/리서치 결과 업데이트 (완료된 경우)
+    analysis_result = task.get('analysis_result')
+    research_result = task.get('super_research_result')
+    if analysis_result or research_result:
+        chatbot.update_context(
+            analysis_result=analysis_result,
+            research_result=research_result
+        )
+
+    async def event_generator():
+        queue = asyncio.Queue()
+
+        async def producer():
+            try:
+                async for event in chatbot.chat(message):
+                    await queue.put(event)
+            except Exception as e:
+                print(f"[CHAT] 스트리밍 오류: {e}")
+                import traceback
+                traceback.print_exc()
+                await queue.put({"type": "error", "content": str(e)})
+            finally:
+                await queue.put(None)  # 종료 신호
+
+        asyncio.create_task(producer())
+
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=15)
+                if event is None:
+                    break
+                if isinstance(event, dict):
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'token', 'content': event}, ensure_ascii=False)}\n\n"
+            except asyncio.TimeoutError:
+                # SSE keepalive — 연결 유지용 (클라이언트에서 무시됨)
+                yield ": keepalive\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.get("/api/chat/history/{task_id}")
+async def get_chat_history(task_id: str):
+    """대화 내역 조회"""
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
+
+    task['last_accessed'] = time.time()
+
+    chatbot = task.get('chatbot')
+    if not chatbot:
+        return {"success": True, "messages": [], "suggestions": []}
+
+    return {
+        "success": True,
+        "messages": chatbot.get_history(),
+        "suggestions": chatbot.get_suggestions()
+    }
+
+
+@app.post("/api/chat/update-context/{task_id}")
+async def update_chat_context(task_id: str):
+    """챗봇 컨텍스트 업데이트 (AI 분석/리서치 완료 후 호출)"""
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
+
+    chatbot = task.get('chatbot')
+    if not chatbot:
+        return {"success": False, "message": "챗봇이 초기화되지 않았습니다."}
+
+    chatbot.update_context(
+        analysis_result=task.get('analysis_result'),
+        research_result=task.get('super_research_result')
+    )
+
+    return {
+        "success": True,
+        "suggestions": chatbot.get_suggestions()
     }
 
 

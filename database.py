@@ -49,7 +49,7 @@ def init_db():
                 ai_used INTEGER DEFAULT 0,          -- 사용한 AI 분석 수
                 subscription_start TIMESTAMP,       -- 유료 시작일
                 expires_at TIMESTAMP,               -- 유료 만료일 (NULL이면 무료)
-                tokens INTEGER DEFAULT 5,           -- 검색 토큰 (Free 기본 5개)
+                search_count INTEGER DEFAULT 5,      -- 검색횟수 (Free 기본 5회)
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -61,11 +61,17 @@ def init_db():
         except:
             pass  # 이미 존재하면 무시
 
-        # 기존 테이블에 tokens 컬럼 추가 (없으면)
+        # 기존 테이블에 search_count 컬럼 추가 (없으면)
         try:
-            cursor.execute('ALTER TABLE users ADD COLUMN tokens INTEGER DEFAULT 5')
+            cursor.execute('ALTER TABLE users ADD COLUMN search_count INTEGER DEFAULT 5')
         except:
             pass  # 이미 존재하면 무시
+
+        # tokens → search_count 컬럼명 마이그레이션
+        try:
+            cursor.execute('ALTER TABLE users RENAME COLUMN tokens TO search_count')
+        except:
+            pass  # 이미 변경되었거나 컬럼이 없으면 무시
 
         # 로그인 기록 테이블
         cursor.execute('''
@@ -124,7 +130,7 @@ def init_db():
             )
         ''')
 
-        # 세션 테이블 (토큰 기반 인증)
+        # 세션 테이블 (세션 기반 인증)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -271,11 +277,11 @@ def check_and_expire_subscription(user_id: int, expires_at: str) -> bool:
         today = datetime.now().date()
 
         if today > expiry_date:
-            # 만료됨 - Free로 전환하고 토큰 0으로
+            # 만료됨 - Free로 전환하고 검색횟수 0으로
             with get_db() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    UPDATE users SET tier = 'free', tokens = 0,
+                    UPDATE users SET tier = 'free', search_count = 0,
                            search_limit = 10, extract_limit = 5, ai_limit = 3,
                            updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
@@ -293,7 +299,7 @@ def get_session(token: str) -> Optional[Dict]:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT s.*, u.email, u.role, u.tier, u.search_limit, u.search_used,
-                   u.extract_limit, u.extract_used, u.ai_limit, u.ai_used, u.expires_at, u.tokens
+                   u.extract_limit, u.extract_used, u.ai_limit, u.ai_used, u.expires_at, u.search_count
             FROM sessions s
             JOIN users u ON s.user_id = u.id
             WHERE s.token = ?
@@ -309,7 +315,7 @@ def get_session(token: str) -> Optional[Dict]:
                     # 만료되었으면 다시 조회
                     cursor.execute('''
                         SELECT s.*, u.email, u.role, u.tier, u.search_limit, u.search_used,
-                               u.extract_limit, u.extract_used, u.ai_limit, u.ai_used, u.expires_at, u.tokens
+                               u.extract_limit, u.extract_used, u.ai_limit, u.ai_used, u.expires_at, u.search_count
                         FROM sessions s
                         JOIN users u ON s.user_id = u.id
                         WHERE s.token = ?
@@ -419,7 +425,7 @@ def get_user_stats(user_id: int) -> Dict:
         cursor.execute('SELECT COUNT(*) FROM llm_usage WHERE user_id = ?', (user_id,))
         ai_count = cursor.fetchone()[0]
 
-        # 총 토큰 사용량
+        # 총 AI API 사용량
         cursor.execute('SELECT SUM(total_tokens) FROM llm_usage WHERE user_id = ?', (user_id,))
         total_tokens = cursor.fetchone()[0] or 0
 
@@ -514,7 +520,7 @@ def get_all_users() -> List[Dict]:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id, email, role, tier, search_used, extract_used, ai_used,
-                   subscription_start, expires_at, tokens, created_at
+                   subscription_start, expires_at, search_count, created_at
             FROM users
             ORDER BY created_at DESC
         ''')
@@ -533,14 +539,14 @@ def get_all_users() -> List[Dict]:
             row = cursor.fetchone()
             user['last_login'] = row[0] if row else None
 
-            # 총 토큰 사용량 (llm_usage에서 total_tokens 합계)
+            # 총 AI API 사용량 (llm_usage에서 total_tokens 합계)
             cursor.execute('''
                 SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage
                 WHERE user_id = ?
             ''', (user_id,))
             user['total_tokens_used'] = cursor.fetchone()[0]
 
-            # 최근 7일간 토큰 사용량
+            # 최근 7일간 AI API 사용량
             cursor.execute('''
                 SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage
                 WHERE user_id = ? AND created_at >= datetime('now', '-7 days')
@@ -568,31 +574,31 @@ def get_all_users() -> List[Dict]:
         return users
 
 
-def use_token(user_id: int) -> bool:
-    """토큰 1개 사용 (차감). 성공하면 True, 토큰 부족하면 False"""
+def use_search(user_id: int) -> bool:
+    """검색횟수 1회 차감. 성공하면 True, 부족하면 False"""
     with get_db() as conn:
         cursor = conn.cursor()
-        # 현재 토큰 확인
-        cursor.execute('SELECT tokens FROM users WHERE id = ?', (user_id,))
+        # 현재 검색횟수 확인
+        cursor.execute('SELECT search_count FROM users WHERE id = ?', (user_id,))
         row = cursor.fetchone()
         if not row or (row[0] is not None and row[0] <= 0):
             return False
-        # 토큰 차감
+        # 검색횟수 차감
         cursor.execute('''
-            UPDATE users SET tokens = tokens - 1, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND (tokens IS NULL OR tokens > 0)
+            UPDATE users SET search_count = search_count - 1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND (search_count IS NULL OR search_count > 0)
         ''', (user_id,))
         return cursor.rowcount > 0
 
 
-def update_user_tokens(user_id: int, tokens: int):
-    """사용자 토큰 수정 (관리자용)"""
+def update_user_search_count(user_id: int, count: int):
+    """사용자 검색횟수 수정 (관리자용)"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            UPDATE users SET tokens = ?, updated_at = CURRENT_TIMESTAMP
+            UPDATE users SET search_count = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        ''', (tokens, user_id))
+        ''', (count, user_id))
 
 
 def update_user_password(user_id: int, new_password_hash: str):
@@ -668,7 +674,7 @@ def get_admin_analytics() -> Dict:
         retained_30days = cursor.fetchone()[0]
         analytics['retention_30d'] = round(retained_30days / users_30days_ago * 100, 1) if users_30days_ago > 0 else 0
 
-        # 7. 토큰 사용량
+        # 7. AI API 사용량
         cursor.execute('SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage')
         analytics['tokens_total'] = cursor.fetchone()[0]
 

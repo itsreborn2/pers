@@ -61,6 +61,37 @@
             border: 1px solid #e8e8e8;
         }
 
+        /* 초기 상태: 화면 가운데 약간 위 */
+        .container.centered {
+            margin-top: calc(25vh - 80px);
+            transition: margin-top 0.4s ease;
+        }
+
+        .container.centered .hero-tagline {
+            display: block;
+        }
+
+        .hero-tagline {
+            display: none;
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .hero-tagline .tagline-main {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #C8A45A;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .hero-tagline .tagline-sub {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-medium);
+            letter-spacing: 0.5px;
+        }
+
         /* 하단 확장 컨테이너 (결과 영역) */
         .container-full {
             display: none;
@@ -998,6 +1029,12 @@
         }
 
         /* 기업개황정보 스타일 */
+        .company-info-wrapper {
+            max-width: 840px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
         .company-info-section {
             margin: 20px auto 0 auto;
             background: #fafafa;
@@ -2149,7 +2186,7 @@
             color: white;
         }
 
-        .user-tokens {
+        .user-search-count {
             font-size: 0.75rem;
             padding: 2px 8px;
             border-radius: 12px;
@@ -2158,7 +2195,7 @@
             color: white;
         }
 
-        .user-tokens.low {
+        .user-search-count.low {
             background: var(--accent);
             color: white;
         }
@@ -2767,6 +2804,519 @@
                 flex-direction: column;
             }
         }
+
+        /* ============================================================
+           PE 챗봇 스타일
+           ============================================================ */
+
+        /* 탭 바 */
+        .ci-tabs {
+            display: none;
+            gap: 8px;
+            padding-left: 4px;
+            margin-top: 24px;
+            margin-bottom: 10px;
+        }
+
+        .ci-tabs.show {
+            display: flex;
+        }
+
+        .ci-tab {
+            padding: 6px 14px;
+            font-size: 0.8rem;
+            border: 1px solid #e5e7eb;
+            background: #ffffff;
+            color: #9ca3af;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'Pretendard', sans-serif;
+        }
+
+        .ci-tab:hover {
+            background: #f9fafb;
+            color: #6b7280;
+        }
+
+        .ci-tab.active {
+            background: #374151;
+            color: #ffffff;
+            border-color: #374151;
+        }
+
+        .ci-tab.active:hover {
+            background: #4b5563;
+            border-color: #4b5563;
+        }
+
+        /* 패널 영역 */
+        .ci-panels {
+            display: flex;
+            gap: 16px;
+        }
+
+        .company-info-wrapper.with-chatbot {
+            max-width: 1060px;
+            padding: 0 20px;
+        }
+
+        .company-info-wrapper.with-chatbot .company-info-section {
+            flex: 1;
+            max-width: none;
+            margin: 0;
+        }
+
+        .chatbot-section {
+            flex: 1;
+            min-width: 300px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            height: var(--ci-height, 500px);
+            align-self: flex-start;
+        }
+
+        /* 확장 모드: 하나만 선택 시 전체 너비 사용 */
+        .ci-panels.expanded-info .chatbot-section {
+            display: none !important;
+        }
+        .ci-panels.expanded-info .company-info-section {
+            flex: 1;
+            max-width: none;
+        }
+
+        .ci-panels.expanded-chat .company-info-section {
+            display: none !important;
+        }
+        .ci-panels.expanded-chat .chatbot-section {
+            flex: 1;
+            max-width: none;
+            height: calc(var(--ci-height, 500px) + 200px);
+        }
+
+        .chatbot-header {
+            background: var(--primary);
+            color: white;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .chatbot-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .chatbot-badge {
+            background: var(--accent);
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .chatbot-status {
+            margin-left: auto;
+            font-size: 0.75rem;
+            opacity: 0.8;
+            display: none;
+        }
+
+        .chatbot-fullscreen-btn {
+            margin-left: auto;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.25);
+            color: white;
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .chatbot-fullscreen-btn:hover {
+            background: rgba(255,255,255,0.25);
+        }
+
+        /* 챗봇 확장 모드 — 화면 중앙 고정 패널 */
+        .chatbot-fullscreen-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 998;
+        }
+        .chatbot-fullscreen-overlay.active { display: block; }
+
+        .chatbot-section.fullscreen-mode {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 820px;
+            height: 820px;
+            z-index: 999;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        @media (max-width: 768px) {
+            .chatbot-section.fullscreen-mode {
+                width: 95vw;
+                height: 80vh;
+            }
+        }
+
+        .chatbot-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .chatbot-messages::-webkit-scrollbar {
+            width: 4px;
+        }
+        .chatbot-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .chatbot-messages::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 4px;
+        }
+
+        .chat-message {
+            display: flex;
+            max-width: 90%;
+        }
+
+        .chat-message.user {
+            align-self: flex-end;
+        }
+
+        .chat-message.assistant {
+            align-self: flex-start;
+        }
+
+        .chat-bubble {
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 0.88rem;
+            line-height: 1.55;
+            word-break: break-word;
+        }
+
+        .chat-bubble h1, .chat-bubble h2, .chat-bubble h3, .chat-bubble h4 {
+            margin: 12px 0 6px 0;
+            font-weight: 600;
+        }
+        .chat-bubble h1 { font-size: 0.95rem; }
+        .chat-bubble h2 { font-size: 0.92rem; border-bottom: 1px solid #dee2e6; padding-bottom: 4px; }
+        .chat-bubble h3 { font-size: 0.9rem; }
+        .chat-bubble h4 { font-size: 0.88rem; }
+
+        .chat-bubble p {
+            margin: 6px 0;
+        }
+
+        .chat-bubble ul, .chat-bubble ol {
+            margin: 6px 0;
+            padding-left: 20px;
+            list-style-position: inside;
+        }
+
+        .chat-bubble ul {
+            list-style-type: disc;
+        }
+
+        .chat-bubble ol {
+            list-style-type: decimal;
+        }
+
+        .chat-bubble li {
+            margin: 4px 0;
+            text-indent: -20px;
+            padding-left: 20px;
+        }
+
+        /* 감싸지 않은 li 태그 (ul/ol 없이 직접 나온 경우) */
+        .chat-bubble > li {
+            list-style: none;
+            margin: 6px 0;
+            padding-left: 12px;
+            border-left: 2px solid var(--primary);
+            text-indent: 0;
+        }
+
+        .chat-references {
+            margin-top: 8px;
+            border-top: 1px solid #dee2e6;
+            padding-top: 6px;
+        }
+
+        .chat-references summary {
+            font-size: 0.78rem;
+            color: var(--text-medium);
+            cursor: pointer;
+            user-select: none;
+            font-weight: 500;
+        }
+
+        .chat-references summary:hover {
+            color: var(--primary);
+        }
+
+        .chat-references .ref-list {
+            margin-top: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .chat-references .ref-item {
+            font-size: 0.75rem;
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+
+        .chat-references .ref-num {
+            color: var(--text-light);
+            flex-shrink: 0;
+            font-size: 0.7rem;
+        }
+
+        .chat-references .ref-item a {
+            color: var(--primary);
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .chat-references .ref-item a:hover {
+            text-decoration: underline;
+        }
+
+        .chat-bubble table.md-table {
+            font-size: 0.8rem;
+            margin: 8px 0;
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #d1d5db;
+        }
+
+        .chat-bubble table.md-table th,
+        .chat-bubble table.md-table td {
+            border: 1px solid #d1d5db;
+            padding: 4px 8px;
+            text-align: left;
+        }
+
+        .chat-bubble table.md-table th {
+            background: #e5e7eb;
+            font-weight: 600;
+        }
+
+        .chat-bubble table.md-table tr:nth-child(even) {
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .chat-bubble strong {
+            font-weight: 600;
+        }
+
+        .chat-bubble pre {
+            background: #e9ecef;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            overflow-x: auto;
+        }
+
+        .chat-message.user .chat-bubble {
+            background: var(--accent);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-message.assistant .chat-bubble {
+            background: #f1f3f5;
+            color: var(--text-dark);
+            border-bottom-left-radius: 4px;
+        }
+
+        .chat-status-msg {
+            text-align: center;
+            font-size: 0.78rem;
+            color: var(--text-light);
+            padding: 6px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            animation: statusPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        .chat-status-msg .status-dots {
+            display: inline-flex;
+            gap: 3px;
+        }
+        .chat-status-msg .status-dots span {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--text-light);
+            animation: statusWave 1.4s ease-in-out infinite;
+        }
+        .chat-status-msg .status-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .chat-status-msg .status-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes statusWave {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-4px); opacity: 1; }
+        }
+
+        .chat-status-msg .spinner {
+            display: none;
+        }
+
+        .chatbot-input-area {
+            border-top: 1px solid var(--border-light);
+            padding: 12px;
+            flex-shrink: 0;
+            background: #fafbfc;
+        }
+
+        .chatbot-suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .suggestion-btn {
+            background: white;
+            border: 1px solid var(--border-medium);
+            border-radius: 16px;
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            color: var(--text-medium);
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: 'Pretendard', sans-serif;
+            white-space: nowrap;
+        }
+
+        .suggestion-btn:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .chatbot-input-row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        .chatbot-input-row textarea {
+            flex: 1;
+            border: 1px solid var(--border-medium);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 0.88rem;
+            font-family: 'Pretendard', sans-serif;
+            resize: none;
+            max-height: 80px;
+            line-height: 1.4;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        .chatbot-input-row textarea:focus {
+            border-color: var(--primary);
+        }
+
+        .chatbot-input-row button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Pretendard', sans-serif;
+            transition: background 0.15s;
+            white-space: nowrap;
+            height: 36px;
+        }
+
+        .chatbot-input-row button:hover {
+            background: var(--primary-dark);
+        }
+
+        .chatbot-input-row button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .chat-typing-indicator {
+            display: inline-flex;
+            gap: 4px;
+            padding: 8px 14px;
+            background: #f1f3f5;
+            border-radius: 12px;
+            border-bottom-left-radius: 4px;
+        }
+
+        .chat-typing-indicator span {
+            width: 6px;
+            height: 6px;
+            background: #9ca3af;
+            border-radius: 50%;
+            animation: chatTyping 1.2s infinite;
+        }
+
+        .chat-typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .chat-typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes chatTyping {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-4px); opacity: 1; }
+        }
+
+        /* 챗봇 반응형 */
+        @media (max-width: 900px) {
+            .ci-panels {
+                flex-direction: column;
+            }
+
+            .company-info-wrapper.with-chatbot .company-info-section {
+                flex: none;
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .chatbot-section {
+                min-width: unset;
+                width: 100%;
+                height: 420px;
+            }
+        }
     </style>
     <!-- Mermaid 다이어그램 라이브러리 -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -2816,7 +3366,7 @@
                         </div>
                         <div style="display: flex; gap: 6px; align-items: center;">
                             <span class="user-tier" id="userTier"></span>
-                            <span class="user-tokens" id="userTokens"></span>
+                            <span class="user-search-count" id="userSearchCount"></span>
                         </div>
                     </div>
                 </div>
@@ -2824,7 +3374,13 @@
         </div>
     </header>
 
-    <div class="container">
+    <div class="container centered" id="mainContainer">
+        <!-- 히어로 태그라인 (초기 상태에서만 표시) -->
+        <div class="hero-tagline" id="heroTagline">
+            <div class="tagline-main">밸류렌즈</div>
+            <div class="tagline-sub">PE All In One 플랫폼</div>
+        </div>
+
         <!-- 검색 섹션 (로그인 후에만 표시) -->
         <div class="search-section" id="mainContent" style="display: none;">
             <div class="input-group">
@@ -2856,8 +3412,28 @@
             </div>
         </div>
 
-        <!-- 기업개황정보 섹션 (독립) -->
-        <div class="company-info-wrapper" id="companyInfoWrapper" style="display: none;">
+        <!-- 추출 진행 섹션 -->
+        <div class="progress-section" id="extractingSection">
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar">0%</div>
+            </div>
+            <p class="progress-message" id="progressMessage">준비 중...</p>
+            <div class="action-buttons">
+                <button class="btn btn-danger" id="cancelBtn" onclick="cancelExtraction()">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 기업개황정보 + 챗봇 (container 밖 — 넓은 레이아웃) -->
+    <div class="company-info-wrapper" id="companyInfoWrapper" style="display: none;">
+        <!-- 탭 바 -->
+        <div class="ci-tabs" id="ciTabs">
+            <button class="ci-tab active" data-ci-panel="info" onclick="toggleCiPanel('info')">기업개황</button>
+            <button class="ci-tab" data-ci-panel="chat" onclick="toggleCiPanel('chat')" disabled style="opacity:0.5; cursor:not-allowed;">AI 어시스턴트</button>
+        </div>
+
+        <!-- 패널 영역 -->
+        <div class="ci-panels expanded-info" id="ciPanels">
             <div class="company-info-section" id="companyInfoSection">
                 <h3 class="company-info-title" onclick="toggleCompanyInfo()">
                     <span>기업개황정보</span>
@@ -2873,16 +3449,31 @@
                     </table>
                 </div>
             </div>
-        </div>
 
-        <!-- 추출 진행 섹션 -->
-        <div class="progress-section" id="extractingSection">
-            <div class="progress-bar-container">
-                <div class="progress-bar" id="progressBar">0%</div>
-            </div>
-            <p class="progress-message" id="progressMessage">준비 중...</p>
-            <div class="action-buttons">
-                <button class="btn btn-danger" id="cancelBtn" onclick="cancelExtraction()">취소</button>
+            <!-- 챗봇 확장 오버레이 배경 -->
+            <div class="chatbot-fullscreen-overlay" id="chatFullscreenOverlay" onclick="toggleChatFullscreen()"></div>
+            <!-- PE 챗봇 섹션 -->
+            <div class="chatbot-section" id="chatbotSection" style="display: none;">
+                <div class="chatbot-header">
+                    <span class="chatbot-title">AI 어시스턴트</span>
+                    <span class="chatbot-badge">PE 전문</span>
+                    <span class="chatbot-status" id="chatbotStatus">대기 중</span>
+                    <button class="chatbot-fullscreen-btn" id="chatFullscreenBtn" onclick="toggleChatFullscreen()">&#x26F6; 전체 화면</button>
+                </div>
+                <div class="chatbot-messages" id="chatbotMessages">
+                    <div class="chat-message assistant">
+                        <div class="chat-bubble">
+                            안녕하세요! 재무 데이터를 분석할 준비가 되었습니다. PE 관점의 분석이 필요하시면 무엇이든 물어보세요.
+                        </div>
+                    </div>
+                </div>
+                <div class="chatbot-input-area">
+                    <div class="chatbot-suggestions" id="chatbotSuggestions"></div>
+                    <div class="chatbot-input-row">
+                        <textarea id="chatInput" placeholder="질문을 입력하세요..." rows="1" onkeydown="handleChatKeydown(event)"></textarea>
+                        <button id="chatSendBtn" onclick="sendChatMessage()">전송</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -3063,8 +3654,8 @@
                         <span class="profile-info-value" id="profileTier">-</span>
                     </div>
                     <div class="profile-info-row">
-                        <span class="profile-info-label">잔여 토큰</span>
-                        <span class="profile-info-value" id="profileTokens">-</span>
+                        <span class="profile-info-label">잔여 검색횟수</span>
+                        <span class="profile-info-value" id="profileSearchCount">-</span>
                     </div>
                 </div>
 
@@ -3168,9 +3759,9 @@
                     </div>
                 </div>
 
-                <!-- 토큰 사용량 -->
+                <!-- API 사용량 -->
                 <div class="analytics-section">
-                    <div class="analytics-section-title">토큰 사용량</div>
+                    <div class="analytics-section-title">API 사용량</div>
                     <div class="analytics-grid">
                         <div class="analytics-card">
                             <div class="analytics-value" id="statTokensTotal">-</div>
@@ -3243,7 +3834,7 @@
                             <th>이메일</th>
                             <th>등급</th>
                             <th>마지막 접속</th>
-                            <th>토큰 사용</th>
+                            <th>API 사용</th>
                             <th>일평균</th>
                             <th>주간</th>
                             <th>만료일</th>
@@ -3346,7 +3937,7 @@
                     return;
                 }
 
-                // 성공 - 전체 사용자 정보(토큰 포함) 가져오기
+                // 성공 - 전체 사용자 정보(검색횟수 포함) 가져오기
                 await checkAuth();
                 closeAuthModal();
 
@@ -3476,10 +4067,10 @@
                 document.getElementById('profileTier').textContent = tierNames[currentUser.tier] || currentUser.tier;
 
                 if (currentUser.role === 'admin') {
-                    document.getElementById('profileTokens').textContent = '무제한';
+                    document.getElementById('profileSearchCount').textContent = '무제한';
                 } else {
-                    const tokens = currentUser.tokens !== null && currentUser.tokens !== undefined ? currentUser.tokens : 0;
-                    document.getElementById('profileTokens').textContent = tokens + '개';
+                    const sc = currentUser.search_count !== null && currentUser.search_count !== undefined ? currentUser.search_count : 0;
+                    document.getElementById('profileSearchCount').textContent = sc + '회';
                 }
 
                 // 이용권 정보
@@ -3612,7 +4203,7 @@
             const loggedInEl = document.getElementById('userLoggedIn');
             const emailEl = document.getElementById('userEmail');
             const tierEl = document.getElementById('userTier');
-            const tokensEl = document.getElementById('userTokens');
+            const searchCountEl = document.getElementById('userSearchCount');
             const mainContent = document.getElementById('mainContent');
             const overlay = document.getElementById('authModalOverlay');
             const closeBtn = document.querySelector('.auth-modal-close');
@@ -3629,14 +4220,14 @@
                 tierEl.textContent = tierNames[currentUser.tier] || currentUser.tier;
                 tierEl.className = 'user-tier ' + currentUser.tier;
 
-                // 토큰 표시 (관리자는 무제한)
+                // 검색횟수 표시 (관리자는 무제한)
                 if (currentUser.role === 'admin') {
-                    tokensEl.textContent = '토큰: ∞';
-                    tokensEl.className = 'user-tokens';
+                    searchCountEl.textContent = '검색횟수: ∞';
+                    searchCountEl.className = 'user-search-count';
                 } else {
-                    const tokens = currentUser.tokens !== null && currentUser.tokens !== undefined ? currentUser.tokens : 0;
-                    tokensEl.textContent = `토큰: ${tokens}`;
-                    tokensEl.className = tokens <= 3 ? 'user-tokens low' : 'user-tokens';
+                    const sc = currentUser.search_count !== null && currentUser.search_count !== undefined ? currentUser.search_count : 0;
+                    searchCountEl.textContent = `검색횟수: ${sc}`;
+                    searchCountEl.className = sc <= 3 ? 'user-search-count low' : 'user-search-count';
                 }
 
                 // 관리자 메뉴 표시/숨김
@@ -3713,7 +4304,7 @@
                     document.getElementById('statRetention7d').textContent = (a.retention_7d || 0) + '%';
                     document.getElementById('statRetention30d').textContent = (a.retention_30d || 0) + '%';
 
-                    // 토큰 사용량 (숫자 포맷팅)
+                    // API 사용량 (숫자 포맷팅)
                     const formatNum = (n) => n ? n.toLocaleString() : '0';
                     document.getElementById('statTokensTotal').textContent = formatNum(a.tokens_total);
                     document.getElementById('statTokensWeek').textContent = formatNum(a.tokens_week);
@@ -4082,6 +4673,9 @@
         function selectCompany(corpCode, corpName, stockCode, market) {
             selectedCorp = { corpCode, corpName, stockCode, market };
 
+            // 태그라인 숨기고 검색 섹션 상단으로 복귀
+            document.getElementById('mainContainer').classList.remove('centered');
+
             // UI 업데이트
             document.getElementById('searchResults').classList.remove('show');
             document.getElementById('selectedCompanyName').textContent = `${corpName} (${market})`;
@@ -4262,9 +4856,9 @@
         async function startExtraction(integrated = false) {
             if (!selectedCorp) return;
 
-            // 토큰 체크
-            if (currentUser && currentUser.tokens !== null && currentUser.tokens !== undefined && currentUser.tokens <= 0) {
-                alert('토큰이 부족합니다.\n유료 결제를 진행해 주세요.');
+            // 검색횟수 체크
+            if (currentUser && currentUser.search_count !== null && currentUser.search_count !== undefined && currentUser.search_count <= 0) {
+                alert('검색횟수가 부족합니다.\n유료 결제를 진행해 주세요.');
                 return;
             }
 
@@ -4285,9 +4879,10 @@
             }
 
             // UI 전환
+            document.getElementById('mainContainer').classList.remove('centered');
             document.getElementById('progressSection').classList.remove('show');
             document.getElementById('extractingSection').classList.add('show');
-            
+
             try {
                 const response = await fetch('/api/extract', {
                     method: 'POST',
@@ -4449,7 +5044,7 @@
             // Heartbeat 시작 (브라우저 열려있는 동안 작업 유지)
             startHeartbeat();
 
-            // 토큰 갱신 (차감된 토큰 반영)
+            // 검색횟수 갱신 (차감된 검색횟수 반영)
             checkAuth();
 
             // 미리보기 표시
@@ -4469,11 +5064,16 @@
                     startAnalysis();
                     startSuperResearch();  // 기업 리서치도 동시에 시작
                 }, 500);
+                // 통합모드에서도 추출 직후 챗봇 활성화 (재무데이터 기반 질의 가능)
+                setTimeout(() => { initChatbot(); }, 1500);
             } else {
                 // 재무제표만 추출: AI 분석 시작 버튼 표시
                 document.getElementById('analysisStartContainer').style.display = 'block';
                 document.getElementById('analysisStatus').textContent = '';
+                // 분석 없이도 챗봇 활성화 (재무데이터 기반 질의 가능)
+                setTimeout(() => { initChatbot(); }, 1000);
             }
+
         }
 
         // 상위 탭 전환 (재무분석 AI / 재무정보)
@@ -4791,10 +5391,16 @@
             financialsContent.innerHTML = renderVCMFormat();
 
             // 재무분석 AI 서브탭 상태에 따라 vcm-box 숨김 처리
+            // #financialsContent 범위 내에서만 쿼리 (전역 쿼리 방지)
             const aiBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="ai"]');
-            const vcmBoxes = document.querySelectorAll('.vcm-box');
-            if (vcmBoxes[2] && aiBtn && !aiBtn.classList.contains('active')) {
-                vcmBoxes[2].classList.add('hidden');
+            const vcmWrapper = financialsContent.querySelector('.vcm-wrapper');
+            const vcmBoxes = vcmWrapper ? vcmWrapper.querySelectorAll('.vcm-box') : [];
+            const aiBox = vcmWrapper ? vcmWrapper.querySelector('.vcm-box-analysis') : null;
+
+            console.log('[VCM렌더] AI박스 존재:', !!aiBox, 'AI버튼 active:', aiBtn?.classList.contains('active'));
+
+            if (aiBox && aiBtn && !aiBtn.classList.contains('active')) {
+                aiBox.classList.add('hidden');
             }
 
             // 재무분석 AI 박스 너비/높이 조정
@@ -5813,6 +6419,10 @@
                 // 재무분석 AI 결과가 있으면 3번째 박스로 추가
                 const analysisResultEl = document.getElementById('analysisResult');
                 const hasAnalysisResult = analysisResultEl && analysisResultEl.innerHTML.trim() !== '' && analysisResultEl.style.display !== 'none';
+                console.log('[VCM-vcm_display] hasAnalysisResult:', hasAnalysisResult,
+                    'el존재:', !!analysisResultEl,
+                    'innerHTML길이:', analysisResultEl?.innerHTML?.trim()?.length || 0,
+                    'display:', analysisResultEl?.style?.display);
 
                 let analysisBoxHtml = '';
                 if (hasAnalysisResult) {
@@ -6593,6 +7203,10 @@
             // 재무분석 AI 결과가 있으면 3번째 박스로 추가
             const analysisResultEl = document.getElementById('analysisResult');
             const hasAnalysisResult = analysisResultEl && analysisResultEl.innerHTML.trim() !== '' && analysisResultEl.style.display !== 'none';
+            console.log('[VCM-fallback] hasAnalysisResult:', hasAnalysisResult,
+                'el존재:', !!analysisResultEl,
+                'innerHTML길이:', analysisResultEl?.innerHTML?.trim()?.length || 0,
+                'display:', analysisResultEl?.style?.display);
 
             let analysisBoxHtml = '';
             if (hasAnalysisResult) {
@@ -6713,21 +7327,39 @@
             }
         }
 
+        let analysisStatusErrorCount = 0;  // 연속 에러 횟수
+        const ANALYSIS_MAX_ERRORS = 10;  // 최대 연속 에러 허용 횟수
+
         function startAnalysisStatusCheck() {
             if (analysisCheckInterval) {
                 clearInterval(analysisCheckInterval);
             }
+            analysisStatusErrorCount = 0;
 
             analysisCheckInterval = setInterval(async () => {
                 try {
                     const response = await fetch(`/api/analyze-status/${currentTaskId}`);
 
-                    // 404 에러 처리 (작업을 찾을 수 없음)
+                    // 404 에러 처리 (작업을 찾을 수 없음 — 서버 재시작 등)
                     if (response.status === 404) {
                         stopAnalysisStatusCheck();
                         showAnalysisError('작업을 찾을 수 없습니다. 페이지를 새로고침해주세요.');
                         return;
                     }
+
+                    // 502/503 등 서버 에러
+                    if (!response.ok) {
+                        analysisStatusErrorCount++;
+                        console.warn(`[Analysis] 서버 에러 (${response.status}), 연속 ${analysisStatusErrorCount}/${ANALYSIS_MAX_ERRORS}`);
+                        if (analysisStatusErrorCount >= ANALYSIS_MAX_ERRORS) {
+                            stopAnalysisStatusCheck();
+                            showAnalysisError('서버 연결이 불안정합니다. 페이지를 새로고침해주세요.');
+                        }
+                        return;
+                    }
+
+                    // 성공 시 에러 카운터 리셋
+                    analysisStatusErrorCount = 0;
 
                     const data = await response.json();
 
@@ -6760,13 +7392,19 @@
                             currentFilename = data.filename;
                         }
                         showAnalysisResult(data.result);
+                        updateChatbotContext();  // 챗봇 컨텍스트 업데이트
                     } else if (data.status === 'failed') {
                         stopAnalysisStatusCheck();
                         showAnalysisError(data.message);
                     }
 
                 } catch (error) {
-                    console.error('상태 확인 실패:', error);
+                    analysisStatusErrorCount++;
+                    console.error(`[Analysis] 상태 확인 실패 (${analysisStatusErrorCount}/${ANALYSIS_MAX_ERRORS}):`, error);
+                    if (analysisStatusErrorCount >= ANALYSIS_MAX_ERRORS) {
+                        stopAnalysisStatusCheck();
+                        showAnalysisError('서버 연결이 불안정합니다. 페이지를 새로고침해주세요.');
+                    }
                 }
             }, 2000);  // 2초마다 체크
         }
@@ -6885,6 +7523,9 @@
 
             // Financials 탭으로 전환하여 결과 표시
             showMainTab('financials');
+
+            // PE 챗봇 초기화 (재무분석 완료 후 활성화 — API 충돌 방지)
+            setTimeout(() => { initChatbot(); }, 1000);
         }
 
         // ============================================================
@@ -6949,14 +7590,49 @@
         }
 
         // 기업 리서치 상태 확인 시작
+        let superResearchErrorCount = 0;
+        const SUPER_RESEARCH_MAX_ERRORS = 10;
+
         function startSuperResearchStatusCheck() {
             if (superResearchCheckInterval) {
                 clearInterval(superResearchCheckInterval);
             }
+            superResearchErrorCount = 0;
 
             superResearchCheckInterval = setInterval(async () => {
                 try {
                     const response = await fetch(`/api/super-research-status/${currentTaskId}`);
+
+                    // 404 에러 처리 (작업을 찾을 수 없음 — 서버 재시작 등)
+                    if (response.status === 404) {
+                        console.warn('[SuperResearch] 작업을 찾을 수 없음 (404) — 폴링 중지');
+                        clearInterval(superResearchCheckInterval);
+                        superResearchCheckInterval = null;
+                        const superResearchTabBtn = document.getElementById('superResearchTabBtn');
+                        superResearchTabBtn.textContent = '기업 리서치';
+                        superResearchTabBtn.classList.remove('analyzing');
+                        document.getElementById('superResearchMessage').textContent = '작업이 만료되었습니다. 새로 검색해주세요.';
+                        return;
+                    }
+
+                    // 502/503 등 서버 에러
+                    if (!response.ok) {
+                        superResearchErrorCount++;
+                        console.warn(`[SuperResearch] 서버 에러 (${response.status}), 연속 ${superResearchErrorCount}/${SUPER_RESEARCH_MAX_ERRORS}`);
+                        if (superResearchErrorCount >= SUPER_RESEARCH_MAX_ERRORS) {
+                            clearInterval(superResearchCheckInterval);
+                            superResearchCheckInterval = null;
+                            const superResearchTabBtn = document.getElementById('superResearchTabBtn');
+                            superResearchTabBtn.textContent = '기업 리서치';
+                            superResearchTabBtn.classList.remove('analyzing');
+                            document.getElementById('superResearchMessage').textContent = '서버 연결이 불안정합니다. 페이지를 새로고침해주세요.';
+                        }
+                        return;
+                    }
+
+                    // 성공 시 에러 카운터 리셋
+                    superResearchErrorCount = 0;
+
                     const data = await response.json();
                     console.log('[SuperResearch] 상태:', data.status, 'progress:', data.progress);
 
@@ -6982,7 +7658,16 @@
                         superResearchTabBtn.classList.remove('analyzing');
                     }
                 } catch (error) {
-                    console.error('[SuperResearch] 상태 확인 오류:', error);
+                    superResearchErrorCount++;
+                    console.error(`[SuperResearch] 상태 확인 오류 (${superResearchErrorCount}/${SUPER_RESEARCH_MAX_ERRORS}):`, error);
+                    if (superResearchErrorCount >= SUPER_RESEARCH_MAX_ERRORS) {
+                        clearInterval(superResearchCheckInterval);
+                        superResearchCheckInterval = null;
+                        const superResearchTabBtn = document.getElementById('superResearchTabBtn');
+                        superResearchTabBtn.textContent = '기업 리서치';
+                        superResearchTabBtn.classList.remove('analyzing');
+                        document.getElementById('superResearchMessage').textContent = '서버 연결이 불안정합니다. 페이지를 새로고침해주세요.';
+                    }
                 }
             }, 3000);  // 3초마다 확인
         }
@@ -7007,6 +7692,9 @@
             document.getElementById('superResearchProgress').style.display = 'none';
             document.getElementById('superResearchHeader').style.display = 'flex';
             document.getElementById('superResearchResult').style.display = 'block';
+
+            // 챗봇 컨텍스트 업데이트
+            updateChatbotContext();
 
             // 결과 렌더링 (JSON → HTML)
             const resultContainer = document.getElementById('superResearchResult');
@@ -7308,11 +7996,12 @@
             statusEl.style.display = '';
             statusEl.className = 'analysis-status failed';
 
-            // VCM 서브탭 버튼 원복
+            // VCM 서브탭 버튼 원복 + 활성화 (에러도 보이도록)
             const vcmAiBtn = document.querySelector('.vcm-sub-tab[data-vcm-box="ai"]');
             if (vcmAiBtn) {
                 vcmAiBtn.textContent = '재무분석 AI';
                 vcmAiBtn.classList.remove('analyzing');
+                vcmAiBtn.classList.add('active');
             }
 
             // VCM 서브탭 AI 버튼 툴팁 숨김
@@ -7337,6 +8026,12 @@
             startContainer.style.display = 'block';
             const analyzeBtn = document.getElementById('analyzeBtn');
             analyzeBtn.textContent = '다시 분석하기';
+
+            // Financials VCM에 AI 박스 렌더링 (에러 내용 포함)
+            renderFinancialsVCM();
+
+            // 분석 실패해도 챗봇은 활성화 (재무데이터 기반 질의 가능)
+            setTimeout(() => { initChatbot(); }, 1000);
         }
 
         function markdownToHtml(markdown) {
@@ -7417,20 +8112,38 @@
                 .replace(/\[미검증[^\]]*\]/g, '<span class="badge-unverified">$&</span>')
                 // 마크다운 링크를 HTML 링크로 변환 (출처 URL용)
                 .replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank" class="mna-source-link" title="$2">$1</a>')
+                // 단순 URL을 하이퍼링크로 변환 (href= 안에 있지 않은 것만)
+                .replace(/(?<!="|'>)(https?:\/\/[^\s<)\]"']+)/g, '<a href="$1" target="_blank" class="mna-source-link">$1</a>')
                 // 불릿 리스트 (- 로 통일됨)
                 .replace(/^- (.*$)/gm, '<li>$1</li>')
                 .replace(/^\s+- (.*$)/gm, '<li>$1</li>')
-                // 줄바꿈 - 빈 줄만 단락 구분으로
+                // 줄바꿈 처리
                 .replace(/\n\n+/g, '</p><p>')
-                .replace(/\n/g, ' ');  // 단일 줄바꿈은 공백으로
+                .replace(/\n(\d+)\.\s/g, '</p><p>$1. ')  // 번호 목록 앞 줄바꿈 보존
+                .replace(/\n- /g, '</p><p>- ')             // 불릿 앞 줄바꿈 보존
+                .replace(/\n/g, ' ');
 
-            // 리스트 래핑 - 연속된 li를 ul로 묶기
-            html = html.replace(/(<li>[^<]*<\/li>)(\s*<li>[^<]*<\/li>)*/g, '<ul>$&</ul>');
+            // 번호 매기기 리스트: "1. text" → "<li>text</li>" (헤더로 변환되지 않은 것만)
+            html = html.replace(/(^|<\/p><p>|<\/h[1-6]>|<\/ul>|<\/table>)\s*(\d+)\.\s\s*((?:(?!<\/p>|<h[1-6]|<ul|<table).)+)/g,
+                '$1<ol-li>$3</ol-li>');
+
+            // 연속된 ol-li 사이의 </p><p> 제거 (개별 <ol>로 분리되는 것 방지)
+            html = html.replace(/<\/ol-li>\s*<\/p><p>\s*<ol-li>/g, '</ol-li><ol-li>');
+
+            // 리스트 래핑 - 연속된 li를 ul로 묶기 (HTML 내용 포함)
+            html = html.replace(/((?:\s*<li>[\s\S]*?<\/li>)+)/g, '<ul>$1</ul>');
+
+            // ol 리스트 래핑
+            html = html.replace(/((?:\s*<ol-li>[\s\S]*?<\/ol-li>)+)/g, (match) => {
+                return '<ol>' + match.replace(/<ol-li>/g, '<li>').replace(/<\/ol-li>/g, '</li>') + '</ol>';
+            });
 
             // 불필요한 빈 p 태그 제거
             html = html.replace(/<p>\s*<\/p>/g, '');
-            html = html.replace(/<p>\s*<(h[1-6]|ul|table)/g, '<$1');
-            html = html.replace(/<\/(h[1-6]|ul|table)>\s*<\/p>/g, '</$1>');
+            html = html.replace(/<p>\s*<(h[1-6]|ul|ol|table)/g, '<$1');
+            html = html.replace(/<\/(h[1-6]|ul|ol|table)>\s*<\/p>/g, '</$1>');
+            // p 안에 block 요소가 감싸인 경우 정리
+            html = html.replace(/<p>(\s*<(?:ul|ol|table|h[1-6])[\s\S]*?<\/(?:ul|ol|table|h[1-6])>\s*)<\/p>/g, '$1');
 
             // Mermaid 블록 복원
             mermaidBlocks.forEach((code, index) => {
@@ -7686,7 +8399,7 @@
             // 6. 주요 뉴스/공시
             if (data.news) {
                 html += `<div class="research-section">`;
-                html += `<h3>주요 뉴스 <span style="font-size:12px;font-weight:normal;color:#888;margin-left:8px;">최근 2년 이내 검색 결과.</span></h3>`;
+                html += `<h3>주요 뉴스 <span style="font-size:12px;font-weight:normal;color:#888;margin-left:8px;">최근 5년 이내 검색 결과.</span></h3>`;
                 // 배열 또는 배열-like 객체 모두 안전하게 처리
                 let newsArr = data.news;
                 if (!Array.isArray(newsArr)) {
@@ -7783,6 +8496,9 @@
             stopAnalysisStatusCheck();
             stopHeartbeat();
 
+            // 챗봇 초기화
+            resetChatbot();
+
             // 상태 플래그 초기화
             isExtractionComplete = false;
             isAnalysisStarting = false;
@@ -7807,6 +8523,7 @@
             document.getElementById('resultContainer').classList.remove('expanded');
             document.getElementById('completeSection').classList.remove('show');
             document.getElementById('companyInfoWrapper').style.display = 'none';
+            document.getElementById('mainContainer').classList.add('centered');
             hideError();
 
             // 기업개황정보 초기화
@@ -7877,9 +8594,410 @@
             errorEl.textContent = message;
             errorEl.classList.add('show');
         }
-        
+
         function hideError() {
             document.getElementById('errorMessage').classList.remove('show');
+        }
+
+        // ============================================================
+        // PE 챗봇
+        // ============================================================
+        let chatbotInitialized = false;
+        let chatbotSending = false;
+
+        function toggleCiPanel(panel) {
+            const panels = document.getElementById('ciPanels');
+            const infoBtn = document.querySelector('.ci-tab[data-ci-panel="info"]');
+            const chatBtn = document.querySelector('.ci-tab[data-ci-panel="chat"]');
+            if (!panels || !infoBtn || !chatBtn) return;
+
+            const infoActive = infoBtn.classList.contains('active');
+            const chatActive = chatBtn.classList.contains('active');
+
+            // 숨기기 전에 기업개황 높이 캡처
+            const infoSection = document.getElementById('companyInfoSection');
+            if (infoSection && infoSection.offsetHeight > 0) {
+                panels.style.setProperty('--ci-height', infoSection.offsetHeight + 'px');
+            }
+
+            // 독립 토글: 클릭한 탭만 on/off (단, 최소 1개는 유지)
+            if (panel === 'info') {
+                if (infoActive && chatActive) {
+                    infoBtn.classList.remove('active');
+                } else if (infoActive && !chatActive) {
+                    return;
+                } else {
+                    infoBtn.classList.add('active');
+                }
+            } else if (panel === 'chat') {
+                if (chatActive && infoActive) {
+                    chatBtn.classList.remove('active');
+                } else if (chatActive && !infoActive) {
+                    return;
+                } else {
+                    chatBtn.classList.add('active');
+                }
+            }
+
+            // 상태 반영
+            const nowInfo = infoBtn.classList.contains('active');
+            const nowChat = chatBtn.classList.contains('active');
+
+            panels.classList.remove('expanded-info', 'expanded-chat');
+            if (nowInfo && !nowChat) panels.classList.add('expanded-info');
+            if (nowChat && !nowInfo) panels.classList.add('expanded-chat');
+        }
+
+        function toggleChatFullscreen() {
+            const section = document.getElementById('chatbotSection');
+            const overlay = document.getElementById('chatFullscreenOverlay');
+            const btn = document.getElementById('chatFullscreenBtn');
+            if (!section || !btn) return;
+
+            const isFullscreen = section.classList.toggle('fullscreen-mode');
+            if (overlay) overlay.classList.toggle('active', isFullscreen);
+
+            if (isFullscreen) {
+                btn.innerHTML = '&#x2716; 닫기';
+                document.body.style.overflow = 'hidden';
+            } else {
+                btn.innerHTML = '&#x26F6; 전체 화면';
+                document.body.style.overflow = '';
+            }
+            document.getElementById('chatInput')?.focus();
+        }
+
+        let chatbotInitRetries = 0;
+        const CHATBOT_MAX_RETRIES = 3;
+
+        async function initChatbot() {
+            if (!currentTaskId || chatbotInitialized) return;
+
+            try {
+                const resp = await fetch(`/api/chat/init/${currentTaskId}`, { method: 'POST' });
+                const data = await resp.json();
+
+                if (data.success) {
+                    chatbotInitialized = true;
+                    chatbotInitRetries = 0;
+
+                    // 환영 메시지 업데이트
+                    const messagesEl = document.getElementById('chatbotMessages');
+                    messagesEl.innerHTML = '';
+                    appendChatMessage('assistant', `안녕하세요! **${data.company_name}**의 재무 데이터를 분석할 준비가 되었습니다. PE 관점의 분석이 필요하시면 무엇이든 물어보세요.`);
+
+                    // 추천 질문 렌더링
+                    renderSuggestions(data.suggestions || []);
+
+                    // 챗봇 활성화
+                    const wrapper = document.getElementById('companyInfoWrapper');
+                    wrapper.classList.add('with-chatbot');
+                    document.getElementById('chatbotSection').style.display = 'flex';
+                    document.getElementById('ciTabs').classList.add('show');
+                    document.getElementById('chatbotStatus').textContent = '준비 완료';
+
+                    // AI 어시스턴트 탭 버튼 활성화
+                    const chatTabBtn = document.querySelector('.ci-tab[data-ci-panel="chat"]');
+                    if (chatTabBtn) {
+                        chatTabBtn.disabled = false;
+                        chatTabBtn.style.opacity = '';
+                        chatTabBtn.style.cursor = '';
+                        chatTabBtn.classList.add('active');
+                    }
+
+                    // expanded-info 해제 (양쪽 패널 표시)
+                    const ciPanels = document.getElementById('ciPanels');
+                    if (ciPanels) {
+                        ciPanels.classList.remove('expanded-info');
+                    }
+
+                    // 기업개황 높이 캡처 (챗봇 높이 동기화)
+                    const infoSection = document.getElementById('companyInfoSection');
+                    if (ciPanels && infoSection) {
+                        ciPanels.style.setProperty('--ci-height', infoSection.offsetHeight + 'px');
+                        // 기업개황 높이 변경 시 자동 동기화
+                        new ResizeObserver(() => {
+                            if (infoSection.offsetHeight > 0) {
+                                ciPanels.style.setProperty('--ci-height', infoSection.offsetHeight + 'px');
+                            }
+                        }).observe(infoSection);
+                    }
+
+                    // VCM wrapper 너비에 맞추기
+                    syncWrapperWidth();
+                } else {
+                    // 서버 응답은 있지만 실패 → 재시도
+                    chatbotInitRetries++;
+                    if (chatbotInitRetries < CHATBOT_MAX_RETRIES) {
+                        console.warn(`[Chatbot] 초기화 실패, ${chatbotInitRetries}/${CHATBOT_MAX_RETRIES} 재시도 (5초 후)`);
+                        setTimeout(() => { initChatbot(); }, 5000);
+                    }
+                }
+            } catch (e) {
+                console.error('[Chatbot] 초기화 실패:', e);
+                // 네트워크 오류 시 재시도
+                chatbotInitRetries++;
+                if (chatbotInitRetries < CHATBOT_MAX_RETRIES) {
+                    console.warn(`[Chatbot] 네트워크 오류, ${chatbotInitRetries}/${CHATBOT_MAX_RETRIES} 재시도 (5초 후)`);
+                    setTimeout(() => { initChatbot(); }, 5000);
+                }
+            }
+        }
+
+        function syncWrapperWidth() {
+            const vcmWrapper = document.querySelector('.vcm-wrapper');
+            const wrapper = document.getElementById('companyInfoWrapper');
+            if (vcmWrapper && wrapper) {
+                const vcmWidth = vcmWrapper.offsetWidth;
+                if (vcmWidth > 0) {
+                    wrapper.style.width = vcmWidth + 'px';
+                }
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            if (chatbotInitialized) syncWrapperWidth();
+        });
+
+        function renderSuggestions(suggestions) {
+            const container = document.getElementById('chatbotSuggestions');
+            container.innerHTML = '';
+            suggestions.forEach(text => {
+                const btn = document.createElement('button');
+                btn.className = 'suggestion-btn';
+                btn.textContent = text;
+                btn.onclick = () => {
+                    document.getElementById('chatInput').value = text;
+                    sendChatMessage();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function appendChatMessage(role, content) {
+            const messagesEl = document.getElementById('chatbotMessages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `chat-message ${role}`;
+
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'chat-bubble';
+
+            if (role === 'assistant') {
+                bubbleDiv.innerHTML = markdownToHtml(content);
+            } else {
+                bubbleDiv.textContent = content;
+            }
+
+            msgDiv.appendChild(bubbleDiv);
+            messagesEl.appendChild(msgDiv);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            return bubbleDiv;
+        }
+
+        function appendChatStatus(text) {
+            const messagesEl = document.getElementById('chatbotMessages');
+            const statusDiv = document.createElement('div');
+            statusDiv.className = 'chat-status-msg';
+            statusDiv.id = 'chatStatusMsg';
+            statusDiv.innerHTML = `${text} <span class="status-dots"><span></span><span></span><span></span></span>`;
+            messagesEl.appendChild(statusDiv);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            return statusDiv;
+        }
+
+        function removeChatStatus() {
+            const el = document.getElementById('chatStatusMsg');
+            if (el) el.remove();
+        }
+
+        function showTypingIndicator() {
+            const messagesEl = document.getElementById('chatbotMessages');
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'chat-message assistant';
+            typingDiv.id = 'chatTypingIndicator';
+            typingDiv.innerHTML = '<div class="chat-typing-indicator"><span></span><span></span><span></span></div>';
+            messagesEl.appendChild(typingDiv);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        function removeTypingIndicator() {
+            const el = document.getElementById('chatTypingIndicator');
+            if (el) el.remove();
+        }
+
+        function handleChatKeydown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage();
+            }
+            if (e.key === 'Escape') {
+                const section = document.getElementById('chatbotSection');
+                if (section && section.classList.contains('fullscreen-mode')) {
+                    toggleChatFullscreen();
+                }
+            }
+        }
+
+        async function sendChatMessage() {
+            if (chatbotSending || !chatbotInitialized || !currentTaskId) return;
+
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            chatbotSending = true;
+            input.value = '';
+            input.style.height = 'auto';
+            document.getElementById('chatSendBtn').disabled = true;
+            document.getElementById('chatbotStatus').textContent = '응답 중...';
+
+            // 추천 질문 숨기기
+            document.getElementById('chatbotSuggestions').innerHTML = '';
+
+            // 사용자 메시지 표시
+            appendChatMessage('user', message);
+
+            // 타이핑 인디케이터
+            showTypingIndicator();
+
+            try {
+                const resp = await fetch(`/api/chat/message/${currentTaskId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+
+                if (!resp.ok) {
+                    throw new Error(`HTTP ${resp.status}`);
+                }
+
+                // SSE 스트리밍 처리 (타이핑 인디케이터는 첫 토큰까지 유지)
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let assistantBubble = null;
+                let fullText = '';
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const jsonStr = line.slice(6).trim();
+                        if (!jsonStr) continue;
+
+                        try {
+                            const event = JSON.parse(jsonStr);
+
+                            if (event.type === 'classify') {
+                                removeTypingIndicator();
+                                const typeMap = { default: '🔍 분석 중...', search: '🌐 검색 중...' };
+                                const statusMsg = typeMap[event.content] || '응답 중...';
+                                document.getElementById('chatbotStatus').textContent = statusMsg;
+                                appendChatStatus(statusMsg);
+                            } else if (event.type === 'status') {
+                                removeChatStatus();
+                                appendChatStatus(event.content);
+                            } else if (event.type === 'search_start') {
+                                removeChatStatus();
+                                appendChatStatus('웹 검색 중...');
+                            } else if (event.type === 'search_done') {
+                                removeChatStatus();
+                                appendChatStatus('검색 결과 분석 중...');
+                            } else if (event.type === 'token') {
+                                if (!assistantBubble) {
+                                    removeChatStatus();
+                                    removeTypingIndicator();
+                                    assistantBubble = appendChatMessage('assistant', '');
+                                }
+                                fullText += event.content;
+                                // 스트리밍 중 렌더링 스로틀 (테이블 깨짐 방지)
+                                if (!assistantBubble._renderPending) {
+                                    assistantBubble._renderPending = true;
+                                    requestAnimationFrame(() => {
+                                        assistantBubble.innerHTML = markdownToHtml(fullText);
+                                        assistantBubble._renderPending = false;
+                                        const messagesEl = document.getElementById('chatbotMessages');
+                                        messagesEl.scrollTop = messagesEl.scrollHeight;
+                                    });
+                                }
+                            } else if (event.type === 'references') {
+                                // 참고 자료 접이식 추가
+                                if (assistantBubble && event.content && event.content.length > 0) {
+                                    const refsHtml = event.content.map((ref, i) => {
+                                        const domain = new URL(ref.url).hostname.replace('www.', '');
+                                        const title = ref.title || domain;
+                                        return `<div class="ref-item"><span class="ref-num">[${i+1}]</span><a href="${ref.url}" target="_blank" title="${ref.url}">${title}</a></div>`;
+                                    }).join('');
+                                    const detailsEl = document.createElement('details');
+                                    detailsEl.className = 'chat-references';
+                                    detailsEl.innerHTML = `<summary>참고 자료 (${event.content.length}건)</summary><div class="ref-list">${refsHtml}</div>`;
+                                    assistantBubble.appendChild(detailsEl);
+                                }
+                            } else if (event.type === 'error') {
+                                removeChatStatus();
+                                removeTypingIndicator();
+                                appendChatMessage('assistant', `오류가 발생했습니다: ${event.content}`);
+                            } else if (event.type === 'done') {
+                                removeChatStatus();
+                                // 최종 렌더링 (스트리밍 중 누락분 보정)
+                                if (assistantBubble && fullText) {
+                                    assistantBubble.innerHTML = markdownToHtml(fullText);
+                                }
+                            }
+                        } catch (parseErr) {
+                            // JSON 파싱 실패 무시
+                        }
+                    }
+                }
+            } catch (e) {
+                removeTypingIndicator();
+                removeChatStatus();
+                appendChatMessage('assistant', `연결 오류가 발생했습니다. 다시 시도해주세요.`);
+                console.error('[Chatbot] 전송 실패:', e);
+            } finally {
+                chatbotSending = false;
+                document.getElementById('chatSendBtn').disabled = false;
+                document.getElementById('chatbotStatus').textContent = '준비 완료';
+            }
+        }
+
+        // 챗봇 컨텍스트 업데이트 (AI 분석/리서치 완료 후)
+        async function updateChatbotContext() {
+            if (!chatbotInitialized || !currentTaskId) return;
+            try {
+                const resp = await fetch(`/api/chat/update-context/${currentTaskId}`, { method: 'POST' });
+                const data = await resp.json();
+                if (data.success && data.suggestions) {
+                    renderSuggestions(data.suggestions);
+                }
+            } catch (e) {
+                console.error('[Chatbot] 컨텍스트 업데이트 실패:', e);
+            }
+        }
+
+        // 리셋 시 챗봇 정리
+        function resetChatbot() {
+            chatbotInitialized = false;
+            chatbotSending = false;
+            document.getElementById('chatbotSection').style.display = 'none';
+            const ciWrapper = document.getElementById('companyInfoWrapper');
+            ciWrapper.classList.remove('with-chatbot');
+            ciWrapper.style.width = '';
+            document.getElementById('chatbotMessages').innerHTML = '';
+            document.getElementById('chatbotSuggestions').innerHTML = '';
+            document.getElementById('chatbotStatus').textContent = '대기 중';
+            // 탭 리셋
+            const ciTabs = document.getElementById('ciTabs');
+            if (ciTabs) ciTabs.classList.remove('show');
+            const ciPanels = document.getElementById('ciPanels');
+            if (ciPanels) ciPanels.classList.remove('expanded-info', 'expanded-chat');
+            document.querySelectorAll('.ci-tab').forEach(t => t.classList.add('active'));
         }
     </script>
 </body>

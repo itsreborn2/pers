@@ -49,8 +49,11 @@ from firecrawl import FirecrawlApp
 # 환경변수 로드
 load_dotenv()
 
-# Gemini 클라이언트 초기화
-gemini_client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
+# Gemini 클라이언트 초기화 (타임아웃 300초 설정)
+gemini_client = genai.Client(
+    api_key=os.getenv('GEMINI_API_KEY'),
+    http_options=types.HttpOptions(timeout=300000)
+)
 
 # Firecrawl 클라이언트 초기화
 firecrawl_client = FirecrawlApp(api_key=os.getenv('FIRECRAWL_API_KEY'))
@@ -60,7 +63,7 @@ MODEL_PRO = "gemini-3-pro-preview"
 MODEL_FLASH = "gemini-3-flash-preview"
 
 # 재시도 설정
-MAX_RETRIES = 3
+MAX_RETRIES = 5
 INITIAL_RETRY_DELAY = 15
 
 
@@ -85,7 +88,7 @@ def generate_with_retry(client_obj, model: str, contents, config=None, max_retri
             error_str = str(e)
             last_error = e
 
-            if '429' in error_str or 'RESOURCE_EXHAUSTED' in error_str:
+            if '429' in error_str or 'RESOURCE_EXHAUSTED' in error_str or '503' in error_str or 'UNAVAILABLE' in error_str:
                 retry_match = re.search(r'retry.?in.?(\d+(?:\.\d+)?)', error_str.lower())
                 if retry_match:
                     wait_time = float(retry_match.group(1)) + 1
@@ -138,14 +141,14 @@ class BusinessSearchResult:
 
 @dataclass
 class DisclosureResult:
-    """공시 검색 결과 (최근 2년)"""
+    """공시 검색 결과 (최근 5년)"""
     disclosure_items: List[Dict[str, str]] = field(default_factory=list)
     summary: str = ""
 
 
 @dataclass
 class MajorNewsResult:
-    """주요 뉴스 검색 결과 (최근 2년)"""
+    """주요 뉴스 검색 결과 (최근 5년)"""
     news_items: List[str] = field(default_factory=list)  # 중복 제거된 뉴스 리스트
     raw_news: str = ""  # 정리된 뉴스 텍스트 (보고서용)
 
@@ -182,7 +185,7 @@ class Step2Result:
     company: CompanyInput
     business: BusinessSearchResult
     disclosure: DisclosureResult
-    major_news: MajorNewsResult = field(default_factory=MajorNewsResult)  # 주요 뉴스 (2년)
+    major_news: MajorNewsResult = field(default_factory=MajorNewsResult)  # 주요 뉴스 (5년)
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
@@ -280,17 +283,59 @@ class SuperResearchPipeline:
         'pstatic.net',
     }
 
-    def _filter_search_results(self, items: list, company_name: str = '') -> List[dict]:
-        """검색 결과에서 중복 제거 + 불필요한 URL 필터링
+    @staticmethod
+    def _extract_year_from_url(url: str) -> Optional[int]:
+        """URL 경로에서 연도를 추출 (뉴스 URL에 흔히 포함됨)
+        예: /news/2018/03/... → 2018
+            /article/20180315... → 2018
+            /news/articleView.html?idxno=12345 → None (추출 불가)
+        """
+        import re
+        path = url.split('?')[0]  # 쿼리스트링 제거
+        # 패턴 1: /2021/ 또는 /2021- 형태
+        m = re.search(r'/(\d{4})[-/]', path)
+        if m:
+            year = int(m.group(1))
+            if 2000 <= year <= 2030:
+                return year
+        # 패턴 2: /20210315 또는 /article/2021... 형태 (8자리 날짜)
+        m = re.search(r'/(\d{4})\d{2,4}', path)
+        if m:
+            year = int(m.group(1))
+            if 2000 <= year <= 2030:
+                return year
+        return None
+
+    @staticmethod
+    def _extract_year_from_date(date_str: str) -> Optional[int]:
+        """날짜 문자열에서 연도 추출
+        예: '2018-03-15' → 2018, '2018.03' → 2018, '3 hours ago' → None
+        """
+        import re
+        if not date_str:
+            return None
+        m = re.search(r'(20\d{2})', date_str)
+        if m:
+            year = int(m.group(1))
+            if 2000 <= year <= 2030:
+                return year
+        return None
+
+    def _filter_search_results(self, items: list, company_name: str = '', max_age_years: int = 0) -> List[dict]:
+        """검색 결과에서 중복 제거 + 불필요한 URL 필터링 + 날짜 필터링
 
         Args:
             items: Firecrawl 검색 결과 아이템 리스트 (Pydantic 모델)
             company_name: 회사명 (관련성 필터링용, 빈 문자열이면 스킵)
+            max_age_years: 최대 허용 연수 (0이면 날짜 필터 비활성)
 
         Returns:
-            [{'url': str, 'title': str, 'desc': str}, ...] 필터링된 결과
+            [{'url': str, 'title': str, 'desc': str, 'date': str}, ...] 필터링된 결과
         """
         from urllib.parse import urlparse
+
+        current_year = datetime.now().year
+        min_year = current_year - max_age_years if max_age_years > 0 else 0
 
         seen_urls = set()
         seen_titles = set()
@@ -346,6 +391,18 @@ class SuperResearchPipeline:
                     continue
 
             date = getattr(item, 'date', None) or ''
+
+            # 날짜 필터링 (max_age_years > 0일 때만)
+            if min_year > 0:
+                # 1순위: Firecrawl date 필드에서 연도 추출
+                year = self._extract_year_from_date(date)
+                # 2순위: URL 경로에서 연도 추출
+                if year is None:
+                    year = self._extract_year_from_url(url)
+                # 연도를 알 수 있고, 기준 연도보다 오래된 경우 제외
+                if year is not None and year < min_year:
+                    continue
+
             filtered.append({'url': url, 'title': title or '', 'desc': desc or '', 'date': date})
 
         return filtered
@@ -366,7 +423,7 @@ class SuperResearchPipeline:
                     url,
                     formats=["markdown"],
                     only_main_content=True,
-                    timeout=15000
+                    timeout=30000
                 )
                 title = getattr(doc.metadata, 'title', '') if doc.metadata else ''
                 content = (doc.markdown or '')[:max_chars]
@@ -609,17 +666,17 @@ class SuperResearchPipeline:
             return BusinessSearchResult(raw_business="", source="error")
 
     async def _search_disclosure(self, company: CompanyInput) -> DisclosureResult:
-        """Firecrawl 검색 → 본문 크롤링 → Gemini 분석으로 공시/뉴스 파악 (최근 2년)"""
+        """Firecrawl 검색 → 본문 크롤링 → Gemini 분석으로 공시/뉴스 파악 (최근 5년)"""
         current_year = datetime.now().year
 
         try:
-            # 2년 전 날짜 계산
+            # 5년 전 날짜 계산
             from datetime import timedelta
-            two_years_ago = datetime.now() - timedelta(days=730)
+            five_years_ago = datetime.now() - timedelta(days=1825)
             today = datetime.now()
-            date_range = f"cdr:1,cd_min:{two_years_ago.strftime('%m/%d/%Y')},cd_max:{today.strftime('%m/%d/%Y')}"
+            date_range = f"cdr:1,cd_min:{five_years_ago.strftime('%m/%d/%Y')},cd_max:{today.strftime('%m/%d/%Y')}"
 
-            # Firecrawl 뉴스 검색 (최근 2년)
+            # Firecrawl 뉴스 검색 (최근 5년)
             search_results = self.firecrawl.search(
                 query=f"{company.corp_name} 공시 인수 합병 투자 임원 지배구조",
                 limit=15,
@@ -628,7 +685,7 @@ class SuperResearchPipeline:
 
             # 검색 결과 수집 → 중복 제거 + 불필요 URL 필터링
             raw_items = search_results.web[:15] if search_results and search_results.web else []
-            filtered = self._filter_search_results(raw_items, company_name=company.corp_name)
+            filtered = self._filter_search_results(raw_items, company_name=company.corp_name, max_age_years=5)
 
             print(f"  → Firecrawl 공시/뉴스 검색 완료: {len(raw_items)}건 → 필터 후 {len(filtered)}건")
 
@@ -657,7 +714,7 @@ class SuperResearchPipeline:
             prompt = f"""다음은 {company.corp_name}의 공시/뉴스 관련 기사입니다. 기사 본문에 실제로 언급된 내용만 기반으로 중요한 공시/뉴스를 추출해주세요.
 
 기업명: {company.corp_name}
-검색 기간: {current_year - 2}년 ~ {current_year}년 (최근 2년)
+검색 기간: {current_year - 5}년 ~ {current_year}년 (최근 5년)
 
 ## 기사 내용
 {context}
@@ -702,15 +759,15 @@ class SuperResearchPipeline:
             return DisclosureResult()
 
     async def _search_major_news(self, company: CompanyInput) -> MajorNewsResult:
-        """Firecrawl 뉴스 검색 → 중복/불필요 필터링 → 본문 크롤링 → Gemini 분석 (최근 2년)"""
+        """Firecrawl 뉴스 검색 → 중복/불필요 필터링 → 본문 크롤링 → Gemini 분석 (최근 5년)"""
         try:
             all_items = []  # Firecrawl 검색 결과 원본
 
-            # 2년 전 날짜 계산
+            # 5년 전 날짜 계산
             from datetime import timedelta
-            two_years_ago = datetime.now() - timedelta(days=730)
+            five_years_ago = datetime.now() - timedelta(days=1825)
             today = datetime.now()
-            date_range = f"cdr:1,cd_min:{two_years_ago.strftime('%m/%d/%Y')},cd_max:{today.strftime('%m/%d/%Y')}"
+            date_range = f"cdr:1,cd_min:{five_years_ago.strftime('%m/%d/%Y')},cd_max:{today.strftime('%m/%d/%Y')}"
 
             # 회사명에서 (주), ㈜ 제거
             clean_name = company.corp_name.replace('(주)', '').replace('㈜', '').strip()
@@ -781,8 +838,8 @@ class SuperResearchPipeline:
                 elif isinstance(result, list):
                     all_items.extend(result)
 
-            # 1단계: 중복 제거 + 불필요 URL 필터링 (회사명 관련성 포함)
-            filtered = self._filter_search_results(all_items, company_name=company.corp_name)
+            # 1단계: 중복 제거 + 불필요 URL 필터링 (회사명 관련성 + 5년 이내)
+            filtered = self._filter_search_results(all_items, company_name=company.corp_name, max_age_years=5)
 
             print(f"  → Firecrawl 주요뉴스 병렬검색 완료: {len(search_tasks)}개 쿼리, {len(all_items)}건 → 필터 후 {len(filtered)}건")
 
@@ -1743,7 +1800,7 @@ Return JSON array only (no comments):"""
 ### 해외 M&A 사례
 {mna_intl_text if mna_intl_text else ''}
 
-### 주요 뉴스 (2년)
+### 주요 뉴스 (5년)
 {major_news_text if major_news_text else ''}
 
 ---

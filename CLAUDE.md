@@ -434,9 +434,40 @@ excludes = ['유동성', '유동', '전환']  # 기존 유지 + 새 조건 추�
 ├── dart_financial_extractor.py  # 재무제표 추출 모듈 (복잡)
 ├── dart_company_info.py         # 기업개황정보 전용 모듈 (경량)
 ├── financial_insight_analyzer.py # 재무분석 AI 분석 모듈
+├── pe_chatbot.py                # PE 전문 AI 챗봇 모듈
 ├── output/                      # 생성된 Excel 파일
 └── CLAUDE.md                    # 이 파일
 ```
+
+---
+
+## 주석(Footnotes) 데이터
+
+### 개요
+DART 재무제표 주석 데이터를 백엔드에서 처리. **프론트엔드 탭은 미구현 (데이터가 너무 방대하여 롤백).**
+엑셀 저장과 API 응답에는 포함되어 있음.
+
+### 데이터 흐름
+1. **추출**: `fs_data['notes']` → `{'is_notes': [], 'bs_notes': [], 'cf_notes': []}` (각 항목: `{name, df, consolidated}`)
+2. **서버**: `preview_data['notes']` → 각 주석을 `{title, type, consolidated, source, data}` 형태로 변환 (FY + 계정과목 컬럼만)
+3. **프론트**: 미사용 (프론트엔드 탭 롤백됨)
+4. **엑셀**: 기존대로 `손익주석1`, `재무주석1`, `현금주석1` 시트로 저장 (변경 없음)
+
+### VCM 서브탭 순서
+| 인덱스 | 탭 | data-vcm-box | 기본 상태 |
+|--------|-----|-------------|-----------|
+| 0 | 재무상태표 | bs | active |
+| 1 | 손익계산서 | is | active |
+| 2 | 재무분석 AI | ai | inactive |
+
+### 관련 코드
+- `server.py` line ~1173: `preview_data['notes']` 생성 (API 응답에 포함)
+
+### 기업 리서치 공시 제거
+- `super_research_pipeline.py`: `step2_parallel_search()`에서 `_search_disclosure()` 호출 제거
+- Step5 프롬프트에서 "최근 공시" 섹션 제거
+- 뉴스 JSON에서 `type` 필드 제거 (공시/뉴스 구분 불필요)
+- 프론트엔드: "주요 뉴스/공시" → "주요 뉴스"로 변경
 
 ---
 
@@ -561,6 +592,54 @@ LLM을 활용하여 재무제표의 이상 패턴을 감지하고, 웹 검색을
 - 차입금/부채 급변
 - 운전자본(NWC) 이상 변동
 - 영업외비용 급증 (과징금, 소송 등)
+
+---
+
+## PE 전용 AI 챗봇
+
+### 개요
+DART 재무제표 추출 완료 후 기업개황정보 우측에 활성화되는 PE 전문 AI 챗봇.
+기업개황 + VCM/IS/BS/CF 재무데이터를 컨텍스트로 주입하여 할루시네이션 없는 정확한 답변 제공.
+
+### 아키텍처
+```
+[질문 입력]
+     ↓
+[LLM 분류] (Flash) → simple / complex / search
+     ↓
+[simple] Flash 단일 에이전트 → 즉시 응답
+[complex] 3-에이전트 병렬:
+  ├── Financial Analyst (Flash): 재무 정량 분석
+  ├── Market Researcher (Flash + Firecrawl): 웹 검색 + 시장 조사
+  └── PE Advisor (Pro): 종합 → 최종 답변
+[search] Firecrawl 검색 → Flash 응답
+     ↓
+[SSE 스트리밍] → 프론트엔드 타이핑 효과
+```
+
+### 관련 파일
+- `pe_chatbot.py`: PEChatbot 클래스 (시스템 프롬프트, 재무 컨텍스트, 검색, 멀티에이전트)
+- `server.py`: 챗봇 API 엔드포인트 4개
+- `index.html`: 챗봇 UI (CSS + HTML + JS)
+
+### API 엔드포인트
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/chat/init/{task_id}` | 챗봇 세션 초기화 |
+| POST | `/api/chat/message/{task_id}` | 메시지 전송 (SSE 스트리밍) |
+| GET | `/api/chat/history/{task_id}` | 대화 내역 조회 |
+| POST | `/api/chat/update-context/{task_id}` | AI분석/리서치 완료 후 컨텍스트 업데이트 |
+
+### UI 레이아웃
+- 추출 완료 시 `#companyInfoWrapper`가 flex 레이아웃으로 전환
+- 좌측: 기업개황정보 (420px 고정)
+- 우측: AI 챗봇 (나머지 공간, min 320px)
+- 900px 이하: column 방향 (아래로 이동)
+
+### 메모리 관리
+- `task['chatbot']`에 PEChatbot 인스턴스 저장
+- 챗봇 활성화 시 `preview_data` cleanup 방지 (`'chatbot' not in task` 조건)
+- 대화 최대 50턴 → 오래된 대화 자동 제거
 
 ---
 

@@ -66,8 +66,8 @@ MODEL_FLASH = "gemini-3-flash-preview"  # Flash 모델 (빠른 처리)
 MODEL_RESEARCH = "gemini-3-pro-preview"  # 리서치 모델 (검색 + 분석)
 
 # 재시도 설정
-MAX_RETRIES = 3
-INITIAL_RETRY_DELAY = 15  # 초
+MAX_RETRIES = 5
+INITIAL_RETRY_DELAY = 10  # 초
 
 import time
 import re
@@ -278,6 +278,11 @@ def generate_with_retry(client_obj, model: str, contents, config=None, max_retri
 
                 print(f"{label}[Rate Limit] 429 에러. {wait_time:.1f}초 후 재시도 (시도 {attempt + 1}/{max_retries})")
                 time.sleep(wait_time)
+            # 503 UNAVAILABLE 에러 (일시적 서버 과부하)
+            elif '503' in error_str or 'UNAVAILABLE' in error_str:
+                wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)
+                print(f"{label}[503 Unavailable] {wait_time:.1f}초 후 재시도 (시도 {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
             # 타임아웃 에러 (httpx ReadTimeout 등)
             elif 'timeout' in error_str.lower() or 'ReadTimeout' in error_str or 'ConnectTimeout' in error_str:
                 wait_time = 10 * (attempt + 1)
@@ -418,6 +423,10 @@ class FinancialInsightAnalyzer:
             financial_data, company_info, industry_info,
             anomalies, search_results, notes_data
         )
+
+        # 보고서 생성 실패 시 조기 종료 (503 등)
+        if report.startswith("보고서 생성 실패"):
+            raise Exception(report)
 
         # 7단계: 수치 검증 (Solution D)
         update(85, '[7/8] 수치 검증 중')
