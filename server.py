@@ -1326,6 +1326,39 @@ async def extract_financial_data(
                 import traceback
                 print(f"[EXTRACT] VCM 오류 상세:\n{traceback.format_exc()}")
 
+        # ★ 사용자 요청 년도 범위에 맞게 FY 컬럼 필터링
+        req_start = task.get('start_year')
+        req_end = task.get('end_year')
+        if req_start and req_end:
+            def filter_fy_columns(rows, sy, ey):
+                """preview_data의 행 리스트에서 요청 범위 밖의 FY 컬럼 제거"""
+                if not rows:
+                    return rows
+                filtered = []
+                for row in rows:
+                    new_row = {}
+                    for k, v in row.items():
+                        if k.startswith('FY'):
+                            try:
+                                yr = int(k[2:])
+                                if sy <= yr <= ey:
+                                    new_row[k] = v
+                            except:
+                                new_row[k] = v
+                        else:
+                            new_row[k] = v
+                    filtered.append(new_row)
+                return filtered
+
+            for key in ['vcm', 'vcm_display', 'bs', 'is', 'cis', 'cf']:
+                if key in task.get('preview_data', {}):
+                    data = task['preview_data'][key]
+                    if isinstance(data, list) and data:
+                        # bs/is/cis/cf는 FY 컬럼이 딕셔너리 안에 있음
+                        task['preview_data'][key] = filter_fy_columns(data, req_start, req_end)
+
+            print(f"[EXTRACT] FY 컬럼 필터링 적용: FY{req_start}~FY{req_end}")
+
         # ★ 모든 데이터 준비 완료 후 completed_at 설정 (TTL 카운트다운 시작점)
         task['completed_at'] = time.time()
         print(f"[EXTRACT] 추출 완료: {corp_name} (completed_at 설정)")
