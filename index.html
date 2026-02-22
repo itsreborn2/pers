@@ -2996,7 +2996,30 @@
 
         .chat-message {
             display: flex;
+            flex-direction: column;
             max-width: 90%;
+        }
+
+        .chat-copy-btn {
+            align-self: flex-start;
+            background: none;
+            border: 1px solid var(--border-light);
+            border-radius: 6px;
+            padding: 2px 8px;
+            font-size: 0.7rem;
+            color: var(--text-light);
+            cursor: pointer;
+            margin-top: 4px;
+            transition: all 0.15s;
+        }
+        .chat-copy-btn:hover {
+            background: var(--bg-secondary);
+            color: var(--text-medium);
+            border-color: var(--border-medium);
+        }
+        .chat-copy-btn.copied {
+            color: var(--primary);
+            border-color: var(--primary);
         }
 
         .chat-message.user {
@@ -8823,6 +8846,25 @@
             }
 
             msgDiv.appendChild(bubbleDiv);
+
+            if (role === 'assistant') {
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'chat-copy-btn';
+                copyBtn.textContent = '복사';
+                copyBtn.onclick = () => {
+                    const text = bubbleDiv.innerText;
+                    navigator.clipboard.writeText(text).then(() => {
+                        copyBtn.textContent = '복사됨';
+                        copyBtn.classList.add('copied');
+                        setTimeout(() => {
+                            copyBtn.textContent = '복사';
+                            copyBtn.classList.remove('copied');
+                        }, 2000);
+                    });
+                };
+                msgDiv.appendChild(copyBtn);
+            }
+
             messagesEl.appendChild(msgDiv);
             messagesEl.scrollTop = messagesEl.scrollHeight;
             return bubbleDiv;
