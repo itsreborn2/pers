@@ -2837,10 +2837,20 @@ def create_vcm_format(fs_data, excel_filepath=None):
         if isinstance(c, tuple) and len(c) >= 2:
             date_part = c[0]
             if isinstance(date_part, str) and '-' in date_part and len(date_part) == 17:
-                # '20240101-20241231' 형식 - 연결재무제표만 사용
-                if '연결' in str(c[1]):
+                # '20240101-20241231' 형식 - 연결재무제표 우선, 없으면 별도재무제표
+                col_label = str(c[1])
+                if '연결' in col_label or '별도' in col_label or 'Separate' in col_label or 'Consolidated' in col_label:
                     year = date_part[:4]
-                    fy_col_map[c] = f'FY{year}'
+                    fy_key = f'FY{year}'
+                    # 연결이 이미 있으면 별도는 건너뜀
+                    if fy_key in fy_col_map.values() and '별도' in col_label:
+                        continue
+                    # 별도가 있는데 연결이 들어오면 교체
+                    if '연결' in col_label:
+                        existing = [k for k, v in fy_col_map.items() if v == fy_key]
+                        for ek in existing:
+                            del fy_col_map[ek]
+                    fy_col_map[c] = fy_key
                     is_xbrl = True
 
     # 3) XBRL 데이터 감지 (정규화된 경우 또는 튜플 컬럼인 경우)
@@ -2884,16 +2894,33 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 date_part = c[0]
                 # BS는 특정 시점 (20241231 형식) 또는 기간 (20240101-20241231 형식) 모두 가능
                 if isinstance(date_part, str):
+                    col_label = str(c[1])
+                    is_consolidated = '연결' in col_label or 'Consolidated' in col_label
+                    is_separate = '별도' in col_label or 'Separate' in col_label
+                    if not (is_consolidated or is_separate):
+                        continue
                     if '-' in date_part and len(date_part) == 17:
-                        # '20240101-20241231' 형식 - 연결재무제표만 사용
-                        if '연결' in str(c[1]):
-                            year = date_part.split('-')[1][:4]  # 종료 연도 사용
-                            bs_fy_col_map[c] = f'FY{year}'
+                        # '20240101-20241231' 형식
+                        year = date_part.split('-')[1][:4]
+                        fy_key = f'FY{year}'
+                        if fy_key in bs_fy_col_map.values() and is_separate:
+                            continue
+                        if is_consolidated:
+                            existing = [k for k, v in bs_fy_col_map.items() if v == fy_key]
+                            for ek in existing:
+                                del bs_fy_col_map[ek]
+                        bs_fy_col_map[c] = fy_key
                     elif len(date_part) == 8 and date_part.isdigit():
                         # '20241231' 형식 (BS 특정 시점)
-                        if '연결' in str(c[1]):
-                            year = date_part[:4]
-                            bs_fy_col_map[c] = f'FY{year}'
+                        year = date_part[:4]
+                        fy_key = f'FY{year}'
+                        if fy_key in bs_fy_col_map.values() and is_separate:
+                            continue
+                        if is_consolidated:
+                            existing = [k for k, v in bs_fy_col_map.items() if v == fy_key]
+                            for ek in existing:
+                                del bs_fy_col_map[ek]
+                        bs_fy_col_map[c] = fy_key
         print(f"[VCM] BS 연도 컬럼: {list(bs_fy_col_map.values())}")
     else:
         bs_account_col = account_col  # 감사보고서 형식이면 동일
