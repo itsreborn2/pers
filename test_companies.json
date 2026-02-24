@@ -1,0 +1,441 @@
+{
+  "_description": "재무제표 추출 테스트용 기업 리스트. 버그 수정 후 회귀 테스트에 사용.",
+  "_usage": "python3 scripts/test_extraction.py 로 실행하거나, 수동으로 웹에서 검증",
+  "_last_updated": "2026-02-23",
+
+  "listed": {
+    "_description": "상장사 (KOSPI/KOSDAQ/KONEX)",
+    "standard": [
+      {
+        "name": "삼성전자",
+        "corp_code": "00126380",
+        "stock_code": "005930",
+        "market": "KOSPI",
+        "verified": "2026-01",
+        "note": "대기업 표준 케이스 (연결)"
+      },
+      {
+        "name": "E1",
+        "corp_code": "00356361",
+        "stock_code": "017940",
+        "market": "KOSPI",
+        "verified": "2026-01",
+        "note": "매출 하위항목 추출 케이스"
+      },
+      {
+        "name": "아이티엠반도체",
+        "corp_code": "00579980",
+        "stock_code": "084850",
+        "market": "KOSDAQ",
+        "verified": "2026-01-29",
+        "note": "판관비 상세 표시 버그 수정 후 검증"
+      }
+    ],
+    "edge_cases": [
+      {
+        "name": "경동인베스트",
+        "corp_code": "00231567",
+        "stock_code": "012320",
+        "market": "KOSDAQ",
+        "verified": "2026-01",
+        "note": "비유동자산 소계 중복 케이스"
+      },
+      {
+        "name": "이노메트리",
+        "corp_code": "01011888",
+        "stock_code": "302430",
+        "market": "KOSDAQ",
+        "verified": "2026-01",
+        "note": "IS 구조 특성 (영업이익 계산 방식 다름)"
+      },
+      {
+        "name": "콜마홀딩스",
+        "corp_code": "00782886",
+        "stock_code": "024720",
+        "market": "KOSPI",
+        "verified": "2026-01",
+        "note": "판관비 음수"
+      },
+      {
+        "name": "코스맥스엔비티",
+        "corp_code": "00631518",
+        "stock_code": "222040",
+        "market": "KOSDAQ",
+        "verified": "2026-01",
+        "note": "자산총계 불일치 (회사 구조 변경)"
+      },
+      {
+        "name": "영풍",
+        "corp_code": "00128626",
+        "stock_code": "000670",
+        "market": "KOSPI",
+        "verified": "2026-01",
+        "note": "IS 구조 특성 (감가상각비 표시 방식)"
+      },
+      {
+        "name": "패스트캠프",
+        "corp_code": "",
+        "stock_code": "",
+        "market": "KOSDAQ",
+        "verified": "2026-01",
+        "note": "영업손실 괄호 표기 케이스"
+      },
+      {
+        "name": "지에스엔텍",
+        "corp_code": "",
+        "stock_code": "208350",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "note": "별도재무제표만 존재 (연결 없음) — 별도 fallback 수정 계기 기업"
+      }
+    ],
+    "bottom50_small_cap": [
+      {
+        "name": "이앤에치",
+        "corp_code": "01337017",
+        "stock_code": "341310",
+        "market": "KONEX",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": "시총 하위, 별도재무제표"
+      },
+      {
+        "name": "레드우즈",
+        "corp_code": "00990396",
+        "stock_code": "266170",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "연결",
+        "note": ""
+      },
+      {
+        "name": "이노벡스",
+        "corp_code": "01353848",
+        "stock_code": "279060",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": "자본잠식 (자본총계 -2,651M)"
+      },
+      {
+        "name": "로지스몬",
+        "corp_code": "01060735",
+        "stock_code": "223220",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "아퓨어스",
+        "corp_code": "00578130",
+        "stock_code": "149300",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "가이아코퍼레이션",
+        "corp_code": "01229240",
+        "stock_code": "296520",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "연결",
+        "note": ""
+      },
+      {
+        "name": "티엘엔지니어링",
+        "corp_code": "01583953",
+        "stock_code": "413300",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "씨앤에스링크",
+        "corp_code": "01116380",
+        "stock_code": "245450",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": "CIS 없음"
+      },
+      {
+        "name": "유니포인트",
+        "corp_code": "00445869",
+        "stock_code": "121060",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "썬테크",
+        "corp_code": "00963000",
+        "stock_code": "217320",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "연결",
+        "note": "CIS 없음"
+      },
+      {
+        "name": "씨알푸드",
+        "corp_code": "01085187",
+        "stock_code": "236030",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": "CIS 없음"
+      },
+      {
+        "name": "위월드",
+        "corp_code": "00663289",
+        "stock_code": "140660",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "태양기계",
+        "corp_code": "00442631",
+        "stock_code": "116100",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "미래엔에듀파트너",
+        "corp_code": "00876209",
+        "stock_code": "208890",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "연결",
+        "note": ""
+      },
+      {
+        "name": "켈스",
+        "corp_code": "01507722",
+        "stock_code": "402420",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": "자본잠식 (자본총계 -16,780M)"
+      },
+      {
+        "name": "씨앗",
+        "corp_code": "00762377",
+        "stock_code": "103660",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "연결",
+        "note": ""
+      },
+      {
+        "name": "테크트랜스",
+        "corp_code": "01246742",
+        "stock_code": "258050",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "오션스바이오",
+        "corp_code": "01860010",
+        "stock_code": "332190",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "연결",
+        "note": "CIS 없음"
+      },
+      {
+        "name": "더테크놀로지",
+        "corp_code": "00351454",
+        "stock_code": "043090",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "연결",
+        "note": ""
+      },
+      {
+        "name": "큐엠씨",
+        "corp_code": "00816696",
+        "stock_code": "136660",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "메디젠휴먼케어",
+        "corp_code": "01023822",
+        "stock_code": "236340",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "마이크로엔엑스",
+        "corp_code": "01206717",
+        "stock_code": "448780",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "연결",
+        "note": "CIS 없음"
+      },
+      {
+        "name": "팡스카이",
+        "corp_code": "01208821",
+        "stock_code": "266350",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "연결",
+        "note": ""
+      },
+      {
+        "name": "에스제이켐",
+        "corp_code": "01139497",
+        "stock_code": "217910",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "제노텍",
+        "corp_code": "00393618",
+        "stock_code": "066830",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "엔지브이아이",
+        "corp_code": "00521433",
+        "stock_code": "093510",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": "CIS 없음"
+      },
+      {
+        "name": "엘리비젼",
+        "corp_code": "01119651",
+        "stock_code": "276240",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "지앤이헬스케어",
+        "corp_code": "01188749",
+        "stock_code": "299480",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "연결",
+        "note": ""
+      },
+      {
+        "name": "럭스피아",
+        "corp_code": "00578325",
+        "stock_code": "092590",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": "CIS 없음"
+      },
+      {
+        "name": "타이드",
+        "corp_code": "01309069",
+        "stock_code": "346010",
+        "market": "KOSDAQ",
+        "verified": "2026-02-23",
+        "fs_type": "별도",
+        "note": "자본잠식 (자본총계 -4,426M)"
+      }
+    ]
+  },
+
+  "unlisted": {
+    "_description": "비상장사",
+    "verified": [
+      { "name": "유명이앤씨", "corp_code": "01751943", "verified": "2026-01-29", "note": "정상" },
+      { "name": "비케이씨", "corp_code": "01749805", "verified": "2026-01-29", "note": "정상" },
+      { "name": "부산오토갤러리", "corp_code": "01871636", "verified": "2026-01-29", "note": "정상" },
+      { "name": "일문주택개발", "corp_code": "00225539", "verified": "2026-01-29", "note": "정상" },
+      { "name": "삼정시계", "corp_code": "01070671", "verified": "2026-01-29", "note": "정상" },
+      { "name": "국제통신공업", "corp_code": "00965266", "verified": "2026-01-29", "note": "영업손실 괄호 표기" },
+      { "name": "태창철강", "corp_code": "00154231", "verified": "2026-01-29", "note": "영업손실 괄호 표기" },
+      { "name": "지에프에스", "corp_code": "01297940", "verified": "2026-01-29", "note": "자본잠식 + 영업손실" },
+      { "name": "우신이엠시", "corp_code": "00370194", "verified": "2026-01-29", "note": "정상" },
+      { "name": "아이에스에이상운", "corp_code": "01733336", "verified": "2026-01-29", "note": "영업손실 괄호 표기" },
+      { "name": "삼성라이온즈", "corp_code": "00180546", "verified": "2026-01-29", "note": "자본잠식" },
+      { "name": "유성운수", "corp_code": "01474938", "verified": "2026-01-29", "note": "정상" },
+      { "name": "호미곶포항강군", "corp_code": "01226571", "verified": "2026-01-29", "note": "정상" },
+      { "name": "영지테크", "corp_code": "01306266", "verified": "2026-01-29", "note": "정상" },
+      { "name": "부광피앤티", "corp_code": "01840274", "verified": "2026-01-29", "note": "정상" },
+      { "name": "피앤티", "corp_code": "01361838", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "로만시스피앤티", "corp_code": "01580239", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "벽진피앤티(P&T)", "corp_code": "00527774", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "삼화피앤티", "corp_code": "01171563", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "진영피앤티", "corp_code": "00596668", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "피앤티디", "corp_code": "01696284", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "퓨어테크피앤티", "corp_code": "01631384", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "성진피앤티", "corp_code": "00880424", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "대성피앤티", "corp_code": "01758034", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "대륙상운", "corp_code": "01161371", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "이레상운", "corp_code": "01508004", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "태화상운", "corp_code": "00413231", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "범진상운", "corp_code": "00578990", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "정우상운", "corp_code": "01331323", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "HFC", "corp_code": "00832083", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "대현티에프시", "corp_code": "01656675", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" },
+      { "name": "대구시민프로축구단", "corp_code": "00427137", "verified": "2026-01-29", "note": "정상 (툴팁 검증)" }
+    ],
+    "no_data": [
+      { "name": "알에프에이비에스", "corp_code": "00374190", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "코엔텍", "corp_code": "00331858", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "오다스톤인베스트먼트", "corp_code": "01880184", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "엠제이씨개발", "corp_code": "01332465", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "에스엠상선", "corp_code": "01243426", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "동본", "corp_code": "01096271", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "씨앤앰우리케이블티브이", "corp_code": "00445753", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "코스포서비스", "corp_code": "01437405", "verified": "2026-01-29", "note": "VCM 데이터 없음" },
+      { "name": "뉴상현건설", "corp_code": "00602066", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "삼양밸류파트너스", "corp_code": "00927248", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "디엔브이", "corp_code": "00817969", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "효승주택", "corp_code": "00410465", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "동인씨앤디", "corp_code": "00675424", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "농업회사법인금천", "corp_code": "00874122", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "도연이앤디", "corp_code": "01042827", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "지에프민제십차", "corp_code": "01691924", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "영풍상공", "corp_code": "00225399", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "지아이비홈플러스", "corp_code": "01714632", "verified": "2026-01-29", "note": "DART 공시 없음" },
+      { "name": "엘엠제육차", "corp_code": "01186051", "verified": "2026-01-29", "note": "DART 공시 없음" }
+    ]
+  },
+
+  "known_failures": [
+    {
+      "name": "아이엠",
+      "stock_code": "101390",
+      "reason": "검색 시 '맥쿼리아이엠엠프라임7호채권형사모펀드'로 매칭됨 (종목코드 불일치)",
+      "verified": "2026-02-23"
+    }
+  ],
+
+  "stats": {
+    "total_listed": 40,
+    "total_unlisted_verified": 32,
+    "total_unlisted_no_data": 19,
+    "last_batch_test": "2026-02-23",
+    "last_batch_result": "30/31 성공 (96.8%)"
+  }
+}
