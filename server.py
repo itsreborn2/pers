@@ -3137,18 +3137,27 @@ def create_vcm_format(fs_data, excel_filepath=None):
             if section_found:
                 continue
 
-            # 총계 항목 처리
+            # 총계 항목 처리 (exact match 우선, substring fallback)
             is_total = False
             for marker in total_markers:
-                if marker in acc_clean or acc_clean == normalize(marker):
-                    sections['총계'][acc_clean] = val_num
+                if acc_clean == normalize(marker):
+                    sections['총계'][normalize(marker)] = val_num
                     is_total = True
-                    # 자산총계, 부채총계 도달 시 해당 섹션 종료
-                    if '자산총계' in acc_clean:
+                    if '자산총계' == normalize(marker):
                         current_section = None
-                    elif '부채총계' in acc_clean:
+                    elif '부채총계' == normalize(marker):
                         current_section = None
                     break
+            if not is_total:
+                for marker in total_markers:
+                    marker_norm = normalize(marker)
+                    if marker_norm in acc_clean and acc_clean != marker_norm:
+                        # substring match → 원래 acc_clean 이름으로 저장
+                        sections['총계'][acc_clean] = val_num
+                        is_total = True
+                        if acc_clean == normalize('자산총계'):
+                            current_section = None
+                        break
 
             if is_total:
                 continue
@@ -3205,7 +3214,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
         }
 
         # 총계 마커
-        total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계']
+        total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계']
 
         for idx, row in df.iterrows():
             raw_acc = str(row.get(acc_col, '')).strip()
@@ -3224,13 +3233,20 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 except:
                     pass
 
-            # 총계 항목 처리
+            # 총계 항목 처리 (exact match 우선)
             is_total = False
             for marker in total_markers:
-                if marker in acc_clean or acc_clean == normalize(marker):
-                    sections['총계'][acc_clean] = val_num
+                if acc_clean == normalize(marker):
+                    sections['총계'][normalize(marker)] = val_num
                     is_total = True
                     break
+            if not is_total:
+                for marker in total_markers:
+                    marker_norm = normalize(marker)
+                    if marker_norm in acc_clean and acc_clean != marker_norm:
+                        sections['총계'][acc_clean] = val_num
+                        is_total = True
+                        break
 
             if is_total:
                 continue
@@ -3249,6 +3265,107 @@ def create_vcm_format(fs_data, excel_filepath=None):
                         'value': val_num
                     })
 
+        return sections
+
+    def parse_bs_sections_flat(df, year_col, acc_col):
+        """금융업/비정형 BS용 flat 파싱 (유동/비유동 섹션 마커가 없을 때 fallback)
+
+        자산총계/부채총계/자본총계 위치 기준으로 항목을 구간별 배치.
+        유동/비유동 구분은 계정명 키워드로 휴리스틱 분류.
+        """
+        sections = {
+            '유동자산': [],
+            '비유동자산': [],
+            '유동부채': [],
+            '비유동부채': [],
+            '자본': [],
+            '총계': {}
+        }
+
+        total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계']
+
+        # 1단계: 총계 행 위치 찾기
+        asset_total_idx = None
+        liability_total_idx = None
+        equity_total_idx = None
+
+        rows_data = []
+        for idx, row in df.iterrows():
+            raw_acc = str(row.get(acc_col, '')).strip()
+            if not raw_acc or raw_acc == 'nan':
+                continue
+            acc_normalized = strip_note_ref(raw_acc)
+            acc_clean = normalize(acc_normalized)
+            val = row.get(year_col)
+            val_num = None
+            if pd.notna(val):
+                try:
+                    val_num = float(str(val).replace(',', ''))
+                except:
+                    pass
+
+            row_idx = len(rows_data)
+            rows_data.append({'acc_normalized': acc_normalized, 'acc_clean': acc_clean, 'val_num': val_num, 'row_idx': row_idx})
+
+            # exact match로 총계 위치 파악
+            for marker in total_markers:
+                if acc_clean == normalize(marker):
+                    sections['총계'][normalize(marker)] = val_num
+                    if normalize(marker) == '자산총계' and asset_total_idx is None:
+                        asset_total_idx = row_idx
+                    elif normalize(marker) == '부채총계' and liability_total_idx is None:
+                        liability_total_idx = row_idx
+                    elif normalize(marker) == '자본총계' and equity_total_idx is None:
+                        equity_total_idx = row_idx
+                    break
+
+        if asset_total_idx is None:
+            print(f"[VCM FLAT] 자산총계 행을 찾을 수 없음, flat 파싱 중단")
+            return sections
+
+        # 2단계: 위치 기반 항목 분류
+        # 유동자산 키워드 (매칭 시 유동으로 분류)
+        current_keywords = ['현금', '단기', '매출채권', '미수금', '선급금', '선급비용',
+                           '재고자산', '상품', '제품', '원재료', '유동', '당좌', '반제품',
+                           '계약자산', '미청구']
+        current_liability_keywords = ['매입채무', '미지급금', '미지급비용', '선수금', '단기차입금',
+                                      '유동', '당좌', '선수수익', '예수금']
+
+        for rd in rows_data:
+            acc_clean = rd['acc_clean']
+            acc_normalized = rd['acc_normalized']
+            val_num = rd['val_num']
+            row_idx = rd['row_idx']
+
+            # 총계 행 스킵
+            is_total = any(acc_clean == normalize(m) for m in total_markers)
+            if is_total:
+                continue
+            # 섹션 헤더 스킵
+            if re.match(r'^(자산|부채|자본|투자자산|당좌자산)$', acc_clean):
+                continue
+            if val_num is None or val_num == 0:
+                continue
+
+            # 위치 기반 분류
+            if row_idx < asset_total_idx:
+                # 자산 항목 → 유동/비유동 키워드 분류
+                if any(k in acc_clean for k in current_keywords):
+                    sections['유동자산'].append({'name': acc_normalized, 'value': val_num})
+                else:
+                    sections['비유동자산'].append({'name': acc_normalized, 'value': val_num})
+            elif liability_total_idx is not None and row_idx < liability_total_idx:
+                # 부채 항목
+                if any(k in acc_clean for k in current_liability_keywords):
+                    sections['유동부채'].append({'name': acc_normalized, 'value': val_num})
+                else:
+                    sections['비유동부채'].append({'name': acc_normalized, 'value': val_num})
+            elif equity_total_idx is not None and row_idx < equity_total_idx:
+                # 자본 항목
+                sections['자본'].append({'name': acc_normalized, 'value': val_num})
+
+        total_items = sum(len(v) for k, v in sections.items() if k != '총계')
+        print(f"[VCM FLAT] flat 파싱 완료: 유동자산 {len(sections['유동자산'])}개, 비유동자산 {len(sections['비유동자산'])}개, 총 {total_items}개 항목")
         return sections
 
     # 섹션 데이터에서 값 찾기 (parse_bs_sections 결과 사용)
@@ -4032,13 +4149,14 @@ def create_vcm_format(fs_data, excel_filepath=None):
     # 재무상태표에서 값 찾기 (원 단위 그대로)
     def find_bs_val(keywords, year, excludes=[]):
         # BS용 컬럼 사용 (IS와 다를 수 있음)
+        # 1차: exact match 우선 (substring 오매칭 방지)
         for _, row in bs_df.iterrows():
             acc_raw = str(row.get(bs_account_col, ''))
             acc = normalize(acc_raw)
             excluded = any(normalize(ex) in acc for ex in excludes)
             if excluded: continue
             for kw in keywords:
-                if normalize(kw) in acc:
+                if acc == normalize(kw):
                     # BS 연도 컬럼 매핑 사용
                     bs_year = year
                     if bs_fy_col_map and fy_col_map:
@@ -4052,6 +4170,31 @@ def create_vcm_format(fs_data, excel_filepath=None):
                         try:
                             val_str = str(val).replace(',', '').strip()
                             # 괄호로 표시된 음수 처리: (1234) → -1234
+                            if val_str.startswith('(') and val_str.endswith(')'):
+                                val_str = '-' + val_str[1:-1]
+                            return float(val_str)
+                        except:
+                            pass
+        # 2차: substring match fallback (exact match 실패 시)
+        for _, row in bs_df.iterrows():
+            acc_raw = str(row.get(bs_account_col, ''))
+            acc = normalize(acc_raw)
+            excluded = any(normalize(ex) in acc for ex in excludes)
+            if excluded: continue
+            for kw in keywords:
+                kw_norm = normalize(kw)
+                if kw_norm in acc and acc != kw_norm:  # exact는 이미 시도했으므로 제외
+                    bs_year = year
+                    if bs_fy_col_map and fy_col_map:
+                        year_str = fy_col_map.get(year, '')
+                        for bs_col, bs_year_str in bs_fy_col_map.items():
+                            if bs_year_str == year_str:
+                                bs_year = bs_col
+                                break
+                    val = row.get(bs_year)
+                    if pd.notna(val):
+                        try:
+                            val_str = str(val).replace(',', '').strip()
                             if val_str.startswith('(') and val_str.endswith(')'):
                                 val_str = '-' + val_str[1:-1]
                             return float(val_str)
@@ -4078,6 +4221,14 @@ def create_vcm_format(fs_data, excel_filepath=None):
         else:
             all_sections[year_str] = parse_bs_sections(bs_df, bs_year, bs_account_col)
             print(f"[VCM] {year_str} 섹션 파싱 완료: 유동자산 {len(all_sections[year_str]['유동자산'])}개, 비유동자산 {len(all_sections[year_str]['비유동자산'])}개 항목")
+
+        # BUG 3+4 fallback: 유동/비유동 섹션이 비어있으면 flat 파싱 시도
+        sections = all_sections[year_str]
+        total_section_items = sum(len(v) for k, v in sections.items() if k != '총계')
+        has_asset_total = sections['총계'].get('자산총계') is not None
+        if total_section_items == 0 and has_asset_total:
+            print(f"[VCM] {year_str} 유동/비유동 섹션 없음 → 금융업/비정형 BS flat 파싱 적용")
+            all_sections[year_str] = parse_bs_sections_flat(bs_df, bs_year, bs_account_col)
 
     # 항목 정의: (항목명, 부모, 값계산함수)
     # 부모가 있으면 세부항목, 없으면 합계 항목
@@ -4292,7 +4443,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
         퇴직급여채무 = find_in_section(비유동부채_items, ['퇴직급여충당부채', '퇴직급여채무', '확정급여채무', '순확정급여부채']) or find_bs_val(['퇴직급여충당부채', '퇴직급여채무', '확정급여채무'], year) or 0
         기타금융부채_비유동 = find_in_section(비유동부채_items, ['기타금융부채', '금융리스부채', '리스부채']) or 0
         충당부채_비유동 = find_in_section(비유동부채_items, ['충당부채', '장기충당부채'], ['퇴직']) or 0
-        부채총계 = 총계.get('부채총계') or find_bs_val(['부채총계'], year) or 0
+        부채총계 = 총계.get('부채총계') or find_bs_val(['부채총계'], year, excludes=['자본과부채', '부채와자본', '부채및자본']) or 0
 
         # ========== 자본 항목 (섹션 기반) ==========
         자본금 = find_in_section(자본_items, ['자본금'], ['잉여금']) or find_bs_val(['자본금'], year, ['잉여금']) or 0
@@ -4308,7 +4459,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
         # 자본총계/부채와자본총계 추출 (음수 허용)
         자본총계_from_총계 = 총계.get('자본총계')
         # '자본총계' 검색 시 '부채와자본총계', '부채및자본총계' 제외
-        자본총계_from_bs = find_bs_val(['자본총계'], year, excludes=['부채와', '부채및'])
+        자본총계_from_bs = find_bs_val(['자본총계'], year, excludes=['부채와', '부채및', '자본과부채'])
         # 자본총계가 음수인 경우도 허용 (자본잠식)
         if 자본총계_from_총계 is not None:
             자본총계 = 자본총계_from_총계
@@ -4317,7 +4468,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
         else:
             자본총계 = 0
 
-        부채와자본총계 = 총계.get('부채와자본총계') or 총계.get('부채및자본총계') or find_bs_val(['부채와자본총계', '부채및자본총계'], year) or 0
+        부채와자본총계 = 총계.get('부채와자본총계') or 총계.get('부채및자본총계') or 총계.get('자본과부채총계') or find_bs_val(['부채와자본총계', '부채및자본총계', '자본과부채총계'], year) or 0
 
         # ========== 계산 항목 ==========
         nwc = 유동자산 - 유동부채
@@ -4568,8 +4719,8 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     display_name = get_display_name(item['name'], '기타유동자산')
                     bs_items.append((display_name, '기타유동자산', item['value']))
 
-        # 매각예정자산 (유동자산 섹션에 포함)
-        매각예정자산 = find_bs_val(['매각예정비유동자산', '매각예정자산', '처분자산집단'], year) or 0
+        # 매각예정자산 (IFRS 5: 유동/비유동 밖 별도 카테고리)
+        매각예정자산 = find_bs_val(['매각예정비유동자산', '매각예정자산', '처분자산집단', '소유주분배예정자산집단', '소유주분배예정'], year) or 0
         if 매각예정자산:
             bs_items.append(('매각예정자산', '유동자산', 매각예정자산))
 

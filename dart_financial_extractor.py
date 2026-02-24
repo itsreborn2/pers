@@ -257,30 +257,54 @@ class DartFinancialExtractor:
                     pages = report.extract_pages()
 
                     # 페이지별로 재무제표 찾기
+                    found_bs_in_report = False
+                    found_is_in_report = False
                     for page in pages:
                         title = getattr(page, 'title', '') or ''
+                        title_nospace = re.sub(r'\s+', '', title)
 
-                        if '재무상태표' in title or '재 무 상 태 표' in title:
+                        if '재무상태표' in title_nospace:
                             df = self._parse_audit_report_table(page.html, 'bs')
                             if df is not None and not df.empty:
-                                # 연도 정보 추가
                                 year = report.rcept_dt[:4] if hasattr(report, 'rcept_dt') else ''
                                 df['report_year'] = year
                                 all_bs_data.append(df)
+                                found_bs_in_report = True
 
-                        elif '손익계산서' in title or '손 익 계 산 서' in title:
+                        if '손익계산서' in title_nospace or '포괄손익계산서' in title_nospace:
                             df = self._parse_audit_report_table(page.html, 'is')
                             if df is not None and not df.empty:
                                 year = report.rcept_dt[:4] if hasattr(report, 'rcept_dt') else ''
                                 df['report_year'] = year
                                 all_is_data.append(df)
+                                found_is_in_report = True
 
-                        elif '현금흐름표' in title or '현 금 흐 름 표' in title:
+                        if '현금흐름표' in title_nospace:
                             df = self._parse_audit_report_table(page.html, 'cf')
                             if df is not None and not df.empty:
                                 year = report.rcept_dt[:4] if hasattr(report, 'rcept_dt') else ''
                                 df['report_year'] = year
                                 all_cf_data.append(df)
+
+                    # BUG 6 fallback: 개별 페이지에서 BS/IS를 못 찾으면 통합 페이지 시도
+                    if not found_bs_in_report or not found_is_in_report:
+                        for page in pages:
+                            title = getattr(page, 'title', '') or ''
+                            title_nospace = re.sub(r'\s+', '', title)
+                            # "재무제표" 포함하되 이미 개별 매칭된 것은 제외
+                            if ('재무제표' in title_nospace or '첨부' in title_nospace) and \
+                               '재무상태표' not in title_nospace and '손익계산서' not in title_nospace:
+                                year = report.rcept_dt[:4] if hasattr(report, 'rcept_dt') else ''
+                                parsed = self._parse_combined_audit_page(page.html, year)
+                                if parsed:
+                                    if not found_bs_in_report and parsed.get('bs') is not None:
+                                        all_bs_data.append(parsed['bs'])
+                                        found_bs_in_report = True
+                                        print(f"  → 통합 페이지에서 재무상태표 파싱 성공: {title}")
+                                    if not found_is_in_report and parsed.get('is') is not None:
+                                        all_is_data.append(parsed['is'])
+                                        found_is_in_report = True
+                                        print(f"  → 통합 페이지에서 손익계산서 파싱 성공: {title}")
 
                 except Exception as e:
                     print(f"  → 보고서 파싱 오류: {e}")
@@ -304,6 +328,69 @@ class DartFinancialExtractor:
             import traceback
             traceback.print_exc()
             return {}
+
+    def _parse_combined_audit_page(self, html: str, year: str) -> Optional[Dict]:
+        """통합 "(첨부)재무제표" 페이지에서 BS/IS를 분리 파싱
+
+        일부 감사보고서는 모든 재무제표를 단일 페이지에 포함.
+        각 테이블의 내용을 분석하여 BS/IS를 판별.
+        """
+        from bs4 import BeautifulSoup
+        from io import StringIO
+
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            tables = soup.find_all('table')
+            result = {}
+
+            bs_keywords = ['유동자산', '비유동자산', '자산총계', '부채총계', '자본총계', '재무상태표']
+            is_keywords = ['매출액', '매출', '영업이익', '당기순이익', '영업손실', '손익계산서', '수익']
+
+            for table in tables:
+                try:
+                    dfs = pd.read_html(StringIO(str(table)))
+                    if not dfs or dfs[0].empty or len(dfs[0]) < 3:
+                        continue
+                    df = dfs[0]
+                    # 첫 번째 컬럼 텍스트 확인
+                    first_col_text = ' '.join(df.iloc[:, 0].dropna().astype(str).tolist())
+
+                    is_bs = any(k in first_col_text for k in bs_keywords)
+                    is_is = any(k in first_col_text for k in is_keywords)
+
+                    if is_bs and 'bs' not in result:
+                        parsed = self._parse_table_df(df)
+                        if parsed is not None and not parsed.empty and len(parsed) >= 5:
+                            parsed['report_year'] = year
+                            result['bs'] = parsed
+                    elif is_is and 'is' not in result:
+                        parsed = self._parse_table_df(df)
+                        if parsed is not None and not parsed.empty and len(parsed) >= 3:
+                            parsed['report_year'] = year
+                            result['is'] = parsed
+                except Exception:
+                    continue
+
+            return result if result else None
+        except Exception as e:
+            print(f"  → 통합 페이지 파싱 오류: {e}")
+            return None
+
+    def _parse_table_df(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
+        """DataFrame을 재무제표 형식으로 정리 (공통 로직)"""
+        try:
+            df = df.copy()
+            df.columns = ['label_ko'] + [f'col_{i}' for i in range(1, len(df.columns))]
+            if df['label_ko'].iloc[0] in ['과목', '과 목', '구분', '구 분']:
+                df = df.iloc[1:]
+            df = df.dropna(how='all')
+            df = df[df['label_ko'].notna()]
+            for col in df.columns[1:]:
+                df[col] = df[col].apply(self._clean_number)
+            df = df.reset_index(drop=True)
+            return df
+        except Exception:
+            return None
 
     def _parse_audit_report_table(self, html: str, fs_type: str) -> Optional[pd.DataFrame]:
         """
