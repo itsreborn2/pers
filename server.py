@@ -1879,7 +1879,8 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
     update_progress(80, '데이터 정규화 중...')
     
     # XBRL 데이터가 있는 상장사: 분기 데이터를 XBRL에 병합
-    if xbrl_data and any(yearly_data[key] for key in yearly_data):
+    # 비상장사는 XBRL 경로 사용하지 않음 (일부 비상장사가 과거 연결감사보고서에 XBRL 데이터를 갖고 있어 오매칭 방지)
+    if xbrl_data and is_listed and any(yearly_data[key] for key in yearly_data):
         print(f"[FS] 상장사: XBRL 데이터에 분기 데이터 병합...")
         print(f"[FS] yearly_data 키: {[(k, list(v.keys())) for k, v in yearly_data.items() if v]}")
         
@@ -3204,13 +3205,25 @@ def create_vcm_format(fs_data, excel_filepath=None):
             print(f"[VCM XBRL] 분류3 컬럼 없음, 빈 섹션 반환")
             return sections
 
-        # 섹션 매핑
+        # 섹션 매핑 (XBRL 분류3 값 → 내부 섹션명)
         section_mapping = {
             '유동자산': '유동자산',
             '비유동자산': '비유동자산',
             '유동부채': '유동부채',
             '비유동부채': '비유동부채',
             '자본': '자본',
+            # 금융업/특수 자산 분류 → 비유동자산으로 매핑
+            '금융업자산': '비유동자산',
+            '보험업자산': '비유동자산',
+            '기타자산': '비유동자산',
+            # 금융업/특수 부채 분류 → 비유동부채로 매핑
+            '금융업부채': '비유동부채',
+            '보험업부채': '비유동부채',
+            '기타부채': '비유동부채',
+            # IFRS 5 매각예정/분배예정 → 유동자산으로 매핑
+            '매각예정자산': '유동자산',
+            '소유주분배예정 자산집단': '유동자산',
+            '매각예정부채': '유동부채',
         }
 
         # 총계 마커
@@ -3256,14 +3269,24 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 continue
 
             # 섹션에 항목 추가
-            if section_name in section_mapping and val_num is not None and val_num != 0:
-                target_section = section_mapping[section_name]
-                # 중간 헤더 제외
-                if not re.match(r'^(자산|부채|자본|투자자산|당좌자산)$', acc_clean):
-                    sections[target_section].append({
-                        'name': strip_note_ref(raw_acc),
-                        'value': val_num
-                    })
+            if val_num is not None and val_num != 0:
+                target_section = section_mapping.get(section_name)
+                # 매핑에 없는 분류3 → 키워드 기반 추론
+                if not target_section and section_name:
+                    sn = normalize(section_name)
+                    if '자산' in sn or '매각예정' in sn or '분배예정' in sn:
+                        target_section = '비유동자산'
+                    elif '부채' in sn:
+                        target_section = '비유동부채'
+                    elif '자본' in sn:
+                        target_section = '자본'
+                if target_section:
+                    # 중간 헤더 제외
+                    if not re.match(r'^(자산|부채|자본|투자자산|당좌자산)$', acc_clean):
+                        sections[target_section].append({
+                            'name': strip_note_ref(raw_acc),
+                            'value': val_num
+                        })
 
         return sections
 
