@@ -3086,20 +3086,21 @@ def create_vcm_format(fs_data, excel_filepath=None):
         }
 
         # 섹션 마커 패턴 (로마숫자/숫자 prefix 허용)
+        # 금융업자산/보험업자산/기타자산 → 비유동자산으로 매핑 (금융업 BS 대응)
         section_patterns = {
             '유동자산': r'^(Ⅰ|I|1)?\.?\s*유동자산$',
-            '비유동자산': r'^(Ⅱ|II|2)?\.?\s*비유동자산$',
+            '비유동자산': r'^(Ⅱ|II|2)?\.?\s*(비유동자산|금융업자산|보험업자산|기타자산)$',
             '유동부채': r'^(Ⅰ|I|1)?\.?\s*유동부채$',
-            '비유동부채': r'^(Ⅱ|II|2)?\.?\s*비유동부채$',
+            '비유동부채': r'^(Ⅱ|II|2)?\.?\s*(비유동부채|금융업부채|보험업부채|기타부채)$',
             '자본': r'^(Ⅰ|I|1)?\.?\s*자본$',  # '자본금' 제외 (정확히 '자본'만 매칭)
         }
 
         # 종료 마커 (다음 섹션 시작 또는 총계)
         end_markers = {
             '유동자산': ['비유동자산', '자산총계'],
-            '비유동자산': ['자산총계', '부채', '유동부채'],
+            '비유동자산': ['매각예정', '소유주분배예정', '자산총계', '부채', '유동부채'],
             '유동부채': ['비유동부채', '부채총계'],
-            '비유동부채': ['부채총계', '자본'],
+            '비유동부채': ['매각예정부채', '부채총계', '자본'],
             '자본': ['자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계'],
         }
 
@@ -4235,6 +4236,36 @@ def create_vcm_format(fs_data, excel_filepath=None):
     bs_fy_cols = sorted(bs_fy_col_map.keys(), key=lambda c: bs_fy_col_map[c]) if bs_fy_col_map else fy_cols
     bs_col_display = bs_fy_col_map if bs_fy_col_map else fy_col_map
 
+    # XBRL 튜플 컬럼 정규화 (class2 → 분류3 변환으로 parse_bs_sections_xbrl 활성화)
+    if is_xbrl and '분류3' not in bs_df.columns:
+        bs_df_normalized = normalize_xbrl_columns(bs_df)
+        if '분류3' in bs_df_normalized.columns:
+            bs_df = bs_df_normalized
+            bs_account_col = '계정과목'
+            # 정규화된 FY 컬럼으로 bs_fy_cols/bs_col_display 갱신
+            bs_fy_cols_new = sorted([c for c in bs_df.columns if str(c).startswith('FY')], key=lambda c: str(c))
+            if bs_fy_cols_new:
+                bs_fy_cols = bs_fy_cols_new
+                bs_col_display = {c: c for c in bs_fy_cols}
+                bs_fy_col_map = {c: c for c in bs_fy_cols}
+            # 분류3에 유효한 섹션 헤더가 없으면 컬럼 제거 → parse_bs_sections/flat 사용 (유동성배열법 등)
+            valid_class3 = bs_df['분류3'].dropna()
+            valid_class3 = valid_class3[valid_class3.astype(str).str.strip().ne('')]
+            # 분류3 값 중 표준 BS 섹션 헤더가 하나라도 있는지 확인
+            # 유동성배열법 BS는 분류3에 개별 계정명(현금및예치금, 자산총계 등)만 있고
+            # 섹션 헤더(유동자산, 비유동자산 등)가 없음
+            bs_section_headers = {'유동자산', '비유동자산', '유동부채', '비유동부채'}
+            class3_values = set(valid_class3.astype(str).str.strip().tolist())
+            has_section_headers = bool(class3_values & bs_section_headers)
+            if len(valid_class3) > 0 and has_section_headers:
+                print(f"[VCM] BS 튜플 컬럼 정규화 완료: {len(bs_fy_cols)}개 연도, 분류3 유효 ({len(valid_class3)}건, 섹션헤더 포함)")
+            else:
+                bs_df = bs_df.drop(columns=['분류3'])
+                if len(valid_class3) > 0:
+                    print(f"[VCM] BS 분류3 값 있으나 섹션헤더 없음 (유동성배열법) → 행/flat 기반 파싱 (분류3값: {list(class3_values)[:5]}...)")
+                else:
+                    print(f"[VCM] BS 튜플 컬럼 정규화: {len(bs_fy_cols)}개 연도, 분류3 비어있음 → 행 기반 파싱")
+
     for bs_year in bs_fy_cols:
         year_str = bs_col_display[bs_year]
         # XBRL 형식이면 분류3 컬럼 기반 파싱, 아니면 행 기반 파싱
@@ -4365,6 +4396,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
         비유동자산_from_bs = find_bs_val(['비유동자산'], year, ['매각예정']) or 0
         비유동자산_from_items = sum(item['value'] for item in 비유동자산_items) if 비유동자산_items else 0
         비유동자산 = 총계.get('비유동자산') or 비유동자산_from_bs or 비유동자산_from_items or 0
+        # 금융업자산/보험업자산 합산 (유동/비유동 외 별도 자산 섹션이 있는 금융업 BS)
+        금융업자산_sub = find_bs_val(['금융업자산', '보험업자산'], year) or 0
+        if 금융업자산_sub:
+            비유동자산 += 금융업자산_sub
         유형자산 = find_in_section(비유동자산_items, ['유형자산'], ['무형', '처분', '사용권']) or find_bs_val(['유형자산'], year, ['무형', '처분']) or 0
         무형자산 = find_in_section(비유동자산_items, ['무형자산'], ['상각', '손상']) or find_bs_val(['무형자산'], year, ['상각']) or 0
         사용권자산 = find_in_section(비유동자산_items, ['사용권자산']) or 0
@@ -4441,6 +4476,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
         비유동부채_from_bs = find_bs_val(['비유동부채'], year, ['매각예정']) or 0
         비유동부채_from_items = sum(item['value'] for item in 비유동부채_items) if 비유동부채_items else 0
         비유동부채 = 총계.get('비유동부채') or 비유동부채_from_bs or 비유동부채_from_items or 0
+        # 금융업부채/보험업부채 합산 (유동/비유동 외 별도 부채 섹션이 있는 금융업 BS)
+        금융업부채_sub = find_bs_val(['금융업부채', '보험업부채'], year) or 0
+        if 금융업부채_sub:
+            비유동부채 += 금융업부채_sub
 
         # 비유동 매입채무및기타채무 세부항목 (섹션 기반)
         장기매입채무 = find_in_section(비유동부채_items, ['장기매입채무', '매입채무']) or find_bs_val(['장기매입채무'], year) or 0
