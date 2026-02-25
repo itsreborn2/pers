@@ -8437,15 +8437,15 @@
                 }
             }
 
-            // 6. 주요 뉴스/공시
+            // 6. 주요 뉴스
             if (data.news) {
-                html += `<div class="research-section">`;
-                html += `<h3>주요 뉴스 <span style="font-size:12px;font-weight:normal;color:#888;margin-left:8px;">최근 5년 이내 검색 결과.</span></h3>`;
                 // 배열 또는 배열-like 객체 모두 안전하게 처리
                 let newsArr = data.news;
                 if (!Array.isArray(newsArr)) {
                     try { newsArr = Array.from(newsArr); } catch(e) { newsArr = null; }
                 }
+                html += `<div class="research-section">`;
+                html += `<h3>주요 뉴스 <span style="font-size:12px;font-weight:normal;color:#888;margin-left:8px;">최근 5년 이내 검색 결과.</span></h3>`;
                 if (newsArr && newsArr.length > 0 && typeof newsArr[0] === 'object') {
                     // 최신 날짜순 정렬 (YYYY.MM → 역순)
                     newsArr.sort((a, b) => {
@@ -8468,11 +8468,10 @@
                         }
                     });
                     html += `</div>`;
-                } else if (typeof data.news === 'string') {
+                } else if (typeof data.news === 'string' && data.news.trim()) {
                     html += `<div class="news-content">${data.news}</div>`;
                 } else {
-                    // 최종 fallback: JSON.stringify로 확인 가능하게
-                    html += `<div class="news-content">${JSON.stringify(data.news)}</div>`;
+                    html += `<div class="news-content" style="color:#888;">주요 뉴스가 없습니다.</div>`;
                 }
                 html += `</div>`;
             }
