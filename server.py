@@ -5727,16 +5727,23 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
                         col_idx = col_cells[0].column
                         col_letter = get_column_letter(col_idx)
 
-                        # 셀 내용 기반 최대 너비 계산
+                        # 셀 내용 기반 최대 너비 계산 (Excel 표시 너비 추정)
                         max_len = 0
                         has_content = False
                         for cell in col_cells:
-                            if cell.value is not None and str(cell.value).strip():
-                                has_content = True
-                                cell_len = 0
-                                for ch in str(cell.value):
-                                    cell_len += 2 if ord(ch) > 127 else 1
-                                max_len = max(max_len, cell_len)
+                            if cell.value is not None:
+                                v = cell.value
+                                # 숫자 타입은 Excel 표시 포맷 기준으로 길이 계산
+                                if isinstance(v, float):
+                                    cell_str = f"{v:,.1f}" if abs(v) >= 100 else f"{v:.2f}"
+                                elif isinstance(v, int):
+                                    cell_str = f"{v:,}"
+                                else:
+                                    cell_str = str(v)
+                                if cell_str.strip():
+                                    has_content = True
+                                    cell_len = sum(2 if ord(ch) > 127 else 1 for ch in cell_str)
+                                    max_len = max(max_len, cell_len)
 
                         if not has_content:
                             # 빈 구분 컬럼
