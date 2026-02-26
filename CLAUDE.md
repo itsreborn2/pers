@@ -104,6 +104,57 @@ sudo systemctl restart pers-dev
 sudo systemctl restart pers
 ```
 
+### 통합 테스트 규칙 (★필수★)
+
+**사용자가 "테스트해" 또는 "테스트 진행해"라고 하면, 반드시 아래 통합 테스트를 실행하라.**
+
+#### 테스트 스크립트
+```bash
+# 기본 테스트 (DART 추출 + 데이터 검증 + 엑셀 다운로드 + heartbeat)
+cd /home/servermanager/pers-dev
+PYTHONUNBUFFERED=1 python3 -u test_full_pipeline.py
+
+# 전체 테스트 (기본 + AI 분석 + 기업 리서치 + 최종 엑셀)
+PYTHONUNBUFFERED=1 python3 -u test_full_pipeline.py --full
+
+# 특정 기업으로 테스트
+PYTHONUNBUFFERED=1 python3 -u test_full_pipeline.py --company E1 --corp-code 00356361
+
+# 프로덕션 서버 테스트
+PYTHONUNBUFFERED=1 python3 -u test_full_pipeline.py --url http://localhost:8000
+```
+
+#### 테스트 범위 (15+ 항목)
+| 단계 | 테스트 항목 | 설명 |
+|------|------------|------|
+| 1 | 서버 상태 | GET / 200 OK |
+| 2 | DART 추출 시작 | POST /api/extract → task_id |
+| 2 | 추출 완료 | status 폴링 → completed (타임아웃 360초) |
+| 3 | VCM 데이터 | vcm, vcm_display 존재 확인 |
+| 3 | 재무상태표/손익계산서/현금흐름표 | BS, IS, CF 데이터 존재 확인 |
+| 3 | 자산 등식 | 자산총계 = 유동자산 + 비유동자산 (±2) |
+| 3 | 대차 균형 | 부채와자본총계 = 부채총계 + 자본총계 (±2) |
+| 4 | AI 분석 (--full) | POST /api/analyze → 보고서 생성 |
+| 4 | 엑셀 AI시트 추가 | POST /api/add-insight → 엑셀에 시트 추가 |
+| 5 | 기업 리서치 (--full) | POST /api/super-research → 리서치 완료 |
+| 6 | 엑셀 다운로드 | GET /api/download → 파일 수신 |
+| 6 | 엑셀 시트 검증 | Financials, Frontdata 시트 존재 + 데이터 확인 |
+| 7 | Heartbeat 정상 | 존재하는 task → success=true |
+| 7 | Heartbeat 만료 감지 | 없는 task → expired=true |
+
+#### 수정 후 테스트 의무
+- **server.py 수정 시**: 서버 재시작 후 기본 테스트 필수
+- **index.html 수정 시**: 서버 재시작 후 기본 테스트 필수
+- **추출 로직 수정 시**: 기본 테스트 + 기존 검증 기업(삼성전자, E1) 추가 확인
+- **AI 분석/리서치 수정 시**: `--full` 전체 테스트 필수
+- **프로덕션 배포 시**: `--url http://localhost:8000` 프로덕션 테스트 권장
+
+#### 테스트 실패 시
+1. 실패 항목 확인 (로그에 [FAIL] 표시)
+2. 원인 분석 후 수정
+3. 재테스트하여 전체 통과 확인
+4. **테스트 통과 전까지 프로덕션 배포 금지**
+
 ### 기록 형식
 ```markdown
 ## [기능명]
