@@ -104,6 +104,57 @@ sudo systemctl restart pers-dev
 sudo systemctl restart pers
 ```
 
+### 통합 테스트 규칙 (★필수★)
+
+**사용자가 "테스트해" 또는 "테스트 진행해"라고 하면, 반드시 아래 통합 테스트를 실행하라.**
+
+#### 테스트 스크립트
+```bash
+# 기본 테스트 (DART 추출 + 데이터 검증 + 엑셀 다운로드 + heartbeat)
+cd /home/servermanager/pers-dev
+PYTHONUNBUFFERED=1 python3 -u test_full_pipeline.py
+
+# 전체 테스트 (기본 + AI 분석 + 기업 리서치 + 최종 엑셀)
+PYTHONUNBUFFERED=1 python3 -u test_full_pipeline.py --full
+
+# 특정 기업으로 테스트
+PYTHONUNBUFFERED=1 python3 -u test_full_pipeline.py --company E1 --corp-code 00356361
+
+# 프로덕션 서버 테스트
+PYTHONUNBUFFERED=1 python3 -u test_full_pipeline.py --url http://localhost:8000
+```
+
+#### 테스트 범위 (15+ 항목)
+| 단계 | 테스트 항목 | 설명 |
+|------|------------|------|
+| 1 | 서버 상태 | GET / 200 OK |
+| 2 | DART 추출 시작 | POST /api/extract → task_id |
+| 2 | 추출 완료 | status 폴링 → completed (타임아웃 360초) |
+| 3 | VCM 데이터 | vcm, vcm_display 존재 확인 |
+| 3 | 재무상태표/손익계산서/현금흐름표 | BS, IS, CF 데이터 존재 확인 |
+| 3 | 자산 등식 | 자산총계 = 유동자산 + 비유동자산 (±2) |
+| 3 | 대차 균형 | 부채와자본총계 = 부채총계 + 자본총계 (±2) |
+| 4 | AI 분석 (--full) | POST /api/analyze → 보고서 생성 |
+| 4 | 엑셀 AI시트 추가 | POST /api/add-insight → 엑셀에 시트 추가 |
+| 5 | 기업 리서치 (--full) | POST /api/super-research → 리서치 완료 |
+| 6 | 엑셀 다운로드 | GET /api/download → 파일 수신 |
+| 6 | 엑셀 시트 검증 | Financials, Frontdata 시트 존재 + 데이터 확인 |
+| 7 | Heartbeat 정상 | 존재하는 task → success=true |
+| 7 | Heartbeat 만료 감지 | 없는 task → expired=true |
+
+#### 수정 후 테스트 의무
+- **server.py 수정 시**: 서버 재시작 후 기본 테스트 필수
+- **index.html 수정 시**: 서버 재시작 후 기본 테스트 필수
+- **추출 로직 수정 시**: 기본 테스트 + 기존 검증 기업(삼성전자, E1) 추가 확인
+- **AI 분석/리서치 수정 시**: `--full` 전체 테스트 필수
+- **프로덕션 배포 시**: `--url http://localhost:8000` 프로덕션 테스트 권장
+
+#### 테스트 실패 시
+1. 실패 항목 확인 (로그에 [FAIL] 표시)
+2. 원인 분석 후 수정
+3. 재테스트하여 전체 통과 확인
+4. **테스트 통과 전까지 프로덕션 배포 금지**
+
 ### 기록 형식
 ```markdown
 ## [기능명]
@@ -769,18 +820,27 @@ nohup python3 server.py > /tmp/server.log 2>&1 &
 - 새 기업 테스트 시 해당 파일에 추가
 - 카테고리: `listed.standard`, `listed.edge_cases`, `listed.bottom50_small_cap`, `unlisted.verified`, `unlisted.no_data`
 
-### 현재 현황 (2026-02-23)
+### 현재 현황 (2026-02-26)
 
 | 카테고리 | 개수 | 설명 |
 |----------|------|------|
 | 상장사 - 표준 | 3 | 삼성전자, E1, 아이티엠반도체 |
 | 상장사 - 엣지케이스 | 7 | 소계중복, IS구조특성, 판관비음수, 별도재무제표 등 |
 | 상장사 - 소형주(시총하위50) | 30 | 별도 19개 + 연결 11개, 자본잠식 3개 포함 |
-| 비상장사 - 검증완료 | 32 | 영업손실, 자본잠식 포함 |
-| 비상장사 - 데이터없음 | 19 | DART 공시 의무 없는 기업 |
-| **합계** | **91** | |
+| 상장사 - 소형주배치2(시총64~184억) | 46 | KOSDAQ/KOSPI 시총 하위, 매각예정자산 구조 10건 포함 |
+| 비상장사 - 검증완료 | 136 | 대기업 포함 (교보생명, 포스코, 비바리퍼블리카 등) |
+| 비상장사 - 데이터없음 | 69 | DART 공시 의무 없는 기업 (농업회사법인 다수) |
+| **합계** | **291** | |
 
-### 최근 배치 테스트 (2026-02-23)
+### 최근 배치 테스트 (2026-02-26)
+- 시총 하위 소형주 50개 테스트 (KOSDAQ/KOSPI, 시총 64~184억)
+- **결과: 46/48 추출 성공 (95.8%)**
+- Balance check: 46/46 전원 PASS (자산총계 = 부채총계 + 자본총계)
+- Asset equation FAIL 10건: 매각예정자산이 유동자산에 포함된 구조 (추출 로직 문제 아님)
+- NO_DATA 2건: 세니젠(188260), 판타지오(032800) — VCM 데이터 없음
+- RESOLVE_FAIL 2건: 한국IT전문학교(226440), 다이얼로그(064260) — DART corp_code 조회 실패
+
+### 이전 배치 테스트 (2026-02-23)
 - 시가총액 하위 50 종목 중 보통주 31개 테스트
 - **결과: 30/31 성공 (96.8%)**
 - 실패 1건: 아이엠(101390) — 동명 사모펀드로 잘못 매칭 (추출 로직 문제 아님)
