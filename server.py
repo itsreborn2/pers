@@ -45,8 +45,12 @@ TASKS_LOCK = threading.Lock()
 
 # 메모리 정리 설정
 TASK_IDLE_TIMEOUT = 120  # 진행 중 작업: 2분간 status 조회 없으면 취소
-TASK_COMPLETED_TTL = 300  # 완료된 작업: 5분 후 전체 삭제 (파일은 유지)
+TASK_COMPLETED_TTL = 1800  # 완료된 작업: 30분 후 전체 삭제 (파일은 유지) — 브라우저 절전모드 대응
 PREVIEW_DATA_TTL = 300   # preview_data: AI분석 미시작 시 5분 후 정리 (VCM 생성에 60초+ 소요되므로 여유 확보)
+
+# 만료된 작업의 파일 경로 보존 (task 삭제 후에도 다운로드 가능)
+COMPLETED_FILES: Dict[str, Dict[str, str]] = {}  # task_id → {file_path, filename}
+COMPLETED_FILES_TTL = 86400  # 24시간 보존
 
 # 기업 리스트 캐시 (한 번만 로드)
 CORP_LIST = None
@@ -243,8 +247,28 @@ def background_cleanup_thread():
                 if force:
                     with TASKS_LOCK:
                         if task_id in TASKS:
+                            task = TASKS[task_id]
+                            # 파일 경로 보존 (만료 후에도 다운로드 가능)
+                            file_path = task.get('file_path')
+                            filename = task.get('filename')
+                            if file_path and os.path.exists(file_path):
+                                COMPLETED_FILES[task_id] = {
+                                    'file_path': file_path,
+                                    'filename': filename,
+                                    'saved_at': time.time()
+                                }
+                                print(f"[CLEANUP] 파일 경로 보존: {task_id} → {filename}")
                             # 파일은 삭제하지 않음 (output 폴더에 유지)
                             del TASKS[task_id]
+
+            # COMPLETED_FILES 만료 정리 (24시간 경과)
+            expired_files = [
+                tid for tid, info in COMPLETED_FILES.items()
+                if current_time - info.get('saved_at', 0) > COMPLETED_FILES_TTL
+            ]
+            for tid in expired_files:
+                del COMPLETED_FILES[tid]
+                print(f"[CLEANUP] 보존 파일 경로 만료: {tid}")
 
         except Exception as e:
             print(f"[CLEANUP] 에러: {e}")
@@ -5835,7 +5859,9 @@ async def heartbeat(task_id: str):
     """작업 유지 heartbeat - 브라우저가 열려있는 동안 작업 삭제 방지"""
     task = TASKS.get(task_id)
     if not task:
-        return {"success": False}
+        # 만료된 작업이지만 파일이 보존되어 있으면 다운로드 가능 알림
+        has_file = task_id in COMPLETED_FILES
+        return {"success": False, "expired": True, "has_file": has_file}
 
     task['last_accessed'] = time.time()
     return {"success": True}
@@ -7045,8 +7071,22 @@ async def download_file(task_id: str):
     """파일 다운로드 API"""
     task = TASKS.get(task_id)
 
-    # 동시 사용자 환경에서 다른 사람 파일 다운로드 방지
     if not task:
+        # Fallback: 만료된 작업이지만 파일이 보존되어 있으면 다운로드 허용
+        saved = COMPLETED_FILES.get(task_id)
+        if saved and saved.get('file_path') and os.path.exists(saved['file_path']):
+            print(f"[DOWNLOAD] 만료된 작업 파일 다운로드 (fallback): {task_id}")
+            filepath = saved['file_path']
+            filename = saved.get('filename', 'financial_statement.xlsx')
+
+            # 다운로드 전 포맷팅 재적용
+            apply_excel_formatting(filepath)
+
+            return FileResponse(
+                path=filepath,
+                filename=filename,
+                media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
         raise HTTPException(status_code=404, detail="작업이 만료되었습니다. 다시 추출해주세요.")
 
     if task['status'] != 'completed':
