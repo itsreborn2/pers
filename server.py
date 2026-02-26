@@ -5721,24 +5721,29 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
             for sheet_name in workbook.sheetnames:
                 worksheet = workbook[sheet_name]
 
-                # Financials 시트는 고정 너비 사용 (좌우 배치)
+                # Financials 시트는 동적 너비 사용 (좌우 배치, FY 수에 따라 조절)
                 if sheet_name == 'Financials':
-                    # 재무상태표: A~F열 (항목명 20, FY컬럼 10)
-                    worksheet.column_dimensions['A'].width = 20
-                    worksheet.column_dimensions['B'].width = 10
-                    worksheet.column_dimensions['C'].width = 10
-                    worksheet.column_dimensions['D'].width = 10
-                    worksheet.column_dimensions['E'].width = 10
-                    worksheet.column_dimensions['F'].width = 10
-                    # 빈 컬럼: G열
-                    worksheet.column_dimensions['G'].width = 3
-                    # 손익계산서: H~M열 (항목명 20, FY컬럼 10)
-                    worksheet.column_dimensions['H'].width = 20
-                    worksheet.column_dimensions['I'].width = 10
-                    worksheet.column_dimensions['J'].width = 10
-                    worksheet.column_dimensions['K'].width = 10
-                    worksheet.column_dimensions['L'].width = 10
-                    worksheet.column_dimensions['M'].width = 10
+                    for col_cells in worksheet.columns:
+                        col_idx = col_cells[0].column
+                        col_letter = get_column_letter(col_idx)
+
+                        # 셀 내용 기반 최대 너비 계산
+                        max_len = 0
+                        has_content = False
+                        for cell in col_cells:
+                            if cell.value is not None and str(cell.value).strip():
+                                has_content = True
+                                cell_len = 0
+                                for ch in str(cell.value):
+                                    cell_len += 2 if ord(ch) > 127 else 1
+                                max_len = max(max_len, cell_len)
+
+                        if not has_content:
+                            # 빈 구분 컬럼
+                            worksheet.column_dimensions[col_letter].width = 3
+                        else:
+                            # 내용에 맞게 너비 설정 (최소 12, 최대 40)
+                            worksheet.column_dimensions[col_letter].width = min(max(max_len + 3, 12), 40)
                     continue
 
                 for column_cells in worksheet.columns:
