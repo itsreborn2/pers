@@ -5012,21 +5012,47 @@
         }
 
         // Heartbeat: 브라우저가 열려있는 동안 작업 유지
+        let taskExpired = false;  // 작업 만료 상태
+
+        async function sendHeartbeat() {
+            if (!currentTaskId) return;
+            try {
+                const resp = await fetch(`/api/heartbeat/${currentTaskId}`, { method: 'POST' });
+                const data = await resp.json();
+                if (data.expired && !taskExpired) {
+                    taskExpired = true;
+                    console.warn('[Heartbeat] 작업이 서버에서 만료됨:', currentTaskId);
+                    // 다운로드 버튼에 안내 표시 (파일이 보존된 경우 다운로드는 가능)
+                    if (!data.has_file) {
+                        const dlBtn = document.getElementById('downloadBtn');
+                        if (dlBtn) {
+                            dlBtn.title = '세션이 만료되었습니다. 다시 추출해주세요.';
+                        }
+                    }
+                }
+            } catch (e) {
+                // 무시 (서버 연결 끊김 등)
+            }
+        }
+
         function startHeartbeat() {
             stopHeartbeat();  // 기존 인터벌 정리
             if (!currentTaskId) return;
+            taskExpired = false;
 
-            heartbeatInterval = setInterval(async () => {
-                if (!currentTaskId) {
-                    stopHeartbeat();
-                    return;
-                }
-                try {
-                    await fetch(`/api/heartbeat/${currentTaskId}`, { method: 'POST' });
-                } catch (e) {
-                    // 무시 (서버 연결 끊김 등)
-                }
-            }, 60000);  // 60초마다
+            // 즉시 한 번 전송
+            sendHeartbeat();
+
+            heartbeatInterval = setInterval(sendHeartbeat, 60000);  // 60초마다
+
+            // 탭 활성화 시 즉시 heartbeat 전송 (브라우저 절전모드 대응)
+            document.addEventListener('visibilitychange', onVisibilityChange);
+        }
+
+        function onVisibilityChange() {
+            if (document.visibilityState === 'visible' && currentTaskId) {
+                sendHeartbeat();
+            }
         }
 
         function stopHeartbeat() {
@@ -5034,6 +5060,7 @@
                 clearInterval(heartbeatInterval);
                 heartbeatInterval = null;
             }
+            document.removeEventListener('visibilitychange', onVisibilityChange);
         }
 
         function updateProgress(progress, message) {
