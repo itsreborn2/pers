@@ -39,6 +39,9 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
+                name TEXT,                          -- 이름
+                company TEXT,                       -- 회사명
+                phone TEXT,                         -- 연락처
                 role TEXT DEFAULT 'user',           -- 'admin' / 'user'
                 tier TEXT DEFAULT 'free',           -- 'free' / 'basic' / 'pro'
                 search_limit INTEGER DEFAULT 10,    -- 무료 검색 한도
@@ -55,23 +58,38 @@ def init_db():
             )
         ''')
 
-        # 기존 테이블에 subscription_start 컬럼 추가 (없으면)
-        try:
-            cursor.execute('ALTER TABLE users ADD COLUMN subscription_start TIMESTAMP')
-        except:
-            pass  # 이미 존재하면 무시
+        # 기존 테이블에 컬럼 추가 (없으면 무시)
+        for col_def in [
+            'ALTER TABLE users ADD COLUMN subscription_start TIMESTAMP',
+            'ALTER TABLE users ADD COLUMN search_count INTEGER DEFAULT 5',
+            'ALTER TABLE users ADD COLUMN name TEXT',
+            'ALTER TABLE users ADD COLUMN company TEXT',
+            'ALTER TABLE users ADD COLUMN phone TEXT',
+        ]:
+            try:
+                cursor.execute(col_def)
+            except:
+                pass  # 이미 존재하면 무시
 
-        # 기존 테이블에 search_count 컬럼 추가 (없으면)
+        # 레거시 tokens 컬럼 제거 (search_count로 통합됨)
         try:
-            cursor.execute('ALTER TABLE users ADD COLUMN search_count INTEGER DEFAULT 5')
-        except:
-            pass  # 이미 존재하면 무시
-
-        # tokens → search_count 컬럼명 마이그레이션
-        try:
-            cursor.execute('ALTER TABLE users RENAME COLUMN tokens TO search_count')
-        except:
-            pass  # 이미 변경되었거나 컬럼이 없으면 무시
+            # tokens 컬럼이 존재하는지 확인
+            cursor.execute("PRAGMA table_info(users)")
+            columns = [col[1] for col in cursor.fetchall()]
+            if 'tokens' in columns:
+                # tokens 값을 search_count에 반영 (tokens가 더 작으면 사용된 것이므로 반영)
+                cursor.execute('''
+                    UPDATE users SET search_count = tokens
+                    WHERE tokens < search_count
+                ''')
+                # SQLite는 DROP COLUMN을 3.35.0+에서만 지원
+                try:
+                    cursor.execute('ALTER TABLE users DROP COLUMN tokens')
+                    print("[DB] 레거시 tokens 컬럼 제거 완료")
+                except:
+                    print("[DB] tokens 컬럼 제거 불가 (SQLite 버전), 무시됨")
+        except Exception as e:
+            print(f"[DB] tokens 마이그레이션 참고: {e}")
 
         # 로그인 기록 테이블
         cursor.execute('''
@@ -149,6 +167,25 @@ def init_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_extraction_user ON extraction_history(user_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_llm_user ON llm_usage(user_id)')
 
+        # 결제 기록 테이블
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS payment_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                amount INTEGER NOT NULL,             -- 결제 금액 (원)
+                payment_method TEXT DEFAULT '계좌이체', -- 결제 수단
+                tier_granted TEXT,                    -- 부여된 등급 (basic/pro)
+                duration_days INTEGER,                -- 부여 기간 (일)
+                memo TEXT,                            -- 관리자 메모
+                admin_id INTEGER,                     -- 처리한 관리자 ID
+                paid_at TIMESTAMP,                    -- 실제 입금일
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (admin_id) REFERENCES users(id)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_payment_user ON payment_history(user_id)')
+
         # 챗봇 최근 질문 테이블
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS chat_recent_questions (
@@ -187,18 +224,19 @@ def generate_session_token() -> str:
 
 # ==================== 사용자 관리 ====================
 
-def create_user(email: str, password: str, role: str = 'user', tier: str = 'free') -> Optional[int]:
+def create_user(email: str, password: str, role: str = 'user', tier: str = 'free',
+                name: str = None, company: str = None, phone: str = None) -> Optional[int]:
     """사용자 생성"""
     with get_db() as conn:
         cursor = conn.cursor()
         try:
             password_hash = hash_password(password)
             cursor.execute('''
-                INSERT INTO users (email, password_hash, role, tier)
-                VALUES (?, ?, ?, ?)
-            ''', (email, password_hash, role, tier))
+                INSERT INTO users (email, password_hash, role, tier, name, company, phone)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (email, password_hash, role, tier, name, company, phone))
             user_id = cursor.lastrowid
-            print(f"[DB] 사용자 생성: {email} (ID: {user_id})")
+            print(f"[DB] 사용자 생성: {email} / {name} / {company} (ID: {user_id})")
             return user_id
         except sqlite3.IntegrityError:
             print(f"[DB] 사용자 생성 실패 - 이메일 중복: {email}")
@@ -243,15 +281,21 @@ def update_user_tier(user_id: int, tier: str, expires_at: Optional[datetime] = N
 
 
 def reset_user_usage(user_id: int):
-    """사용자 사용량 초기화 (월간 리셋 등)"""
+    """사용자 사용량 초기화 (월간 리셋 등) - search_count도 tier에 맞게 복원"""
+    tier_search_count = {'free': 5, 'basic': 300, 'pro': 4000}
     with get_db() as conn:
         cursor = conn.cursor()
+        # 현재 tier 조회
+        cursor.execute('SELECT tier FROM users WHERE id = ?', (user_id,))
+        row = cursor.fetchone()
+        restore_count = tier_search_count.get(row[0], 5) if row else 5
         cursor.execute('''
             UPDATE users
             SET search_used = 0, extract_used = 0, ai_used = 0,
+                search_count = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        ''', (user_id,))
+        ''', (restore_count, user_id))
 
 
 # ==================== 세션 관리 ====================
@@ -425,11 +469,11 @@ def get_user_stats(user_id: int) -> Dict:
     with get_db() as conn:
         cursor = conn.cursor()
 
-        # 검색 횟수
+        # 총 검색 횟수 (이력 기반)
         cursor.execute('SELECT COUNT(*) FROM search_history WHERE user_id = ?', (user_id,))
-        search_count = cursor.fetchone()[0]
+        total_searches = cursor.fetchone()[0]
 
-        # 추출 횟수
+        # 총 추출 횟수
         cursor.execute('SELECT COUNT(*) FROM extraction_history WHERE user_id = ?', (user_id,))
         extract_count = cursor.fetchone()[0]
 
@@ -445,7 +489,7 @@ def get_user_stats(user_id: int) -> Dict:
         user = get_user_by_id(user_id)
 
         return {
-            'search_count': search_count,
+            'total_searches': total_searches,
             'extract_count': extract_count,
             'ai_count': ai_count,
             'total_tokens': total_tokens,
@@ -459,8 +503,8 @@ def get_user_stats(user_id: int) -> Dict:
         }
 
 
-def get_user_activity_history(user_id: int, limit: int = 200) -> Optional[Dict]:
-    """회원 활동 이력 조회 (관리자용)"""
+def get_user_activity_history(user_id: int) -> Optional[Dict]:
+    """회원 활동 이력 조회 (관리자용) - 전체 이력"""
     user = get_user_by_id(user_id)
     if not user:
         return None
@@ -468,34 +512,31 @@ def get_user_activity_history(user_id: int, limit: int = 200) -> Optional[Dict]:
     with get_db() as conn:
         cursor = conn.cursor()
 
-        # 검색 기록
+        # 검색 기록 (전체)
         cursor.execute('''
             SELECT corp_name, market, searched_at
             FROM search_history
             WHERE user_id = ?
             ORDER BY searched_at DESC
-            LIMIT ?
-        ''', (user_id, limit))
+        ''', (user_id,))
         searches = [dict(row) for row in cursor.fetchall()]
 
-        # 추출 기록
+        # 추출 기록 (전체)
         cursor.execute('''
             SELECT corp_name, start_year, end_year, created_at
             FROM extraction_history
             WHERE user_id = ?
             ORDER BY created_at DESC
-            LIMIT ?
-        ''', (user_id, limit))
+        ''', (user_id,))
         extractions = [dict(row) for row in cursor.fetchall()]
 
-        # AI 분석 기록
+        # AI 분석 기록 (전체)
         cursor.execute('''
             SELECT corp_name, model_name, total_tokens, cost, created_at
             FROM llm_usage
             WHERE user_id = ?
             ORDER BY created_at DESC
-            LIMIT ?
-        ''', (user_id, limit))
+        ''', (user_id,))
         analyses = [dict(row) for row in cursor.fetchall()]
 
     return {
@@ -527,61 +568,33 @@ def get_popular_companies(limit: int = 10) -> List[Dict]:
 
 
 def get_all_users() -> List[Dict]:
-    """모든 사용자 조회 (관리자용) - 활동 통계 포함"""
+    """모든 사용자 조회 (관리자용) - 활동 통계 포함 (단일 쿼리 최적화)"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT id, email, role, tier, search_used, extract_used, ai_used,
-                   subscription_start, expires_at, search_count, created_at
-            FROM users
-            ORDER BY created_at DESC
+            SELECT
+                u.id, u.email, u.name, u.company, u.phone, u.role, u.tier,
+                u.search_used, u.extract_used, u.ai_used,
+                u.subscription_start, u.expires_at, u.search_count, u.created_at,
+                -- 마지막 로그인
+                (SELECT MAX(login_at) FROM login_history WHERE user_id = u.id) as last_login,
+                -- 마지막 검색
+                (SELECT MAX(searched_at) FROM search_history WHERE user_id = u.id) as last_search,
+                -- 검색한 고유 기업 수
+                (SELECT COUNT(DISTINCT corp_code) FROM search_history WHERE user_id = u.id) as unique_companies,
+                -- 총 AI API 토큰
+                (SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage WHERE user_id = u.id) as total_tokens_used,
+                -- 최근 7일 AI API 토큰
+                (SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage
+                 WHERE user_id = u.id AND created_at >= datetime('now', '-7 days')) as weekly_tokens_used
+            FROM users u
+            ORDER BY u.created_at DESC
         ''')
         users = [dict(row) for row in cursor.fetchall()]
 
-        # 각 사용자별 활동 통계 추가
         for user in users:
-            user_id = user['id']
-
-            # 마지막 로그인 시간
-            cursor.execute('''
-                SELECT login_at FROM login_history
-                WHERE user_id = ?
-                ORDER BY login_at DESC LIMIT 1
-            ''', (user_id,))
-            row = cursor.fetchone()
-            user['last_login'] = row[0] if row else None
-
-            # 총 AI API 사용량 (llm_usage에서 total_tokens 합계)
-            cursor.execute('''
-                SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage
-                WHERE user_id = ?
-            ''', (user_id,))
-            user['total_tokens_used'] = cursor.fetchone()[0]
-
-            # 최근 7일간 AI API 사용량
-            cursor.execute('''
-                SELECT COALESCE(SUM(total_tokens), 0) FROM llm_usage
-                WHERE user_id = ? AND created_at >= datetime('now', '-7 days')
-            ''', (user_id,))
-            weekly_tokens = cursor.fetchone()[0]
-            user['weekly_tokens_used'] = weekly_tokens
-            user['daily_avg_tokens'] = round(weekly_tokens / 7, 1) if weekly_tokens else 0
-
-            # 첫 사용일부터 현재까지 일수 (평균 계산용)
-            cursor.execute('''
-                SELECT MIN(created_at) FROM llm_usage WHERE user_id = ?
-            ''', (user_id,))
-            first_usage = cursor.fetchone()[0]
-            if first_usage and user['total_tokens_used'] > 0:
-                from datetime import datetime
-                try:
-                    first_date = datetime.fromisoformat(first_usage.replace('Z', '+00:00'))
-                    days_since_first = max(1, (datetime.now() - first_date.replace(tzinfo=None)).days)
-                    user['overall_daily_avg'] = round(user['total_tokens_used'] / days_since_first, 1)
-                except:
-                    user['overall_daily_avg'] = 0
-            else:
-                user['overall_daily_avg'] = 0
+            weekly = user.get('weekly_tokens_used', 0) or 0
+            user['daily_avg_tokens'] = round(weekly / 7, 1) if weekly else 0
 
         return users
 
@@ -783,6 +796,64 @@ def get_admin_analytics() -> Dict:
         ]
 
         return analytics
+
+
+# ==================== 결제 기록 관리 ====================
+
+def record_payment(user_id: int, amount: int, tier_granted: str, duration_days: int,
+                   payment_method: str = '계좌이체', memo: str = None,
+                   admin_id: int = None, paid_at: str = None) -> Optional[int]:
+    """결제 기록 저장"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        if not paid_at:
+            paid_at = datetime.now().strftime('%Y-%m-%d')
+        cursor.execute('''
+            INSERT INTO payment_history (user_id, amount, payment_method, tier_granted,
+                                         duration_days, memo, admin_id, paid_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, amount, payment_method, tier_granted, duration_days, memo, admin_id, paid_at))
+        payment_id = cursor.lastrowid
+        print(f"[DB] 결제 기록: user_id={user_id}, amount={amount}, tier={tier_granted}, days={duration_days}")
+        return payment_id
+
+
+def get_payment_history(user_id: int) -> List[Dict]:
+    """특정 사용자의 결제 이력 조회"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT ph.*, u.email as admin_email
+            FROM payment_history ph
+            LEFT JOIN users u ON ph.admin_id = u.id
+            WHERE ph.user_id = ?
+            ORDER BY ph.created_at DESC
+        ''', (user_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_all_payments(limit: int = 100) -> List[Dict]:
+    """전체 결제 이력 조회 (관리자용)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT ph.*, u.email as user_email, u.name as user_name, u.company as user_company,
+                   a.email as admin_email
+            FROM payment_history ph
+            JOIN users u ON ph.user_id = u.id
+            LEFT JOIN users a ON ph.admin_id = a.id
+            ORDER BY ph.created_at DESC
+            LIMIT ?
+        ''', (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def delete_payment(payment_id: int) -> bool:
+    """결제 기록 삭제"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM payment_history WHERE id = ?', (payment_id,))
+        return cursor.rowcount > 0
 
 
 # ==================== 챗봇 최근 질문 관리 ====================

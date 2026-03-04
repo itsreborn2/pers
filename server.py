@@ -90,6 +90,9 @@ class RegisterRequest(BaseModel):
     """회원가입 요청"""
     email: str
     password: str
+    name: str
+    company: Optional[str] = None
+    phone: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -314,16 +317,25 @@ async def register(request: RegisterRequest):
     if '@' not in request.email or '.' not in request.email:
         raise HTTPException(status_code=400, detail="올바른 이메일 형식이 아닙니다")
 
+    # 이름 필수 검증
+    if not request.name or not request.name.strip():
+        raise HTTPException(status_code=400, detail="이름을 입력해주세요")
+
     # 비밀번호 길이 검증
     if len(request.password) < 6:
         raise HTTPException(status_code=400, detail="비밀번호는 6자 이상이어야 합니다")
 
     # 사용자 생성
-    user_id = db.create_user(request.email, request.password)
+    user_id = db.create_user(
+        request.email, request.password,
+        name=request.name.strip(),
+        company=request.company.strip() if request.company else None,
+        phone=request.phone.strip() if request.phone else None
+    )
     if not user_id:
         raise HTTPException(status_code=400, detail="이미 등록된 이메일입니다")
 
-    print(f"[AUTH] 회원가입 완료: {request.email}")
+    print(f"[AUTH] 회원가입 완료: {request.email} ({request.name})")
     return {"success": True, "message": "회원가입이 완료되었습니다"}
 
 
@@ -383,19 +395,17 @@ class ChangePasswordRequest(BaseModel):
 @app.post("/api/auth/change-password")
 async def change_password(request: ChangePasswordRequest, user: Dict = Depends(require_auth)):
     """비밀번호 변경 API"""
-    import bcrypt
-
     # 현재 비밀번호 확인
     user_data = db.get_user_by_id(user['user_id'])
     if not user_data:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
 
-    # 현재 비밀번호 검증
-    if not bcrypt.checkpw(request.current_password.encode('utf-8'), user_data['password_hash'].encode('utf-8')):
+    # 현재 비밀번호 검증 (SHA-256 + salt)
+    if not db.verify_password(request.current_password, user_data['password_hash']):
         raise HTTPException(status_code=400, detail="현재 비밀번호가 일치하지 않습니다")
 
-    # 새 비밀번호 해시 생성
-    new_password_hash = bcrypt.hashpw(request.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    # 새 비밀번호 해시 생성 (SHA-256 + salt)
+    new_password_hash = db.hash_password(request.new_password)
 
     # 비밀번호 업데이트
     db.update_user_password(user['user_id'], new_password_hash)
@@ -413,11 +423,17 @@ async def get_me(user: Optional[Dict] = Depends(get_current_user)):
     # 사용량 통계 조회
     stats = db.get_user_stats(user['user_id'])
 
+    # name, company, phone은 sessions JOIN에 없으므로 별도 조회
+    full_user = db.get_user_by_id(user['user_id'])
+
     return {
         "logged_in": True,
         "user": {
             "id": user['user_id'],
             "email": user['email'],
+            "name": full_user.get('name') if full_user else None,
+            "company": full_user.get('company') if full_user else None,
+            "phone": full_user.get('phone') if full_user else None,
             "role": user['role'],
             "tier": user['tier'],
             "search_count": user.get('search_count', 5),
@@ -459,6 +475,21 @@ class UpdateUserRequest(BaseModel):
     search_limit: Optional[int] = None
     extract_limit: Optional[int] = None
     ai_limit: Optional[int] = None
+    password: Optional[str] = None  # 관리자 비밀번호 초기화용
+    name: Optional[str] = None
+    company: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class RecordPaymentRequest(BaseModel):
+    """결제 기록 요청"""
+    user_id: int
+    amount: int                              # 결제 금액 (원)
+    tier_granted: str = 'pro'                # 부여 등급
+    duration_days: int = 365                 # 부여 기간 (일)
+    payment_method: str = '계좌이체'
+    memo: Optional[str] = None
+    paid_at: Optional[str] = None            # 실제 입금일 (YYYY-MM-DD)
 
 
 @app.put("/api/admin/users/{user_id}")
@@ -475,6 +506,9 @@ async def update_user(user_id: int, request: UpdateUserRequest, admin: Dict = De
         params = []
 
         if request.tier is not None:
+            valid_tiers = ['free', 'basic', 'pro']
+            if request.tier not in valid_tiers:
+                raise HTTPException(status_code=400, detail=f"유효하지 않은 등급입니다. 가능한 값: {valid_tiers}")
             updates.append("tier = ?")
             params.append(request.tier)
 
@@ -529,11 +563,29 @@ async def update_user(user_id: int, request: UpdateUserRequest, admin: Dict = De
             updates.append("search_count = ?")
             params.append(request.search_count)
 
+        if request.name is not None:
+            updates.append("name = ?")
+            params.append(request.name if request.name else None)
+
+        if request.company is not None:
+            updates.append("company = ?")
+            params.append(request.company if request.company else None)
+
+        if request.phone is not None:
+            updates.append("phone = ?")
+            params.append(request.phone if request.phone else None)
+
         if updates:
             updates.append("updated_at = CURRENT_TIMESTAMP")
             params.append(user_id)
             query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
             cursor.execute(query, params)
+
+    # 비밀번호 초기화 (별도 처리)
+    if request.password:
+        password_hash = db.hash_password(request.password)
+        db.update_user_password(user_id, password_hash)
+        print(f"[ADMIN] 비밀번호 초기화: user_id={user_id}, by admin_id={admin['id']}")
 
     print(f"[ADMIN] 회원 정보 수정: user_id={user_id}, updates={request}")
     return {"success": True, "message": "회원 정보가 수정되었습니다"}
@@ -579,10 +631,80 @@ async def delete_user(user_id: int, admin: Dict = Depends(require_admin)):
         cursor.execute("DELETE FROM search_history WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM extraction_history WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM llm_usage WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM chat_recent_questions WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM payment_history WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
 
     print(f"[ADMIN] 회원 삭제: user_id={user_id}")
     return {"success": True, "message": "회원이 삭제되었습니다"}
+
+
+@app.post("/api/admin/payments")
+async def record_payment(request: RecordPaymentRequest, admin: Dict = Depends(require_admin)):
+    """결제 기록 등록 (관리자 전용) - 입금 확인 후 등급 변경 + 기록"""
+    user = db.get_user_by_id(request.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+
+    # 결제 기록 저장
+    payment_id = db.record_payment(
+        user_id=request.user_id,
+        amount=request.amount,
+        tier_granted=request.tier_granted,
+        duration_days=request.duration_days,
+        payment_method=request.payment_method,
+        memo=request.memo,
+        admin_id=admin['user_id'],
+        paid_at=request.paid_at
+    )
+
+    # 등급 변경 + 만료일 설정
+    from datetime import datetime, timedelta
+    paid_date = datetime.strptime(request.paid_at, '%Y-%m-%d') if request.paid_at else datetime.now()
+    expiry_date = paid_date + timedelta(days=request.duration_days)
+
+    with db.get_db() as conn:
+        cursor = conn.cursor()
+        tier_config = {
+            'basic': {'search': 100, 'extract': 50, 'ai': 20, 'search_count': 300},
+            'pro': {'search': 9999, 'extract': 9999, 'ai': 100, 'search_count': 4000}
+        }
+        config = tier_config.get(request.tier_granted, tier_config['pro'])
+        cursor.execute('''
+            UPDATE users SET tier = ?, subscription_start = ?, expires_at = ?,
+                   search_limit = ?, extract_limit = ?, ai_limit = ?, search_count = ?,
+                   search_used = 0, extract_used = 0, ai_used = 0,
+                   updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (request.tier_granted, paid_date.strftime('%Y-%m-%d'), expiry_date.strftime('%Y-%m-%d'),
+              config['search'], config['extract'], config['ai'], config['search_count'],
+              request.user_id))
+
+    print(f"[ADMIN] 결제 확인: user_id={request.user_id}, amount={request.amount}원, "
+          f"tier={request.tier_granted}, ~{expiry_date.strftime('%Y-%m-%d')}")
+    return {"success": True, "payment_id": payment_id, "message": "결제가 기록되었습니다"}
+
+
+@app.get("/api/admin/payments/{user_id}")
+async def get_user_payments(user_id: int, admin: Dict = Depends(require_admin)):
+    """특정 사용자 결제 이력 조회 (관리자 전용)"""
+    payments = db.get_payment_history(user_id)
+    return {"payments": payments}
+
+
+@app.get("/api/admin/payments")
+async def get_all_payments(admin: Dict = Depends(require_admin)):
+    """전체 결제 이력 조회 (관리자 전용)"""
+    payments = db.get_all_payments()
+    return {"payments": payments}
+
+
+@app.delete("/api/admin/payments/{payment_id}")
+async def delete_payment(payment_id: int, admin: Dict = Depends(require_admin)):
+    """결제 기록 삭제 (관리자 전용)"""
+    if not db.delete_payment(payment_id):
+        raise HTTPException(status_code=404, detail="결제 기록을 찾을 수 없습니다")
+    return {"success": True, "message": "결제 기록이 삭제되었습니다"}
 
 
 # ============================================================
@@ -604,7 +726,10 @@ async def admin_page():
     """관리자 페이지"""
     html_path = os.path.join(os.path.dirname(__file__), "admin.html")
     with open(html_path, "r", encoding="utf-8") as f:
-        return HTMLResponse(content=f.read())
+        return HTMLResponse(
+            content=f.read(),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+        )
 
 
 @app.post("/api/search")
@@ -3081,6 +3206,13 @@ def create_vcm_format(fs_data, excel_filepath=None):
         s = re.sub(r'\(주석[\d,\s]+\)', '', s)
         return s.strip()
 
+    def safe_get_value(row, col):
+        """row.get(col)에서 중복 컬럼으로 Series 반환 시 첫번째 값 사용"""
+        val = row.get(col)
+        if isinstance(val, pd.Series):
+            val = val.iloc[0] if len(val) > 0 else None
+        return val
+
     # ========== 섹션 기반 재무상태표 파싱 ==========
     def parse_bs_sections(df, year_col, acc_col):
         """재무상태표를 섹션별로 파싱하여 모든 항목 추출
@@ -3143,7 +3275,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
             acc_clean = normalize(acc_normalized)
 
             # 값 추출
-            val = row.get(year_col)
+            val = safe_get_value(row, year_col)
             val_num = None
             if pd.notna(val):
                 try:
@@ -3263,7 +3395,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
             acc_clean = normalize(raw_acc)
 
             # 값 추출
-            val = row.get(year_col)
+            val = safe_get_value(row, year_col)
             val_num = None
             if pd.notna(val):
                 try:
@@ -3344,7 +3476,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 continue
             acc_normalized = strip_note_ref(raw_acc)
             acc_clean = normalize(acc_normalized)
-            val = row.get(year_col)
+            val = safe_get_value(row, year_col)
             val_num = None
             if pd.notna(val):
                 try:
@@ -4213,7 +4345,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
                             if bs_year_str == year_str:
                                 bs_year = bs_col
                                 break
-                    val = row.get(bs_year)
+                    val = safe_get_value(row, bs_year)
                     if pd.notna(val):
                         try:
                             val_str = str(val).replace(',', '').strip()
@@ -4239,7 +4371,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
                             if bs_year_str == year_str:
                                 bs_year = bs_col
                                 break
-                    val = row.get(bs_year)
+                    val = safe_get_value(row, bs_year)
                     if pd.notna(val):
                         try:
                             val_str = str(val).replace(',', '').strip()
@@ -6183,6 +6315,24 @@ async def run_financial_analysis(task_id: str):
         task['analysis_message'] = f'분석 실패: {str(e)}'
         task['analysis_result'] = None
 
+        # 실패 시에도 소비된 토큰 로깅
+        if task.get('user_id'):
+            try:
+                token_info = analyzer._get_token_usage() if 'analyzer' in locals() else {}
+                if token_info.get('total_tokens', 0) > 0:
+                    db.log_llm_usage(
+                        user_id=task['user_id'],
+                        corp_code=task.get('corp_code', ''),
+                        corp_name=task.get('corp_name', ''),
+                        model_name=token_info.get('model', 'gemini-2.5-pro'),
+                        input_tokens=token_info.get('input_tokens', 0),
+                        output_tokens=token_info.get('output_tokens', 0),
+                        cost=token_info.get('cost', 0)
+                    )
+                    print(f"[ANALYSIS] 실패 시 부분 토큰 기록: {token_info.get('total_tokens', 0)} tokens")
+            except Exception as log_err:
+                print(f"[ANALYSIS] 실패 시 토큰 기록 실패: {log_err}")
+
 
 @app.get("/api/analyze-status/{task_id}")
 async def get_analysis_status(task_id: str):
@@ -7007,8 +7157,9 @@ def add_super_research_sheet(filepath: str, task: dict):
                             label = f"[{type_str}] {date_str}" if type_str else date_str
                             # 제목 + 설명 합쳐서 표시
                             full_title = f"{title_str}\n{desc_str}" if desc_str else title_str
-                            ws.cell(row=row_idx, column=1, value=label)
-                            ws.cell(row=row_idx, column=1).border = thin_border
+                            cell_date = ws.cell(row=row_idx, column=1, value=label)
+                            cell_date.number_format = '@'  # 텍스트 형식 (날짜가 숫자로 변환되는 것 방지)
+                            cell_date.border = thin_border
                             ws.cell(row=row_idx, column=2, value=full_title)
                             ws.cell(row=row_idx, column=2).border = thin_border
                             ws.cell(row=row_idx, column=2).alignment = Alignment(wrap_text=True)
@@ -7290,7 +7441,7 @@ async def add_insight_to_excel(task_id: str, request: Request):
         # 완료 시간 갱신 (TTL 리셋) - AI 분석 완료 후 다운로드 시간 확보
         task['completed_at'] = time.time()
 
-        return {"success": True, "message": "재무분석 AI(원본+요약)가 엑셀에 추가되었습니다."}
+        return {"success": True, "message": "재무분석 AI(원본+요약)가 엑셀에 추가되었습니다.", "filename": task.get('filename')}
 
     except Exception as e:
         print(f"[오류] 재무분석 AI 엑셀 추가 실패: {e}")
