@@ -303,7 +303,7 @@
 
         .user-table th,
         .user-table td {
-            padding: 16px 20px;
+            padding: 12px 10px;
             text-align: left;
             border-bottom: 1px solid #f3f4f6;
         }
@@ -416,6 +416,12 @@
             color: #2563eb;
         }
 
+        .activity-date {
+            font-size: 0.8rem;
+            color: #6b7280;
+            white-space: nowrap;
+        }
+
         /* 삭제 버튼 */
         .btn-delete {
             padding: 6px 12px;
@@ -431,6 +437,180 @@
         .btn-delete:hover {
             background: #fee2e2;
             border-color: #f87171;
+        }
+
+        /* PW초기화 버튼 */
+        .btn-reset-pw {
+            padding: 6px 12px;
+            border: 1px solid #93c5fd;
+            border-radius: 6px;
+            background: #eff6ff;
+            color: #2563eb;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 4px;
+        }
+
+        .btn-reset-pw:hover {
+            background: #dbeafe;
+            border-color: #60a5fa;
+        }
+
+        /* 결제등록 버튼 */
+        .btn-payment {
+            padding: 6px 12px;
+            border: 1px solid #86efac;
+            border-radius: 6px;
+            background: #f0fdf4;
+            color: #16a34a;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-payment:hover {
+            background: #dcfce7;
+            border-color: #4ade80;
+        }
+
+        /* 결제 모달 */
+        .payment-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .payment-modal-overlay.show {
+            display: flex;
+        }
+        .payment-modal {
+            background: #fff;
+            border-radius: 16px;
+            width: 480px;
+            max-width: 95vw;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .payment-modal-header {
+            padding: 20px 24px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .payment-modal-header h3 {
+            font-size: 1.1rem;
+            color: #111827;
+        }
+        .payment-modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #9ca3af;
+            cursor: pointer;
+        }
+        .payment-modal-body {
+            padding: 20px 24px;
+        }
+        .payment-form-group {
+            margin-bottom: 14px;
+        }
+        .payment-form-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: #374151;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+        .payment-form-group input,
+        .payment-form-group select,
+        .payment-form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        .payment-form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+        .payment-form-row {
+            display: flex;
+            gap: 12px;
+        }
+        .payment-form-row .payment-form-group {
+            flex: 1;
+        }
+        .payment-submit-btn {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(135deg, #16a34a, #059669);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        .payment-submit-btn:hover {
+            opacity: 0.9;
+        }
+
+        /* 결제 이력 */
+        .payment-history-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #e5e7eb;
+        }
+        .payment-history-section h4 {
+            font-size: 0.9rem;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+        .payment-history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+        }
+        .payment-history-item .ph-amount {
+            font-weight: 600;
+            color: #16a34a;
+        }
+        .payment-history-item .ph-date {
+            color: #6b7280;
+        }
+        .payment-history-item .ph-tier {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .payment-history-item .ph-memo {
+            color: #9ca3af;
+            font-size: 0.8rem;
+        }
+        .payment-history-item .ph-delete {
+            background: none;
+            border: none;
+            color: #d1d5db;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .payment-history-item .ph-delete:hover {
+            color: #ef4444;
         }
 
         /* 로딩 */
@@ -648,7 +828,7 @@
     <header class="top-header">
         <div class="header-content">
             <div class="brand-section">
-                <h1>Valulens</h1>
+                <h1><a href="/" style="color: inherit; text-decoration: none;">Valulens</a></h1>
                 <p class="subtitle">회원관리</p>
             </div>
             <div class="header-nav">
@@ -763,18 +943,23 @@
                 <thead>
                     <tr>
                         <th>ID</th>
+                        <th>이름/회사</th>
                         <th>이메일</th>
                         <th>등급</th>
                         <th>토큰</th>
                         <th>검색</th>
+                        <th>추출</th>
+                        <th>AI</th>
+                        <th>마지막 로그인</th>
                         <th>유료 시작일</th>
                         <th>만료일</th>
+                        <th>결제</th>
                         <th>가입일</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody id="userTableBody">
-                    <tr><td colspan="9" class="loading-row">로딩 중...</td></tr>
+                    <tr><td colspan="15" class="loading-row">로딩 중...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -893,7 +1078,7 @@
                 document.getElementById('statFree').textContent = users.filter(u => u.tier === 'free').length;
 
                 if (users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="9" class="loading-row">등록된 회원이 없습니다</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="15" class="loading-row">등록된 회원이 없습니다</td></tr>';
                     return;
                 }
 
@@ -901,18 +1086,37 @@
                     const isAdmin = user.role === 'admin';
                     const subStart = user.subscription_start ? user.subscription_start.split('T')[0] : '';
                     const subEnd = user.expires_at ? user.expires_at.split('T')[0] : '';
-                    const createdAt = user.created_at ? new Date(user.created_at).toLocaleDateString('ko-KR') : '-';
-                    const tokens = user.tokens !== null && user.tokens !== undefined ? user.tokens : 5;
+                    const createdAt = user.created_at ? (() => { const d = new Date(user.created_at); return `${String(d.getFullYear()).slice(2)}.${d.getMonth()+1}.${d.getDate()}`; })() : '-';
+                    const tokens = user.search_count !== null && user.search_count !== undefined ? user.search_count : 5;
+
+                    const fmtDate = (d) => {
+                        if (!d) return '-';
+                        const dt = new Date(d.replace(' ', 'T'));
+                        if (isNaN(dt)) return '-';
+                        const y = String(dt.getFullYear()).slice(2);
+                        const m = String(dt.getMonth() + 1).padStart(2, '0');
+                        const dd = String(dt.getDate()).padStart(2, '0');
+                        const hh = String(dt.getHours()).padStart(2, '0');
+                        const mm = String(dt.getMinutes()).padStart(2, '0');
+                        return `${y}.${m}.${dd} ${hh}:${mm}`;
+                    };
 
                     const badgeClass = isAdmin ? 'badge-admin' :
                                        user.tier === 'pro' ? 'badge-pro' :
                                        user.tier === 'basic' ? 'badge-basic' : 'badge-free';
 
+                    const nameDisplay = user.name || '-';
+                    const companyDisplay = user.company ? `<span style="color:#6b7280;font-size:0.8em">${user.company}</span>` : '';
+
                     return `
                         <tr>
                             <td>${user.id}</td>
+                            <td style="white-space:nowrap">
+                                ${nameDisplay}
+                                ${companyDisplay ? '<br>' + companyDisplay : ''}
+                            </td>
                             <td>
-                                <a href="#" class="email-link" onclick="showUserHistory(${user.id}, '${user.email}'); return false;">${user.email}</a>
+                                <a href="#" class="email-link" onclick="showUserHistory(${user.id}); return false;">${user.email}</a>
                                 ${isAdmin ? '<span class="badge badge-admin">Admin</span>' : ''}
                             </td>
                             <td>
@@ -927,6 +1131,9 @@
                                        onchange="updateUser(${user.id}, 'tokens', parseInt(this.value))" />
                             </td>
                             <td class="usage-value">${user.search_used || 0}</td>
+                            <td class="usage-value">${user.extract_used || 0}</td>
+                            <td class="usage-value">${user.ai_used || 0}</td>
+                            <td class="activity-date">${fmtDate(user.last_login)}</td>
                             <td>
                                 <input type="date" class="inline-date" value="${subStart}"
                                        onchange="updateUser(${user.id}, 'subscription_start', this.value)" />
@@ -935,9 +1142,13 @@
                                 <input type="date" class="inline-date" value="${subEnd}"
                                        onchange="updateUser(${user.id}, 'expires_at', this.value)" />
                             </td>
+                            <td>
+                                ${!isAdmin ? `<button class="btn-payment" onclick="showPaymentModal(${user.id}, '${(user.name || '').replace(/'/g, "\\'")}', '${user.email}')">결제등록</button>` : ''}
+                            </td>
                             <td>${createdAt}</td>
                             <td>
-                                ${!isAdmin ? `<button class="btn-delete" onclick="deleteUser(${user.id})">삭제</button>` : ''}
+                                ${!isAdmin ? `<button class="btn-reset-pw" onclick="resetPassword(${user.id}, '${user.email}')">PW초기화</button>
+                                <button class="btn-delete" onclick="deleteUser(${user.id})">삭제</button>` : ''}
                             </td>
                         </tr>
                     `;
@@ -945,7 +1156,7 @@
 
             } catch (err) {
                 console.error('Load users error:', err);
-                tbody.innerHTML = '<tr><td colspan="9" class="loading-row">회원 목록을 불러올 수 없습니다</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="14" class="loading-row">회원 목록을 불러올 수 없습니다</td></tr>';
             }
         }
 
@@ -961,7 +1172,7 @@
 
                 const body = {};
                 if (field === 'tokens') {
-                    body[field] = value;  // 0도 정상 저장
+                    body['search_count'] = value;  // 백엔드 필드명: search_count
                 } else {
                     body[field] = value || null;
                 }
@@ -985,6 +1196,35 @@
             } catch (err) {
                 alert('오류: ' + err.message);
                 loadUsers();
+            }
+        }
+
+        async function resetPassword(userId, email) {
+            if (!confirm(`${email} 의 비밀번호를 초기화하시겠습니까?`)) return;
+
+            // 8자리 임시 비밀번호 생성 (영문+숫자)
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+            let tempPw = '';
+            for (let i = 0; i < 8; i++) {
+                tempPw += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+
+            try {
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: tempPw })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || '비밀번호 초기화 실패');
+                }
+
+                prompt(`${email} 의 임시 비밀번호입니다.\n아래 비밀번호를 복사하여 사용자에게 전달하세요:`, tempPw);
+
+            } catch (err) {
+                alert('오류: ' + err.message);
             }
         }
 
@@ -1012,7 +1252,7 @@
 
         let currentHistoryData = null;
 
-        async function showUserHistory(userId, email) {
+        async function showUserHistory(userId) {
             try {
                 const response = await fetch(`/api/admin/users/${userId}/history`);
                 if (!response.ok) throw new Error('이력 조회 실패');
@@ -1133,6 +1373,182 @@
             document.querySelector('.table-container').style.display = '';
             document.querySelector('.page-title').style.display = '';
         }
+
+        // ==================== 결제 관리 ====================
+
+        let paymentModalUserId = null;
+
+        async function showPaymentModal(userId, userName, userEmail) {
+            paymentModalUserId = userId;
+            document.getElementById('paymentUserInfo').textContent = `${userName || '-'} (${userEmail})`;
+            document.getElementById('paymentAmount').value = '';
+            document.getElementById('paymentTier').value = 'pro';
+            document.getElementById('paymentDuration').value = '365';
+            document.getElementById('paymentMethod').value = '계좌이체';
+            document.getElementById('paymentMemo').value = '';
+            document.getElementById('paymentPaidAt').value = new Date().toISOString().split('T')[0];
+
+            // 결제 이력 로드
+            await loadPaymentHistory(userId);
+
+            document.getElementById('paymentModalOverlay').classList.add('show');
+        }
+
+        function closePaymentModal() {
+            document.getElementById('paymentModalOverlay').classList.remove('show');
+            paymentModalUserId = null;
+        }
+
+        async function loadPaymentHistory(userId) {
+            const container = document.getElementById('paymentHistoryList');
+            try {
+                const response = await fetch(`/api/admin/payments/${userId}`);
+                if (!response.ok) throw new Error('조회 실패');
+                const data = await response.json();
+                const payments = data.payments || [];
+
+                if (payments.length === 0) {
+                    container.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:12px;">결제 이력 없음</div>';
+                    return;
+                }
+
+                container.innerHTML = payments.map(p => {
+                    const dt = p.paid_at || (p.created_at ? p.created_at.split(' ')[0] : '-');
+                    const tierLabel = p.tier_granted === 'pro' ? 'Pro' : p.tier_granted === 'basic' ? 'Basic' : p.tier_granted;
+                    const tierColor = p.tier_granted === 'pro' ? 'background:#fef2f2;color:#dc2626' : 'background:#fffbeb;color:#d97706';
+                    return `
+                        <div class="payment-history-item">
+                            <span class="ph-date">${dt}</span>
+                            <span class="ph-tier" style="${tierColor}">${tierLabel}</span>
+                            <span class="ph-amount">${Number(p.amount).toLocaleString()}원</span>
+                            <span>${p.duration_days}일</span>
+                            <span class="ph-memo">${p.memo || ''}</span>
+                            <button class="ph-delete" onclick="deletePaymentRecord(${p.id})" title="삭제">&times;</button>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                container.innerHTML = '<div style="color:#ef4444;padding:8px;">이력 로드 실패</div>';
+            }
+        }
+
+        async function submitPayment() {
+            if (!paymentModalUserId) return;
+
+            const amount = parseInt(document.getElementById('paymentAmount').value);
+            if (!amount || amount <= 0) {
+                alert('결제 금액을 입력해주세요.');
+                return;
+            }
+
+            const body = {
+                user_id: paymentModalUserId,
+                amount: amount,
+                tier_granted: document.getElementById('paymentTier').value,
+                duration_days: parseInt(document.getElementById('paymentDuration').value) || 365,
+                payment_method: document.getElementById('paymentMethod').value,
+                memo: document.getElementById('paymentMemo').value || null,
+                paid_at: document.getElementById('paymentPaidAt').value || null
+            };
+
+            if (!confirm(`${body.amount.toLocaleString()}원 결제를 등록하고 ${body.tier_granted.toUpperCase()} 등급으로 변경하시겠습니까?`)) return;
+
+            try {
+                const response = await fetch('/api/admin/payments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || '결제 등록 실패');
+                }
+
+                alert('결제가 등록되었습니다.');
+                await loadPaymentHistory(paymentModalUserId);
+                document.getElementById('paymentAmount').value = '';
+                document.getElementById('paymentMemo').value = '';
+                loadUsers(); // 메인 테이블 새로고침
+            } catch (err) {
+                alert('오류: ' + err.message);
+            }
+        }
+
+        async function deletePaymentRecord(paymentId) {
+            if (!confirm('이 결제 기록을 삭제하시겠습니까? (등급은 변경되지 않습니다)')) return;
+            try {
+                const response = await fetch(`/api/admin/payments/${paymentId}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error('삭제 실패');
+                if (paymentModalUserId) await loadPaymentHistory(paymentModalUserId);
+            } catch (err) {
+                alert('오류: ' + err.message);
+            }
+        }
     </script>
+
+    <!-- 결제 등록 모달 -->
+    <div class="payment-modal-overlay" id="paymentModalOverlay" onclick="if(event.target===this)closePaymentModal()">
+        <div class="payment-modal">
+            <div class="payment-modal-header">
+                <h3>결제 등록</h3>
+                <button class="payment-modal-close" onclick="closePaymentModal()">&times;</button>
+            </div>
+            <div class="payment-modal-body">
+                <div style="margin-bottom:16px;padding:10px 14px;background:#f0f9ff;border-radius:8px;color:#1e40af;font-size:0.9rem" id="paymentUserInfo"></div>
+
+                <div class="payment-form-row">
+                    <div class="payment-form-group">
+                        <label>결제 금액 (원)</label>
+                        <input type="number" id="paymentAmount" placeholder="예: 990000" min="0" />
+                    </div>
+                    <div class="payment-form-group">
+                        <label>입금일</label>
+                        <input type="date" id="paymentPaidAt" />
+                    </div>
+                </div>
+
+                <div class="payment-form-row">
+                    <div class="payment-form-group">
+                        <label>부여 등급</label>
+                        <select id="paymentTier">
+                            <option value="pro">Pro</option>
+                            <option value="basic">Basic</option>
+                        </select>
+                    </div>
+                    <div class="payment-form-group">
+                        <label>이용 기간 (일)</label>
+                        <select id="paymentDuration">
+                            <option value="30">30일 (1개월)</option>
+                            <option value="90">90일 (3개월)</option>
+                            <option value="180">180일 (6개월)</option>
+                            <option value="365" selected>365일 (1년)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="payment-form-group">
+                    <label>결제 수단</label>
+                    <select id="paymentMethod">
+                        <option value="계좌이체">계좌이체</option>
+                        <option value="카드결제">카드결제</option>
+                        <option value="기타">기타</option>
+                    </select>
+                </div>
+
+                <div class="payment-form-group">
+                    <label>메모</label>
+                    <textarea id="paymentMemo" placeholder="비고 (선택)"></textarea>
+                </div>
+
+                <button class="payment-submit-btn" onclick="submitPayment()">결제 등록 및 등급 변경</button>
+
+                <div class="payment-history-section">
+                    <h4>결제 이력</h4>
+                    <div id="paymentHistoryList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
