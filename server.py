@@ -132,6 +132,20 @@ async def require_admin(request: Request, session_token: Optional[str] = Cookie(
     return session
 
 
+def get_client_ip(request: Request) -> str:
+    """클라이언트 IP 추출 (프록시 지원)"""
+    # X-Real-IP (nginx)
+    real_ip = request.headers.get('x-real-ip')
+    if real_ip:
+        return real_ip
+    # X-Forwarded-For (첫 번째 IP가 원본)
+    forwarded = request.headers.get('x-forwarded-for')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    # 직접 연결
+    return request.client.host if request.client else '0.0.0.0'
+
+
 # ============================================================
 # 유틸리티 함수
 # ============================================================
@@ -306,6 +320,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="DART 재무제표 추출기", lifespan=lifespan)
 
+# 정적 파일 서빙 (랜딩 페이지 이미지 등)
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 
 # ============================================================
 # 인증 API 엔드포인트
@@ -415,10 +434,22 @@ async def change_password(request: ChangePasswordRequest, user: Dict = Depends(r
 
 
 @app.get("/api/auth/me")
-async def get_me(user: Optional[Dict] = Depends(get_current_user)):
+async def get_me(request: Request, user: Optional[Dict] = Depends(get_current_user)):
     """현재 로그인한 사용자 정보 조회"""
     if not user:
-        return {"logged_in": False, "user": None}
+        ip = get_client_ip(request)
+        usage = db.get_guest_usage(ip)
+        limits = db.get_guest_limits()
+        return {
+            "logged_in": False,
+            "user": None,
+            "guest": {
+                "extract_used": usage.get('extract_used', 0),
+                "extract_limit": limits['extract_limit'],
+                "chat_used": usage.get('chat_used', 0),
+                "chat_limit": limits['chat_limit'],
+            }
+        }
 
     # 사용량 통계 조회
     stats = db.get_user_stats(user['user_id'])
@@ -489,7 +520,8 @@ class RecordPaymentRequest(BaseModel):
     duration_days: int = 365                 # 부여 기간 (일)
     payment_method: str = '계좌이체'
     memo: Optional[str] = None
-    paid_at: Optional[str] = None            # 실제 입금일 (YYYY-MM-DD)
+    paid_at: Optional[str] = None            # 유료 시작일 (YYYY-MM-DD)
+    expires_at: Optional[str] = None         # 만료일 (YYYY-MM-DD), 전달 시 직접 사용
 
 
 @app.put("/api/admin/users/{user_id}")
@@ -516,8 +548,9 @@ async def update_user(user_id: int, request: UpdateUserRequest, admin: Dict = De
             from datetime import datetime, timedelta
             today = datetime.now().strftime('%Y-%m-%d')
 
+            free_s = db.get_free_tier_settings()
             tier_config = {
-                'free': {'search': 10, 'extract': 5, 'ai': 3, 'search_count': 5, 'duration_months': 0},
+                'free': {'search': free_s['search_limit'], 'extract': free_s['extract_limit'], 'ai': free_s['ai_limit'], 'search_count': free_s['search_count'], 'duration_months': 0},
                 'basic': {'search': 100, 'extract': 50, 'ai': 20, 'search_count': 300, 'duration_months': 1},
                 'pro': {'search': 9999, 'extract': 9999, 'ai': 100, 'search_count': 4000, 'duration_months': 12}
             }
@@ -661,7 +694,10 @@ async def record_payment(request: RecordPaymentRequest, admin: Dict = Depends(re
     # 등급 변경 + 만료일 설정
     from datetime import datetime, timedelta
     paid_date = datetime.strptime(request.paid_at, '%Y-%m-%d') if request.paid_at else datetime.now()
-    expiry_date = paid_date + timedelta(days=request.duration_days)
+    if request.expires_at:
+        expiry_date = datetime.strptime(request.expires_at, '%Y-%m-%d')
+    else:
+        expiry_date = paid_date + timedelta(days=request.duration_days)
 
     with db.get_db() as conn:
         cursor = conn.cursor()
@@ -673,7 +709,7 @@ async def record_payment(request: RecordPaymentRequest, admin: Dict = Depends(re
         cursor.execute('''
             UPDATE users SET tier = ?, subscription_start = ?, expires_at = ?,
                    search_limit = ?, extract_limit = ?, ai_limit = ?, search_count = ?,
-                   search_used = 0, extract_used = 0, ai_used = 0,
+                   search_used = 0, extract_used = 0, ai_used = 0, chat_used = 0,
                    updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         ''', (request.tier_granted, paid_date.strftime('%Y-%m-%d'), expiry_date.strftime('%Y-%m-%d'),
@@ -707,6 +743,41 @@ async def delete_payment(payment_id: int, admin: Dict = Depends(require_admin)):
     return {"success": True, "message": "결제 기록이 삭제되었습니다"}
 
 
+@app.get("/api/admin/settings")
+async def get_admin_settings(admin: Dict = Depends(require_admin)):
+    """앱 설정 조회 (관리자 전용)"""
+    settings = db.get_free_tier_settings()
+    return {"settings": settings}
+
+
+class UpdateSettingsRequest(BaseModel):
+    free_search_limit: Optional[int] = None
+    free_extract_limit: Optional[int] = None
+    free_ai_limit: Optional[int] = None
+    free_search_count: Optional[int] = None
+
+
+@app.put("/api/admin/settings")
+async def update_admin_settings(request: UpdateSettingsRequest, admin: Dict = Depends(require_admin)):
+    """앱 설정 변경 (관리자 전용) — 기존 가입자에는 영향 없음, 새 가입자부터 적용"""
+    updated = []
+    if request.free_search_limit is not None:
+        db.update_setting('free_search_limit', str(request.free_search_limit))
+        updated.append('free_search_limit')
+    if request.free_extract_limit is not None:
+        db.update_setting('free_extract_limit', str(request.free_extract_limit))
+        updated.append('free_extract_limit')
+    if request.free_ai_limit is not None:
+        db.update_setting('free_ai_limit', str(request.free_ai_limit))
+        updated.append('free_ai_limit')
+    if request.free_search_count is not None:
+        db.update_setting('free_search_count', str(request.free_search_count))
+        updated.append('free_search_count')
+
+    print(f"[ADMIN] 설정 변경: {updated} by {admin.get('email')}")
+    return {"success": True, "updated": updated, "message": "설정이 변경되었습니다"}
+
+
 # ============================================================
 # API 엔드포인트
 # ============================================================
@@ -725,6 +796,28 @@ async def index():
 async def admin_page():
     """관리자 페이지"""
     html_path = os.path.join(os.path.dirname(__file__), "admin.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(
+            content=f.read(),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+        )
+
+
+@app.get("/privacy.html", response_class=HTMLResponse)
+async def privacy_page():
+    """개인정보 처리방침 페이지"""
+    html_path = os.path.join(os.path.dirname(__file__), "privacy.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(
+            content=f.read(),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+        )
+
+
+@app.get("/terms.html", response_class=HTMLResponse)
+async def terms_page():
+    """이용약관 페이지"""
+    html_path = os.path.join(os.path.dirname(__file__), "terms.html")
     with open(html_path, "r", encoding="utf-8") as f:
         return HTMLResponse(
             content=f.read(),
@@ -895,18 +988,25 @@ async def get_company_info(corp_code: str, user: Optional[Dict] = Depends(get_cu
 @app.post("/api/extract")
 async def start_extraction(
     request: ExtractRequest,
+    req_obj: Request,
     background_tasks: BackgroundTasks,
     user: Optional[Dict] = Depends(get_current_user)
 ):
     """재무제표 추출 시작 API"""
-    # 검색횟수 확인 및 차감 (관리자는 무제한)
-    if user and user.get('role') != 'admin':
-        user_search_count = user.get('search_count', 0)
-        if user_search_count is not None and user_search_count <= 0:
-            raise HTTPException(status_code=403, detail="검색횟수가 부족합니다. 유료 결제를 진행해 주세요.")
-        # 검색횟수 차감
-        if not db.use_search(user['user_id']):
-            raise HTTPException(status_code=403, detail="검색횟수 차감에 실패했습니다.")
+    if user:
+        # 로그인 사용자: 검색횟수 확인 및 차감 (관리자는 무제한)
+        if user.get('role') != 'admin':
+            user_search_count = user.get('search_count', 0)
+            if user_search_count is not None and user_search_count <= 0:
+                raise HTTPException(status_code=403, detail="검색횟수가 부족합니다. 유료 결제를 진행해 주세요.")
+            # 검색횟수 차감
+            if not db.use_search(user['user_id']):
+                raise HTTPException(status_code=403, detail="검색횟수 차감에 실패했습니다.")
+    else:
+        # 게스트: 추출 한도 체크
+        ip = get_client_ip(req_obj)
+        if not db.use_guest_extract(ip):
+            raise HTTPException(status_code=403, detail="GUEST_LIMIT_EXTRACT")
 
     # 작업 ID 생성
     task_id = str(uuid.uuid4())
@@ -923,6 +1023,7 @@ async def start_extraction(
         "corp_code": request.corp_code,
         "company_info": request.company_info,  # 기업개황정보 저장
         "user_id": user['user_id'] if user else None,  # 사용자 ID 저장
+        "client_ip": get_client_ip(req_obj) if not user else None,  # 게스트 IP 추적
         "start_year": request.start_year,
         "end_year": request.end_year,
         "created_at": current_time,  # 작업 생성 시간
@@ -6290,23 +6391,22 @@ async def run_financial_analysis(task_id: str):
             del task['preview_data']
             print(f"[ANALYSIS] preview_data 메모리 해제: {task_id}")
 
-        # LLM 사용량 로깅 (로그인한 사용자인 경우)
-        if task.get('user_id'):
-            try:
-                # 토큰 정보 추출 (result에 포함되어 있으면 사용, 없으면 기본값)
-                token_info = result.get('token_usage', {}) if result else {}
-                db.log_llm_usage(
-                    user_id=task['user_id'],
-                    corp_code=task.get('corp_code', ''),
-                    corp_name=task.get('corp_name', ''),
-                    model_name=token_info.get('model', 'gemini-2.5-pro'),
-                    input_tokens=token_info.get('input_tokens', 0),
-                    output_tokens=token_info.get('output_tokens', 0),
-                    cost=token_info.get('cost', 0)
-                )
-                print(f"[ANALYSIS] LLM 사용량 기록 완료: user_id={task['user_id']}")
-            except Exception as log_err:
-                print(f"[ANALYSIS] LLM 사용량 기록 실패: {log_err}")
+        # LLM 사용량 로깅 (로그인 사용자 + 게스트 모두)
+        try:
+            token_info = result.get('token_usage', {}) if result else {}
+            db.log_llm_usage(
+                user_id=task.get('user_id'),
+                corp_code=task.get('corp_code', ''),
+                corp_name=task.get('corp_name', ''),
+                model_name=token_info.get('model', 'gemini-2.5-pro'),
+                input_tokens=token_info.get('input_tokens', 0),
+                output_tokens=token_info.get('output_tokens', 0),
+                cost=token_info.get('cost', 0),
+                ip_address=task.get('client_ip')
+            )
+            print(f"[ANALYSIS] LLM 사용량 기록 완료: user_id={task.get('user_id')}, ip={task.get('client_ip')}")
+        except Exception as log_err:
+            print(f"[ANALYSIS] LLM 사용량 기록 실패: {log_err}")
 
     except Exception as e:
         print(f"[ANALYSIS ERROR] {e}")
@@ -6315,23 +6415,24 @@ async def run_financial_analysis(task_id: str):
         task['analysis_message'] = f'분석 실패: {str(e)}'
         task['analysis_result'] = None
 
-        # 실패 시에도 소비된 토큰 로깅
-        if task.get('user_id'):
-            try:
-                token_info = analyzer._get_token_usage() if 'analyzer' in locals() else {}
-                if token_info.get('total_tokens', 0) > 0:
-                    db.log_llm_usage(
-                        user_id=task['user_id'],
-                        corp_code=task.get('corp_code', ''),
-                        corp_name=task.get('corp_name', ''),
-                        model_name=token_info.get('model', 'gemini-2.5-pro'),
-                        input_tokens=token_info.get('input_tokens', 0),
-                        output_tokens=token_info.get('output_tokens', 0),
-                        cost=token_info.get('cost', 0)
-                    )
-                    print(f"[ANALYSIS] 실패 시 부분 토큰 기록: {token_info.get('total_tokens', 0)} tokens")
-            except Exception as log_err:
-                print(f"[ANALYSIS] 실패 시 토큰 기록 실패: {log_err}")
+        # 실패 시에도 소비된 토큰 로깅 (게스트 포함)
+        try:
+            token_info = analyzer._get_token_usage() if 'analyzer' in locals() else {}
+            if token_info.get('total_tokens', 0) > 0:
+                db.log_llm_usage(
+                    user_id=task.get('user_id'),
+                    corp_code=task.get('corp_code', ''),
+                    corp_name=task.get('corp_name', ''),
+                    model_name=token_info.get('model', 'gemini-2.5-pro'),
+                    input_tokens=token_info.get('input_tokens', 0),
+                    output_tokens=token_info.get('output_tokens', 0),
+                    cost=token_info.get('cost', 0),
+                    increment_used=False,
+                    ip_address=task.get('client_ip')
+                )
+                print(f"[ANALYSIS] 실패 시 토큰만 기록 (횟수 미증가): {token_info.get('total_tokens', 0)} tokens")
+        except Exception as log_err:
+            print(f"[ANALYSIS] 실패 시 토큰 기록 실패: {log_err}")
 
 
 @app.get("/api/analyze-status/{task_id}")
@@ -6598,7 +6699,7 @@ async def init_chatbot(task_id: str):
 
 
 @app.post("/api/chat/message/{task_id}")
-async def chat_message(task_id: str, request: ChatMessageRequest):
+async def chat_message(task_id: str, request: ChatMessageRequest, req_obj: Request):
     """채팅 메시지 전송 (SSE 스트리밍)"""
     task = TASKS.get(task_id)
     if not task:
@@ -6614,8 +6715,14 @@ async def chat_message(task_id: str, request: ChatMessageRequest):
     if not message:
         raise HTTPException(status_code=400, detail="메시지가 비어있습니다.")
 
-    # 최근 질문 저장
+    # 게스트 챗 한도 체크
     user_id = task.get('user_id')
+    if not user_id:
+        ip = get_client_ip(req_obj)
+        if not db.use_guest_chat(ip):
+            raise HTTPException(status_code=403, detail="GUEST_LIMIT_CHAT")
+
+    # 최근 질문 저장
     if user_id:
         db.save_recent_question(user_id, message)
 
@@ -6657,6 +6764,42 @@ async def chat_message(task_id: str, request: ChatMessageRequest):
             except asyncio.TimeoutError:
                 # SSE keepalive — 연결 유지용 (클라이언트에서 무시됨)
                 yield ": keepalive\n\n"
+
+        # 챗봇 대화 이력 + 토큰 사용량 기록
+        try:
+            token_info = chatbot.get_last_token_usage()
+            last_response = ''
+            if chatbot.conversation_history and chatbot.conversation_history[-1].get('role') == 'assistant':
+                last_response = chatbot.conversation_history[-1].get('content', '')
+
+            # 대화 이력 저장 (로그인 사용자만 — 게스트는 chat_history 불필요)
+            if user_id:
+                db.log_chat_history(
+                    user_id=user_id,
+                    corp_code=task.get('corp_code', ''),
+                    corp_name=task.get('corp_name', ''),
+                    question=message,
+                    response=last_response,
+                    input_tokens=token_info.get('input_tokens', 0),
+                    output_tokens=token_info.get('output_tokens', 0)
+                )
+
+            # 토큰 사용량 기록 (로그인 + 게스트 모두)
+            if token_info.get('total_tokens', 0) > 0:
+                db.log_llm_usage(
+                    user_id=user_id,
+                    corp_code=task.get('corp_code', ''),
+                    corp_name=task.get('corp_name', ''),
+                    model_name='gemini-chat',
+                    input_tokens=token_info['input_tokens'],
+                    output_tokens=token_info['output_tokens'],
+                    cost=0,
+                    usage_type='chat',
+                    ip_address=task.get('client_ip')
+                )
+            print(f"[CHAT] 대화 기록 완료: user_id={user_id}, ip={task.get('client_ip')}, tokens={token_info.get('total_tokens', 0)}")
+        except Exception as log_err:
+            print(f"[CHAT] 대화 기록 실패: {log_err}")
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

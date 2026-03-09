@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이용약관 - Valulens</title>
+    <style>
+        :root {
+            --primary: #373c5f;
+            --primary-dark: #2a2e4a;
+            --primary-light: #4a5080;
+            --accent: #b49132;
+            --accent-dark: #9a7c2a;
+            --accent-light: #c9a64a;
+            --text-dark: #1a1a1a;
+            --text-medium: #4a5568;
+            --text-light: #6b7280;
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+            --border-light: #e2e8f0;
+            --border-medium: #cbd5e0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        body {
+            font-family: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-primary);
+            min-height: 100vh;
+            color: var(--text-dark);
+            line-height: 1.8;
+        }
+
+        /* ============================================ */
+        /* 상단 헤더                                     */
+        /* ============================================ */
+        .top-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #131313;
+            border-bottom: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px 48px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand-section h1 {
+            font-size: 1.5rem;
+            color: var(--accent);
+            margin: 0;
+        }
+
+        .brand-section h1 a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .brand-section .subtitle {
+            font-size: 0.8rem;
+            color: darkgray;
+            margin-top: 2px;
+        }
+
+        .header-nav-links {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-nav-link {
+            color: rgba(255,255,255,0.75);
+            font-size: 0.95rem;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .header-nav-link:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+        }
+
+        /* ============================================ */
+        /* 본문 컨테이너                                 */
+        /* ============================================ */
+        .page-content {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 110px 20px 60px;
+        }
+
+        .document-card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 56px 64px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e8e8e8;
+        }
+
+        .document-title {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .document-subtitle {
+            text-align: center;
+            color: var(--text-light);
+            font-size: 0.95rem;
+            margin-bottom: 48px;
+            padding-bottom: 32px;
+            border-bottom: 2px solid var(--border-light);
+        }
+
+        .document-subtitle strong {
+            color: var(--accent);
+        }
+
+        /* 섹션 스타일 */
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section:last-child {
+            margin-bottom: 0;
+        }
+
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 16px;
+            padding-left: 14px;
+            border-left: 4px solid var(--accent);
+            line-height: 1.4;
+        }
+
+        .section-body {
+            font-size: 0.95rem;
+            color: var(--text-medium);
+            line-height: 1.9;
+            padding-left: 4px;
+        }
+
+        .section-body p {
+            margin-bottom: 12px;
+        }
+
+        .section-body p:last-child {
+            margin-bottom: 0;
+        }
+
+        .section-body ul,
+        .section-body ol {
+            margin: 8px 0 12px 20px;
+        }
+
+        .section-body ul li,
+        .section-body ol li {
+            margin-bottom: 6px;
+        }
+
+        .section-body strong {
+            color: var(--text-dark);
+            font-weight: 600;
+        }
+
+        /* 테이블 */
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 0.9rem;
+        }
+
+        .info-table th,
+        .info-table td {
+            border: 1px solid var(--border-light);
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .info-table th {
+            background: var(--bg-primary);
+            color: var(--primary);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .info-table td {
+            color: var(--text-medium);
+        }
+
+        /* 강조 박스 */
+        .highlight-box {
+            background: #f0f4ff;
+            border: 1px solid #d0d8f0;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin: 16px 0;
+            font-size: 0.9rem;
+            color: var(--primary);
+        }
+
+        .highlight-box.warning {
+            background: #fff8f0;
+            border-color: #f0d8b0;
+            color: #8a6520;
+        }
+
+        /* 시행일 */
+        .effective-date {
+            text-align: center;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-top: 48px;
+            padding-top: 32px;
+            border-top: 2px solid var(--border-light);
+        }
+
+        /* ============================================ */
+        /* 푸터                                          */
+        /* ============================================ */
+        .site-footer {
+            background: #131313;
+            color: rgba(255,255,255,0.7);
+            margin-top: 0;
+            padding: 48px 0 0;
+        }
+
+        .footer-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 48px;
+        }
+
+        .footer-top {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr 1.2fr;
+            gap: 40px;
+            padding-bottom: 32px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .footer-col h4 {
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .footer-col p {
+            font-size: 0.9rem;
+            line-height: 1.8;
+            color: rgba(255,255,255,0.55);
+        }
+
+        .footer-brand .footer-logo {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--accent);
+            margin-bottom: 10px;
+        }
+
+        .footer-brand .footer-desc {
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: rgba(255,255,255,0.5);
+        }
+
+        .footer-col ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .footer-col ul li {
+            margin-bottom: 8px;
+        }
+
+        .footer-col ul li a,
+        .footer-col ul li span {
+            color: rgba(255,255,255,0.55);
+            font-size: 0.9rem;
+            text-decoration: none;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .footer-col ul li a:hover,
+        .footer-col ul li span:hover {
+            color: #fff;
+        }
+
+        .footer-contact-item {
+            font-size: 0.9rem;
+            line-height: 2;
+            color: rgba(255,255,255,0.55);
+        }
+
+        .footer-contact-item strong {
+            color: rgba(255,255,255,0.75);
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 0;
+            font-size: 0.82rem;
+            color: rgba(255,255,255,0.35);
+        }
+
+        .footer-bottom a {
+            color: rgba(255,255,255,0.35);
+            text-decoration: none;
+        }
+
+        .footer-bottom a:hover {
+            color: rgba(255,255,255,0.6);
+        }
+
+        .footer-legal {
+            display: flex;
+            gap: 20px;
+        }
+
+        /* ============================================ */
+        /* 반응형                                        */
+        /* ============================================ */
+        @media (max-width: 768px) {
+            .header-content {
+                padding: 12px 20px;
+            }
+
+            .brand-section .subtitle {
+                display: none;
+            }
+
+            .page-content {
+                padding: 90px 12px 40px;
+            }
+
+            .document-card {
+                padding: 32px 24px;
+            }
+
+            .document-title {
+                font-size: 1.5rem;
+            }
+
+            .section-title {
+                font-size: 1.05rem;
+            }
+
+            .info-table th,
+            .info-table td {
+                padding: 10px 12px;
+                font-size: 0.85rem;
+            }
+
+            .footer-top {
+                grid-template-columns: 1fr;
+                gap: 32px;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                gap: 8px;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 상단 고정 헤더 -->
+    <header class="top-header">
+        <div class="header-content">
+            <div class="brand-section">
+                <h1><a href="/">Valulens</a></h1>
+                <p class="subtitle">LLM & DART 기반 딥 리서치 플랫폼 밸류렌즈</p>
+            </div>
+            <div class="header-nav-links">
+                <a class="header-nav-link" href="/">홈으로</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 본문 -->
+    <div class="page-content">
+        <div class="document-card">
+
+            <h1 class="document-title">이용약관</h1>
+            <p class="document-subtitle">
+                <strong>Valulens (밸류렌즈)</strong> &mdash; MOAT AI<br>
+                시행일: 2026년 3월 9일
+            </p>
+
+            <!-- 제1조 -->
+            <div class="section">
+                <h2 class="section-title">제1조 (목적)</h2>
+                <div class="section-body">
+                    <p>이 약관은 MOAT AI(이하 "회사")가 제공하는 Valulens(밸류렌즈) 서비스(이하 "서비스")의 이용에 관한 조건 및 절차, 회사와 이용자 간의 권리·의무 및 책임사항, 기타 필요한 사항을 규정함을 목적으로 합니다.</p>
+                </div>
+            </div>
+
+            <!-- 제2조 -->
+            <div class="section">
+                <h2 class="section-title">제2조 (정의)</h2>
+                <div class="section-body">
+                    <p>이 약관에서 사용하는 용어의 정의는 다음과 같습니다.</p>
+                    <ol>
+                        <li><strong>"서비스"</strong>란 회사가 Valulens 브랜드로 제공하는 DART 재무제표 추출, AI 재무분석, 기업 리서치, PE 전문 AI 챗봇, 엑셀 다운로드 등 일체의 온라인 서비스를 의미합니다.</li>
+                        <li><strong>"회원"</strong>이란 회사의 서비스에 접속하여 이 약관에 따라 회사와 이용계약을 체결하고, 이메일과 비밀번호를 등록하여 회사가 제공하는 서비스를 이용하는 자를 의미합니다.</li>
+                        <li><strong>"게스트"</strong>란 회원으로 가입하지 않고 회사가 제공하는 서비스를 이용하는 자를 의미합니다. 게스트는 일부 기능에 대해 제한된 접근 권한을 가집니다.</li>
+                        <li><strong>"이용자"</strong>란 회원 및 게스트를 포함하여 회사의 서비스를 이용하는 모든 자를 의미합니다.</li>
+                        <li><strong>"콘텐츠"</strong>란 서비스를 통해 제공되는 재무 데이터, AI 분석 보고서, 기업 리서치 보고서, 챗봇 응답, 엑셀 파일 등 일체의 정보를 의미합니다.</li>
+                        <li><strong>"유료 서비스"</strong>란 회사가 유료로 제공하는 서비스로서, 이용자가 별도의 요금을 지불하고 이용하는 서비스를 의미합니다.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 제3조 -->
+            <div class="section">
+                <h2 class="section-title">제3조 (서비스의 내용)</h2>
+                <div class="section-body">
+                    <p>회사가 제공하는 서비스의 내용은 다음과 같습니다.</p>
+                    <ol>
+                        <li><strong>DART 재무제표 추출</strong><br>금융감독원 전자공시시스템(DART)의 공시 데이터를 기반으로 기업의 재무상태표, 손익계산서, 현금흐름표, 포괄손익계산서 및 주석 정보를 추출하여 구조화된 형태로 제공합니다.</li>
+                        <li><strong>AI 재무분석</strong><br>대규모 언어모델(LLM)을 활용하여 추출된 재무제표에서 이상 패턴을 감지하고, M&A 실사(Due Diligence) 관점의 인사이트를 도출합니다. 웹 검색을 통해 이상 변동의 원인을 파악하는 심층 분석을 제공합니다.</li>
+                        <li><strong>기업 리서치</strong><br>기업의 산업 동향, 경쟁 환경, 거시경제 영향 등을 종합적으로 분석하여 PE(Private Equity) 관점의 리서치 보고서를 생성합니다.</li>
+                        <li><strong>PE 전문 AI 챗봇</strong><br>추출된 재무 데이터와 기업개황을 컨텍스트로 활용하여 PE 실무에 특화된 질의응답을 제공합니다.</li>
+                        <li><strong>엑셀 다운로드</strong><br>추출된 재무 데이터, AI 분석 결과, 리서치 보고서를 포함한 통합 엑셀 파일을 다운로드할 수 있습니다.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 제4조 -->
+            <div class="section">
+                <h2 class="section-title">제4조 (이용 계약의 성립)</h2>
+                <div class="section-body">
+                    <ol>
+                        <li>이용 계약은 이용자가 약관의 내용에 동의한 후 회원가입을 신청하고, 회사가 이를 승낙함으로써 성립합니다.</li>
+                        <li>회사는 다음 각 호에 해당하는 신청에 대하여는 승낙하지 아니하거나 사후에 이용계약을 해지할 수 있습니다.
+                            <ul>
+                                <li>실명이 아니거나 타인의 정보를 이용한 경우</li>
+                                <li>허위의 정보를 기재하거나, 회사가 필수적으로 요구하는 정보를 제공하지 않은 경우</li>
+                                <li>이전에 이용자격을 상실한 적이 있는 자인 경우 (회사의 재가입 승인을 받은 경우는 예외)</li>
+                                <li>기타 이용신청 요건이 미비되었거나 위법·부당한 이용신청인 경우</li>
+                            </ul>
+                        </li>
+                        <li>게스트로서 서비스를 이용하는 경우, 서비스 접속 시점에 본 약관에 동의한 것으로 간주합니다.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 제5조 -->
+            <div class="section">
+                <h2 class="section-title">제5조 (서비스 이용 요금)</h2>
+                <div class="section-body">
+                    <p>회사가 제공하는 서비스의 이용 요금 및 플랜은 다음과 같습니다.</p>
+                    <table class="info-table">
+                        <tr>
+                            <th>구분</th>
+                            <th>Free</th>
+                            <th>Pro</th>
+                            <th>Team</th>
+                        </tr>
+                        <tr>
+                            <td><strong>월 요금</strong></td>
+                            <td>무료</td>
+                            <td>유료 (별도 공지)</td>
+                            <td>유료 (별도 공지)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>기업 검색</strong></td>
+                            <td>월 10회</td>
+                            <td>무제한</td>
+                            <td>무제한</td>
+                        </tr>
+                        <tr>
+                            <td><strong>재무제표 추출</strong></td>
+                            <td>월 5회</td>
+                            <td>무제한</td>
+                            <td>무제한</td>
+                        </tr>
+                        <tr>
+                            <td><strong>AI 분석</strong></td>
+                            <td>월 3회</td>
+                            <td>월 100회</td>
+                            <td>무제한</td>
+                        </tr>
+                        <tr>
+                            <td><strong>기업 리서치</strong></td>
+                            <td>월 3회</td>
+                            <td>월 100회</td>
+                            <td>무제한</td>
+                        </tr>
+                        <tr>
+                            <td><strong>AI 챗봇</strong></td>
+                            <td>제한적</td>
+                            <td>무제한</td>
+                            <td>무제한</td>
+                        </tr>
+                        <tr>
+                            <td><strong>엑셀 다운로드</strong></td>
+                            <td>기본 포맷</td>
+                            <td>전체 포맷</td>
+                            <td>전체 포맷</td>
+                        </tr>
+                    </table>
+                    <ol>
+                        <li>유료 서비스의 구체적인 요금은 서비스 내 가격 페이지에서 별도로 공지합니다.</li>
+                        <li>유료 서비스 결제는 계좌이체 방식으로 진행되며, 결제 확인 후 관리자가 등급을 변경합니다.</li>
+                        <li>회사는 유료 서비스의 요금을 변경할 수 있으며, 변경 시 최소 30일 전에 공지합니다.</li>
+                        <li>이미 결제된 요금에 대해서는 변경된 요금이 적용되지 않습니다.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 제6조 -->
+            <div class="section">
+                <h2 class="section-title">제6조 (서비스의 제공 및 변경)</h2>
+                <div class="section-body">
+                    <ol>
+                        <li>회사는 이용자에게 아래와 같은 서비스를 제공합니다.
+                            <ul>
+                                <li>DART 공시 데이터 기반 재무제표 추출 서비스</li>
+                                <li>AI 기반 재무분석 및 기업 리서치 서비스</li>
+                                <li>PE 전문 AI 챗봇 서비스</li>
+                                <li>분석 결과 엑셀 다운로드 서비스</li>
+                                <li>기타 회사가 정하는 서비스</li>
+                            </ul>
+                        </li>
+                        <li>회사는 서비스의 내용을 변경할 경우, 변경 사유 및 내용을 서비스 내 공지사항에 게시하거나 이메일 등의 방법으로 이용자에게 통지합니다.</li>
+                        <li>회사는 서비스의 품질 향상을 위해 서비스의 전부 또는 일부를 수정, 변경할 수 있습니다.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 제7조 -->
+            <div class="section">
+                <h2 class="section-title">제7조 (서비스의 중단)</h2>
+                <div class="section-body">
+                    <ol>
+                        <li>회사는 다음 각 호의 경우에 서비스 제공을 일시적으로 중단할 수 있습니다.
+                            <ul>
+                                <li>서버 등 정보통신 설비의 보수 점검, 교체, 고장, 통신 두절 등의 사유가 발생한 경우</li>
+                                <li>DART API, Google Gemini API 등 외부 서비스 제공자의 서비스 중단 또는 장애가 발생한 경우</li>
+                                <li>천재지변, 국가비상사태, 정전 등 불가항력적 사유가 발생한 경우</li>
+                                <li>서비스 이용의 폭주 등으로 정상적인 서비스 이용에 지장이 있는 경우</li>
+                            </ul>
+                        </li>
+                        <li>회사는 서비스의 제공이 중단되는 경우, 사전에 서비스 내 공지사항에 게시하거나 이용자에게 통지합니다. 다만, 회사가 통제할 수 없는 사유로 인한 중단의 경우에는 사후에 통지할 수 있습니다.</li>
+                        <li>회사는 서비스 중단으로 인하여 이용자가 입은 손해에 대하여 회사의 고의 또는 과실이 없는 한 책임을 지지 않습니다.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 제8조 -->
+            <div class="section">
+                <h2 class="section-title">제8조 (회원의 의무)</h2>
+                <div class="section-body">
+                    <ol>
+                        <li>회원은 다음 행위를 하여서는 안됩니다.
+                            <ul>
+                                <li>신청 또는 변경 시 허위 내용을 등록하는 행위</li>
+                                <li>타인의 정보를 도용하는 행위</li>
+                                <li>회사가 게시한 정보를 변경하는 행위</li>
+                                <li>회사 및 기타 제3자의 저작권 등 지적재산권을 침해하는 행위</li>
+                                <li>회사 및 기타 제3자의 명예를 손상시키거나 업무를 방해하는 행위</li>
+                                <li>서비스를 이용하여 법령 또는 이 약관이 금지하는 행위를 하는 것</li>
+                                <li>서비스의 안정적 운영을 방해하는 행위(과도한 API 호출, 자동화 스크립트 등)</li>
+                                <li>서비스를 통해 수집한 데이터를 회사의 사전 동의 없이 제3자에게 제공하거나 상업적으로 이용하는 행위</li>
+                                <li>서비스의 보안 취약점을 악용하거나, 시스템에 무단으로 접근하려는 행위</li>
+                                <li>AI 챗봇 또는 AI 분석 기능에 대한 프롬프트 인젝션(Prompt Injection) 등 악의적 입력을 시도하는 행위</li>
+                            </ul>
+                        </li>
+                        <li>회원은 관계 법령, 이 약관의 규정, 이용안내 및 서비스와 관련하여 공지한 주의사항, 회사가 통지하는 사항 등을 준수하여야 합니다.</li>
+                        <li>회원은 자신의 계정 정보(이메일, 비밀번호)를 안전하게 관리할 의무가 있으며, 이를 제3자에게 양도하거나 대여할 수 없습니다.</li>
+                        <li>회원의 계정 관리 소홀로 인해 발생하는 손해에 대해 회사는 책임을 지지 않습니다.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 제9조 -->
+            <div class="section">
+                <h2 class="section-title">제9조 (면책 조항)</h2>
+                <div class="section-body">
+                    <div class="highlight-box warning">
+                        <strong>중요:</strong> 본 서비스에서 제공하는 AI 재무분석 결과, 기업 리서치 보고서, AI 챗봇 응답 등 모든 AI 생성 콘텐츠는 참고 자료로서의 성격을 가지며, 투자 판단의 최종 책임은 이용자 본인에게 있습니다.
+                    </div>
+                    <ol>
+                        <li><strong>AI 분석 결과의 정확성</strong><br>회사의 서비스는 대규모 언어모델(LLM)을 활용하여 재무 데이터를 분석합니다. AI 모델의 특성상 분석 결과에 오류, 부정확한 수치, 또는 할루시네이션(hallucination)이 포함될 수 있으며, 회사는 AI 분석 결과의 완전성, 정확성, 신뢰성을 보증하지 않습니다.</li>
+                        <li><strong>투자 판단 책임</strong><br>본 서비스에서 제공하는 일체의 콘텐츠는 투자 자문, 투자 권유, 투자 추천이 아니며, 「자본시장과 금융투자업에 관한 법률」에 따른 투자 자문업 또는 투자일임업에 해당하지 않습니다. 이용자는 서비스를 통해 얻은 정보를 기반으로 한 투자 판단의 결과에 대해 전적으로 본인이 책임집니다.</li>
+                        <li><strong>DART 데이터의 정확성</strong><br>서비스가 추출하는 재무 데이터는 금융감독원 DART 시스템의 공시 데이터를 기반으로 합니다. DART 원본 데이터의 오류, 공시 지연, 정정 공시 등으로 인한 데이터 부정확에 대해 회사는 책임을 지지 않습니다.</li>
+                        <li><strong>서비스 이용 관련 면책</strong><br>
+                            <ul>
+                                <li>회사는 천재지변, 전쟁, 기간통신사업자의 서비스 중지 등 불가항력적 사유로 인한 서비스 중단에 대해 책임을 지지 않습니다.</li>
+                                <li>회사는 이용자의 귀책 사유로 인한 서비스 이용 장애에 대해 책임을 지지 않습니다.</li>
+                                <li>회사는 이용자가 서비스를 이용하여 기대하는 수익을 얻지 못하거나 상실한 것에 대하여 책임을 지지 않습니다.</li>
+                                <li>회사는 이용자가 서비스에 게재한 정보, 자료, 사실의 신뢰도, 정확성 등에 관하여 책임을 지지 않습니다.</li>
+                            </ul>
+                        </li>
+                        <li><strong>외부 API 관련 면책</strong><br>서비스는 Google Gemini API, 금융감독원 DART API 등 외부 서비스를 활용합니다. 해당 외부 서비스의 장애, 변경, 종료 등으로 인한 서비스 품질 저하 또는 기능 제한에 대해 회사는 책임을 지지 않습니다.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 제10조 -->
+            <div class="section">
+                <h2 class="section-title">제10조 (지적재산권)</h2>
+                <div class="section-body">
+                    <ol>
+                        <li>서비스에 사용된 소프트웨어, 디자인, 로고, 알고리즘, AI 모델 프롬프트, 사용자 인터페이스 등에 대한 지적재산권은 회사에 귀속됩니다.</li>
+                        <li>서비스를 통해 생성된 AI 분석 보고서, 기업 리서치 보고서 등의 콘텐츠에 대한 이용 권한은 다음과 같습니다.
+                            <ul>
+                                <li>이용자는 생성된 콘텐츠를 개인적 용도 또는 소속 조직 내부 업무 목적으로 자유롭게 이용할 수 있습니다.</li>
+                                <li>이용자는 생성된 콘텐츠를 회사의 사전 서면 동의 없이 불특정 다수에게 공개하거나, 재판매하거나, 경쟁 서비스 개발에 활용할 수 없습니다.</li>
+                            </ul>
+                        </li>
+                        <li>이용자가 서비스에 입력한 기업명, 검색어 등의 정보에 대한 권리는 이용자에게 귀속됩니다.</li>
+                        <li>DART 공시 데이터의 저작권은 금융감독원 및 해당 기업에 귀속되며, 회사는 해당 데이터의 가공·분석 결과물에 대한 권리만을 보유합니다.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 제11조 -->
+            <div class="section">
+                <h2 class="section-title">제11조 (분쟁 해결)</h2>
+                <div class="section-body">
+                    <ol>
+                        <li>회사는 이용자가 제기하는 정당한 의견이나 불만을 반영하고, 그 피해를 보상 처리하기 위하여 개인정보 보호책임자를 지정하여 운영하고 있습니다.</li>
+                        <li>회사와 이용자 간에 발생한 분쟁은 상호 협의하여 해결하는 것을 원칙으로 합니다.</li>
+                        <li>협의에 의해 분쟁이 해결되지 않는 경우, 양 당사자는 「민사소송법」상의 관할 법원에 소를 제기할 수 있습니다.</li>
+                        <li>회사와 이용자 간에 제기된 소송에는 대한민국 법을 적용합니다.</li>
+                        <li>서비스 이용과 관련하여 분쟁이 발생한 경우, 이용자는 아래 연락처로 문의할 수 있습니다.
+                            <table class="info-table">
+                                <tr>
+                                    <th>담당자</th>
+                                    <td>천영록</td>
+                                </tr>
+                                <tr>
+                                    <th>이메일</th>
+                                    <td>finance@moatai.io</td>
+                                </tr>
+                                <tr>
+                                    <th>주소</th>
+                                    <td>서울특별시 강남구 삼성동 코엑스 스파크플러스</td>
+                                </tr>
+                            </table>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 제12조 -->
+            <div class="section">
+                <h2 class="section-title">제12조 (약관의 변경)</h2>
+                <div class="section-body">
+                    <ol>
+                        <li>회사는 「약관의 규제에 관한 법률」, 「정보통신망 이용촉진 및 정보보호 등에 관한 법률」 등 관련 법령을 위배하지 않는 범위에서 이 약관을 개정할 수 있습니다.</li>
+                        <li>회사가 약관을 개정할 경우에는 적용 일자 및 개정 사유를 명시하여 현행 약관과 함께 서비스 내 공지사항에 그 적용 일자 7일 이전부터 적용 일자 전일까지 공지합니다.</li>
+                        <li>다만, 이용자에게 불리한 약관의 개정의 경우에는 적용 일자 30일 이전부터 공지하며, 이메일 등의 전자적 수단을 통해 별도로 명확히 통지합니다.</li>
+                        <li>회사가 전항에 따라 공지 또는 통지를 하면서, 공지 기간 내에 의사 표시를 하지 않으면 승인한 것으로 본다는 뜻을 명확하게 공지 또는 통지하였음에도 이용자가 명시적으로 거부의 의사 표시를 하지 아니한 경우, 이용자가 개정 약관에 동의한 것으로 봅니다.</li>
+                        <li>이용자가 개정 약관의 적용에 동의하지 않는 경우 회사는 개정 약관의 내용을 적용할 수 없으며, 이 경우 이용자는 이용계약을 해지(회원 탈퇴)할 수 있습니다.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- 부칙 -->
+            <div class="section">
+                <h2 class="section-title">부칙</h2>
+                <div class="section-body">
+                    <ol>
+                        <li>이 약관에서 정하지 아니한 사항과 이 약관의 해석에 관하여는 「전자상거래 등에서의 소비자보호에 관한 법률」, 「약관의 규제에 관한 법률」, 「정보통신망 이용촉진 및 정보보호 등에 관한 법률」 등 관련 법령 또는 상관례에 따릅니다.</li>
+                        <li>회사의 유료 서비스 이용에 관한 별도의 정책이 있는 경우, 해당 정책이 이 약관에 우선합니다.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="effective-date">
+                본 이용약관은 <strong>2026년 3월 9일</strong>부터 시행합니다.
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 푸터 -->
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <div class="footer-top">
+                <div class="footer-col footer-brand">
+                    <div class="footer-logo">Valulens</div>
+                    <p class="footer-desc">PE 실사를 위한 올인원 재무 분석 플랫폼.<br>DART 재무제표 추출부터 AI 분석, 기업 리서치까지<br>하나의 플랫폼에서 완성합니다.</p>
+                </div>
+                <div class="footer-col">
+                    <h4>서비스</h4>
+                    <ul>
+                        <li><a href="/">홈으로</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>Contact</h4>
+                    <div class="footer-contact-item"><strong>담당자</strong> 천영록</div>
+                    <div class="footer-contact-item"><strong>이메일</strong> finance@moatai.io</div>
+                    <div class="footer-contact-item"><strong>주소</strong> 서울특별시 강남구 삼성동 코엑스 스파크플러스</div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>&copy; 2026 Valulens. All rights reserved.</span>
+                <div class="footer-legal">
+                    <a href="/privacy.html">개인정보 처리방침</a>
+                    <a href="/terms.html">이용약관</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>
