@@ -45,7 +45,7 @@
             font-family: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: var(--bg-primary);
             min-height: 100vh;
-            padding: 110px 20px 40px 20px;
+            padding: 110px 20px 0 20px;
             overflow-x: hidden;
             overflow-y: auto;
         }
@@ -90,6 +90,582 @@
             font-weight: 700;
             color: var(--text-medium);
             letter-spacing: 0.5px;
+        }
+
+        /* ============================================ */
+        /* Why 섹션 (서비스 필요성)                     */
+        /* ============================================ */
+        .why-section {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 32px 40px;
+        }
+
+        .why-hero {
+            text-align: center;
+            padding: 64px 0 56px;
+        }
+
+        .why-hero .why-eyebrow {
+            display: inline-block;
+            background: var(--primary);
+            color: #fff;
+            font-size: 0.85rem;
+            font-weight: 700;
+            padding: 6px 20px;
+            border-radius: 20px;
+            letter-spacing: 1px;
+            margin-bottom: 24px;
+            text-transform: uppercase;
+        }
+
+        .why-hero h2 {
+            font-size: 2.8rem;
+            font-weight: 800;
+            color: var(--primary);
+            line-height: 1.35;
+            margin-bottom: 20px;
+        }
+
+        .why-hero h2 .highlight {
+            color: var(--accent);
+        }
+
+        .why-hero .why-sub {
+            font-size: 1.3rem;
+            color: var(--text-light);
+            line-height: 1.7;
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        /* 문제점 카드 */
+        .problem-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 28px;
+            margin-bottom: 64px;
+        }
+
+        .problem-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 40px 32px;
+            text-align: center;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.06);
+            border: 1px solid var(--border-light);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .problem-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent), var(--accent-light));
+        }
+
+        .problem-card .card-icon {
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+        }
+
+        .problem-card .card-icon.red { background: #fef2f2; }
+        .problem-card .card-icon.blue { background: #eff6ff; }
+        .problem-card .card-icon.green { background: #f0fdf4; }
+
+        .problem-card .card-number {
+            font-size: 2.8rem;
+            font-weight: 800;
+            color: var(--primary);
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .problem-card .card-unit {
+            font-size: 1rem;
+            color: var(--text-light);
+            margin-bottom: 16px;
+        }
+
+        .problem-card .card-desc {
+            font-size: 1.1rem;
+            color: var(--text-medium);
+            line-height: 1.7;
+        }
+
+        /* Before → After 비교 */
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 0;
+            align-items: stretch;
+            margin-bottom: 64px;
+        }
+
+        .comparison-box {
+            background: #fff;
+            border-radius: 16px;
+            padding: 44px 40px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.06);
+            border: 1px solid var(--border-light);
+        }
+
+        .comparison-box.before {
+            border-top: 4px solid #94a3b8;
+        }
+
+        .comparison-box.after {
+            border-top: 4px solid var(--accent);
+        }
+
+        .comparison-box .comp-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+
+        .comparison-box.before .comp-label { color: #94a3b8; }
+        .comparison-box.after .comp-label { color: var(--accent); }
+
+        .comparison-box h3 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+
+        .comparison-box ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .comparison-box ul li {
+            font-size: 1.15rem;
+            color: var(--text-medium);
+            line-height: 2;
+            padding-left: 28px;
+            position: relative;
+        }
+
+        .comparison-box.before ul li::before {
+            content: '✕';
+            position: absolute;
+            left: 0;
+            color: #ef4444;
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .comparison-box.after ul li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #22c55e;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .comparison-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 20px;
+        }
+
+        .comparison-arrow .arrow-circle {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 1.6rem;
+            font-weight: 700;
+            box-shadow: 0 4px 16px rgba(180, 145, 50, 0.3);
+        }
+
+        /* 핵심 가치 메시지 */
+        .value-message {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            border-radius: 20px;
+            padding: 56px 64px;
+            color: #fff;
+            text-align: center;
+            margin-bottom: 64px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .value-message::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 400px;
+            height: 400px;
+            border-radius: 50%;
+            background: rgba(180, 145, 50, 0.08);
+        }
+
+        .value-message::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -10%;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .value-message h3 {
+            font-size: 2.2rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+            line-height: 1.4;
+        }
+
+        .value-message h3 .gold {
+            color: var(--accent-light);
+        }
+
+        .value-message p {
+            font-size: 1.25rem;
+            line-height: 1.8;
+            opacity: 0.9;
+            max-width: 800px;
+            margin: 0 auto 32px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .value-pillars {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .value-pillar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .value-pillar .pillar-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+        }
+
+        .value-pillar .pillar-text {
+            text-align: left;
+        }
+
+        .value-pillar .pillar-text .pillar-num {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--accent-light);
+        }
+
+        .value-pillar .pillar-text .pillar-label {
+            font-size: 0.95rem;
+            opacity: 0.85;
+        }
+
+        /* PE 전용 배지 */
+        .pe-exclusive {
+            background: #fff;
+            border-radius: 16px;
+            padding: 48px 56px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.06);
+            border: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            gap: 48px;
+            margin-bottom: 80px;
+        }
+
+        .pe-exclusive .pe-badge {
+            flex-shrink: 0;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: #fff;
+            box-shadow: 0 4px 24px rgba(180, 145, 50, 0.3);
+        }
+
+        .pe-exclusive .pe-badge .badge-text {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            line-height: 1;
+        }
+
+        .pe-exclusive .pe-badge .badge-sub {
+            font-size: 0.7rem;
+            font-weight: 600;
+            opacity: 0.9;
+            letter-spacing: 2px;
+            margin-top: 4px;
+        }
+
+        .pe-exclusive .pe-content h3 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 12px;
+        }
+
+        .pe-exclusive .pe-content p {
+            font-size: 1.2rem;
+            color: var(--text-medium);
+            line-height: 1.8;
+        }
+
+        /* 구분선 */
+        .section-divider {
+            text-align: center;
+            margin: 0 0 16px;
+            padding: 0;
+        }
+
+        .section-divider .divider-label {
+            display: inline-block;
+            background: var(--bg-primary);
+            padding: 0 24px;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--accent);
+            letter-spacing: 2px;
+            position: relative;
+        }
+
+        .section-divider .divider-label::before,
+        .section-divider .divider-label::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 80px;
+            height: 1px;
+            background: var(--border-medium);
+        }
+
+        .section-divider .divider-label::before { right: 100%; }
+        .section-divider .divider-label::after { left: 100%; }
+
+        /* Why 반응형 */
+        @media (max-width: 768px) {
+            .why-hero h2 { font-size: 1.8rem; }
+            .problem-cards { grid-template-columns: 1fr; }
+            .comparison { grid-template-columns: 1fr; gap: 16px; }
+            .comparison-arrow { padding: 12px 0; }
+            .comparison-arrow .arrow-circle { transform: rotate(90deg); }
+            .value-message { padding: 36px 24px; }
+            .value-message h3 { font-size: 1.5rem; }
+            .value-pillars { flex-direction: column; align-items: center; gap: 20px; }
+            .pe-exclusive { flex-direction: column; text-align: center; padding: 36px 24px; }
+        }
+
+        /* ============================================ */
+        /* 서비스 소개 (랜딩 페이지)                    */
+        /* ============================================ */
+        .service-intro {
+            max-width: 1400px;
+            margin: 64px auto 0;
+            padding: 0 32px 80px;
+        }
+
+        .service-intro .intro-headline {
+            text-align: center;
+            margin-bottom: 64px;
+        }
+
+        .service-intro .intro-headline h2 {
+            font-size: 2.6rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 16px;
+        }
+
+        .service-intro .intro-headline p {
+            font-size: 1.35rem;
+            color: var(--text-light);
+            line-height: 1.7;
+        }
+
+        /* 각 기능 블록 */
+        .feature-block {
+            display: flex;
+            align-items: flex-start;
+            gap: 56px;
+            margin-bottom: 64px;
+            background: #fff;
+            border-radius: 16px;
+            padding: 48px 56px;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+            border: 1px solid var(--border-light);
+        }
+
+        .feature-block.reverse {
+            flex-direction: row-reverse;
+        }
+
+        .feature-block .feature-text {
+            flex: 0.8;
+            min-width: 300px;
+        }
+
+        .feature-block .feature-img {
+            flex: 1.5;
+            min-width: 400px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-light);
+            background: var(--bg-primary);
+        }
+
+        .feature-block .feature-img img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .feature-block .feature-img .img-placeholder {
+            width: 100%;
+            min-height: 280px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-light);
+            font-size: 1rem;
+            background: linear-gradient(135deg, #f0f2f5, #e8eaed);
+        }
+
+        .feature-block .feature-step {
+            display: inline-block;
+            background: var(--accent);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 700;
+            padding: 5px 18px;
+            border-radius: 20px;
+            margin-bottom: 16px;
+            letter-spacing: 0.5px;
+        }
+
+        .feature-block .feature-text h3 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 16px;
+        }
+
+        .feature-block .feature-text p {
+            font-size: 1.25rem;
+            color: var(--text-medium);
+            line-height: 1.8;
+            margin-bottom: 12px;
+        }
+
+        .feature-block .feature-text ul {
+            list-style: none;
+            padding: 0;
+            margin-top: 16px;
+        }
+
+        .feature-block .feature-text ul li {
+            position: relative;
+            padding-left: 24px;
+            font-size: 1.2rem;
+            color: var(--text-medium);
+            line-height: 2;
+        }
+
+        .feature-block .feature-text ul li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 13px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+
+        /* 하단 CTA */
+        .intro-cta {
+            text-align: center;
+            padding: 48px 0 0;
+        }
+
+        .intro-cta p {
+            font-size: 1.35rem;
+            color: var(--text-medium);
+            margin-bottom: 20px;
+        }
+
+        .intro-cta .cta-btn {
+            display: inline-block;
+            background: var(--accent);
+            color: #fff;
+            font-size: 1.25rem;
+            font-weight: 600;
+            padding: 16px 48px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .intro-cta .cta-btn:hover {
+            background: var(--accent-dark);
+        }
+
+        /* 반응형 */
+        @media (max-width: 768px) {
+            .feature-block {
+                flex-direction: column !important;
+                padding: 28px 24px;
+                gap: 24px;
+            }
+
+            .feature-block .feature-text,
+            .feature-block .feature-img {
+                min-width: unset;
+            }
+
+            .service-intro .intro-headline h2 {
+                font-size: 1.6rem;
+            }
         }
 
         /* 하단 확장 컨테이너 (결과 영역) */
@@ -2029,6 +2605,292 @@
             margin: 4px 0;
         }
 
+        /* 헤더 네비 링크 */
+        .header-nav-links {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .header-nav-link {
+            color: rgba(255,255,255,0.75);
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 8px 18px;
+            border-radius: 8px;
+            transition: all 0.2s;
+            letter-spacing: 0.3px;
+            border: 1px solid transparent;
+        }
+
+        .header-nav-link:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .header-nav-link.price {
+            color: var(--accent-light);
+            border: 1px solid rgba(180,145,50,0.4);
+        }
+
+        .header-nav-link.price:hover {
+            background: rgba(180,145,50,0.15);
+            color: var(--accent-light);
+            border-color: rgba(180,145,50,0.6);
+        }
+
+        /* Pricing 모달 */
+        .pricing-modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+
+        .pricing-modal-overlay.active {
+            display: flex;
+        }
+
+        .pricing-modal {
+            background: var(--bg-primary);
+            border-radius: 20px;
+            padding: 48px 40px 40px;
+            max-width: 1000px;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .pricing-modal-close {
+            position: absolute;
+            top: 16px;
+            right: 20px;
+            background: none;
+            border: none;
+            font-size: 2rem;
+            color: var(--text-light);
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .pricing-modal-close:hover { color: var(--text-dark); }
+
+        .pricing-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .pricing-header h2 {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        .pricing-header p {
+            font-size: 1.1rem;
+            color: var(--text-light);
+        }
+
+        .pricing-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+
+        .pricing-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 36px 28px;
+            border: 2px solid var(--border-light);
+            text-align: center;
+            position: relative;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+        }
+
+        .pricing-card.featured {
+            border-color: var(--accent);
+            box-shadow: 0 4px 24px rgba(180,145,50,0.15);
+        }
+
+        .pricing-card .card-badge {
+            position: absolute;
+            top: -14px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent);
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 4px 20px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        .pricing-card .plan-name {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        .pricing-card .plan-price {
+            font-size: 2.4rem;
+            font-weight: 800;
+            color: var(--primary);
+            line-height: 1.2;
+            margin-bottom: 4px;
+        }
+
+        .pricing-card .plan-price .price-small {
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-light);
+        }
+
+        .pricing-card .plan-original {
+            font-size: 1rem;
+            color: var(--text-light);
+            text-decoration: line-through;
+            margin-bottom: 4px;
+        }
+
+        .pricing-card .plan-period {
+            font-size: 0.95rem;
+            color: var(--text-light);
+            margin-bottom: 24px;
+        }
+
+        .pricing-card .plan-divider {
+            height: 1px;
+            background: var(--border-light);
+            margin: 0 -8px 24px;
+        }
+
+        .pricing-card .plan-features {
+            list-style: none;
+            padding: 0;
+            text-align: left;
+        }
+
+        .pricing-card .plan-features li {
+            font-size: 1rem;
+            color: var(--text-medium);
+            line-height: 2.2;
+            padding-left: 24px;
+            position: relative;
+        }
+
+        .pricing-card .plan-features li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .pricing-card .plan-features li.highlight-feature {
+            color: var(--accent-dark);
+            font-weight: 600;
+        }
+
+        /* Pricing 하단 연락처 */
+        .pricing-contact {
+            background: #fff;
+            border-radius: 14px;
+            padding: 32px 36px;
+            border: 1px solid var(--border-light);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .pricing-contact .contact-left h4 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 6px;
+        }
+
+        .pricing-contact .contact-left p {
+            font-size: 0.95rem;
+            color: var(--text-light);
+        }
+
+        .pricing-contact .contact-right {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-end;
+            font-size: 0.95rem;
+            color: var(--text-medium);
+        }
+
+        .pricing-contact .contact-email {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-primary);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            color: var(--primary);
+            cursor: pointer;
+            border: 1px solid var(--border-light);
+            transition: background 0.2s;
+        }
+
+        .pricing-contact .contact-email:hover {
+            background: var(--border-light);
+        }
+
+        .pricing-contact .contact-email .copy-icon {
+            font-size: 0.85rem;
+            color: var(--text-light);
+        }
+
+        .copy-toast {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: var(--primary);
+            color: #fff;
+            padding: 12px 28px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 2000;
+            pointer-events: none;
+        }
+
+        .copy-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        @media (max-width: 768px) {
+            .pricing-cards { grid-template-columns: 1fr; }
+            .pricing-contact { flex-direction: column; align-items: flex-start; }
+            .pricing-contact .contact-right { align-items: flex-start; }
+        }
+
         /* 내 정보 모달 스타일 */
         .profile-modal-overlay {
             position: fixed;
@@ -2198,6 +3060,64 @@
         .user-search-count.low {
             background: var(--accent);
             color: white;
+        }
+
+        /* 게스트 무료 체험 배너 */
+        .guest-trial-banner {
+            position: sticky;
+            top: 72px;
+            z-index: 99;
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border-bottom: 1px solid #f59e0b;
+            padding: 8px 20px;
+        }
+        .guest-trial-inner {
+            max-width: 840px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .guest-trial-text {
+            font-size: 0.88rem;
+            color: #92400e;
+            font-weight: 500;
+        }
+        .btn-guest-signup {
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 5px 16px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .btn-guest-signup:hover {
+            background: var(--accent-dark);
+        }
+
+        /* 게스트 한도 모달 */
+        .guest-limit-modal-content {
+            text-align: center;
+            padding: 24px;
+        }
+        .guest-limit-modal-content h3 {
+            margin-bottom: 12px;
+            color: var(--text-dark);
+        }
+        .guest-limit-modal-content p {
+            margin-bottom: 20px;
+            color: var(--text-medium);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        .guest-limit-modal-content .btn-primary {
+            width: 100%;
+            padding: 12px;
+            font-size: 1rem;
         }
 
         /* 헤더용 (다크 배경) */
@@ -3358,6 +4278,124 @@
                 height: 420px;
             }
         }
+        /* ============================================ */
+        /* 푸터                                        */
+        /* ============================================ */
+        .site-footer {
+            background: #131313;
+            color: rgba(255,255,255,0.7);
+            margin: 80px -20px 0;
+            padding: 48px 0 0;
+        }
+
+        .footer-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 48px;
+        }
+
+        .footer-top {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr 1.2fr;
+            gap: 40px;
+            padding-bottom: 40px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .footer-col h4 {
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .footer-col p {
+            font-size: 0.9rem;
+            line-height: 1.8;
+            color: rgba(255,255,255,0.55);
+        }
+
+        .footer-brand .footer-logo {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--accent);
+            margin-bottom: 10px;
+        }
+
+        .footer-brand .footer-desc {
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: rgba(255,255,255,0.5);
+        }
+
+        .footer-col ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .footer-col ul li {
+            margin-bottom: 8px;
+        }
+
+        .footer-col ul li a,
+        .footer-col ul li span {
+            color: rgba(255,255,255,0.55);
+            font-size: 0.9rem;
+            text-decoration: none;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .footer-col ul li a:hover,
+        .footer-col ul li span:hover {
+            color: #fff;
+        }
+
+        .footer-contact-item {
+            font-size: 0.9rem;
+            line-height: 2;
+            color: rgba(255,255,255,0.55);
+        }
+
+        .footer-contact-item strong {
+            color: rgba(255,255,255,0.75);
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 0;
+            font-size: 0.82rem;
+            color: rgba(255,255,255,0.35);
+        }
+
+        .footer-bottom a {
+            color: rgba(255,255,255,0.35);
+            text-decoration: none;
+        }
+
+        .footer-bottom a:hover {
+            color: rgba(255,255,255,0.6);
+        }
+
+        .footer-legal {
+            display: flex;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .footer-top {
+                grid-template-columns: 1fr;
+                gap: 32px;
+            }
+            .footer-bottom {
+                flex-direction: column;
+                gap: 8px;
+                text-align: center;
+            }
+        }
+
     </style>
     <!-- Mermaid 다이어그램 라이브러리 -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -3385,6 +4423,10 @@
                 <p class="subtitle">LLM & DART 기반 딥 리서치 플랫폼 밸류랜즈</p>
             </div>
             <div class="user-section" id="userSection">
+                <div class="header-nav-links">
+                    <span class="header-nav-link" onclick="scrollToGuide()">사용방법</span>
+                    <span class="header-nav-link price" onclick="showPricingModal()">Price</span>
+                </div>
                 <!-- 비로그인 상태 -->
                 <div class="user-guest" id="userGuest">
                     <button class="btn btn-outline" onclick="showAuthModal('login')">로그인</button>
@@ -3414,6 +4456,14 @@
             </div>
         </div>
     </header>
+
+    <!-- 게스트 무료 체험 배너 -->
+    <div class="guest-trial-banner" id="guestTrialBanner" style="display: none;">
+        <div class="guest-trial-inner">
+            <span class="guest-trial-text" id="guestTrialText">무료 체험 중</span>
+            <button class="btn-guest-signup" onclick="showAuthModal('register')">회원가입</button>
+        </div>
+    </div>
 
     <div class="container centered" id="mainContainer">
         <!-- 히어로 태그라인 (초기 상태에서만 표시) -->
@@ -3462,6 +4512,291 @@
             <div class="action-buttons">
                 <button class="btn btn-danger" id="cancelBtn" onclick="cancelExtraction()">취소</button>
             </div>
+        </div>
+    </div>
+
+    <!-- 서비스 소개 섹션 (검색창 하단, 초기 상태에서만 표시) -->
+    <div class="service-intro" id="serviceIntro">
+
+        <!-- Why 섹션: 서비스 필요성 -->
+        <div class="why-section">
+            <div class="why-hero">
+                <span class="why-eyebrow">WHY VALULENS</span>
+                <h2>고급 인력이 단순 리서치에<br><span class="highlight">낭비되고 있습니다</span></h2>
+                <p class="why-sub">재무제표 추출, 데이터 정리, 기초 리서치에 수 시간을 쓰는 동안<br>더 좋은 딜은 경쟁사에게 넘어가고 있습니다.</p>
+            </div>
+
+            <!-- 문제점 숫자 카드 -->
+            <div class="problem-cards">
+                <div class="problem-card">
+                    <div class="card-icon red">&#x23F1;</div>
+                    <div class="card-number">5~7일</div>
+                    <div class="card-unit">기업 1곳 기초 리서치 소요 시간</div>
+                    <div class="card-desc">DART 공시 확인, 재무제표 정리, 업계 동향 조사까지 수작업으로 일주일 가까이 소요됩니다.</div>
+                </div>
+                <div class="problem-card">
+                    <div class="card-icon blue">&#x1F4B0;</div>
+                    <div class="card-number">연 6천만원~</div>
+                    <div class="card-unit">주니어 어소시에이트 인건비</div>
+                    <div class="card-desc">고임금 인력이 데이터 취합과 포맷 정리에 시간을 쓰고 있습니다. 이 시간에 더 가치 있는 분석을 할 수 있습니다.</div>
+                </div>
+                <div class="problem-card">
+                    <div class="card-icon green">&#x1F3AF;</div>
+                    <div class="card-number">40~50배</div>
+                    <div class="card-unit">검토 가능 기업 수 차이</div>
+                    <div class="card-desc">같은 시간에 수십 배 더 많은 기업을 스크리닝하면, 그만큼 좋은 딜을 잡을 확률이 올라갑니다.</div>
+                </div>
+            </div>
+
+            <!-- Before → After 비교 -->
+            <div class="comparison">
+                <div class="comparison-box before">
+                    <div class="comp-label">BEFORE</div>
+                    <h3>기존 워크플로우</h3>
+                    <ul>
+                        <li>DART에서 재무제표 수동 다운로드</li>
+                        <li>엑셀에 수기 입력 및 포맷 정리</li>
+                        <li>뉴스, 업계 리포트 개별 검색</li>
+                        <li>경쟁사 데이터 별도 수집</li>
+                        <li>기업 1곳에 반나절 이상 소요</li>
+                    </ul>
+                </div>
+                <div class="comparison-arrow">
+                    <div class="arrow-circle">&#x279C;</div>
+                </div>
+                <div class="comparison-box after">
+                    <div class="comp-label">AFTER &mdash; VALULENS</div>
+                    <h3>원클릭 올인원</h3>
+                    <ul>
+                        <li>기업명 검색 한 번으로 재무제표 자동 추출</li>
+                        <li>AI가 이상 패턴 감지 + 원인 분석</li>
+                        <li>산업 동향, 경쟁사, M&A 자동 리서치</li>
+                        <li>PE 맞춤 보고서 + 엑셀 즉시 다운로드</li>
+                        <li>기업 1곳에 10분 이내 완료</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 핵심 가치 메시지 -->
+            <div class="value-message">
+                <h3>빠른 의사결정은 곧<br><span class="gold">더 많은 기회</span>입니다</h3>
+                <p>단순 리서치에 시간을 쓰는 대신, 더 많은 후보 기업을 빠르게 스크리닝하고 올바른 의사결정을 내리는 것. 그것이 현 시대 PE 전문가가 가장 가치 있게 시간을 쓰는 방법입니다.</p>
+                <div class="value-pillars">
+                    <div class="value-pillar">
+                        <div class="pillar-icon">&#x26A1;</div>
+                        <div class="pillar-text">
+                            <div class="pillar-num">10분</div>
+                            <div class="pillar-label">기업 1곳 분석 완료</div>
+                        </div>
+                    </div>
+                    <div class="value-pillar">
+                        <div class="pillar-icon">&#x1F4CA;</div>
+                        <div class="pillar-text">
+                            <div class="pillar-num">40~50배</div>
+                            <div class="pillar-label">더 많은 기업 검토</div>
+                        </div>
+                    </div>
+                    <div class="value-pillar">
+                        <div class="pillar-icon">&#x1F3AF;</div>
+                        <div class="pillar-text">
+                            <div class="pillar-num">100%</div>
+                            <div class="pillar-label">PE 전용 최적화</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PE 전용 서비스 -->
+            <div class="pe-exclusive">
+                <div class="pe-badge">
+                    <span class="badge-text">PE</span>
+                    <span class="badge-sub">EXCLUSIVE</span>
+                </div>
+                <div class="pe-content">
+                    <h3>오직 PE만을 위한 서비스</h3>
+                    <p>밸류렌즈는 범용 금융 플랫폼이 아닙니다. PE 실무자의 실제 워크플로우와 의견을 반영하여, PE 딜 소싱과 실사에 최적화된 기능만을 제공합니다. 사용자 피드백을 지속적으로 수용하며 PE 전문가를 위한 최고의 도구로 발전해 나갑니다.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 서비스 흐름 구분선 -->
+        <div class="section-divider">
+            <span class="divider-label">HOW IT WORKS</span>
+        </div>
+
+        <div class="intro-headline">
+            <h2>PE 실사를 위한 올인원 재무 분석 플랫폼</h2>
+            <p>DART 재무제표 추출부터 AI 분석, 기업 리서치, 엑셀 다운로드까지<br>하나의 플랫폼에서 한 번의 클릭으로 완성합니다.</p>
+        </div>
+
+        <!-- Step 1: 기업 검색 -->
+        <div class="feature-block">
+            <div class="feature-text">
+                <span class="feature-step">STEP 1</span>
+                <h3>기업 검색</h3>
+                <p>검색창에 기업명을 입력하면 DART에 등록된 상장사 / 비상장사를 실시간으로 검색합니다.</p>
+                <ul>
+                    <li>코스피 / 코스닥 / 비상장 뱃지로 시장 구분 한눈에 확인</li>
+                    <li>종목코드, 고유번호 함께 표시</li>
+                    <li>최근 검색 이력 자동 저장</li>
+                </ul>
+            </div>
+            <div class="feature-img">
+                <img src="/static/images/step1_search.png" alt="기업 검색 화면">
+            </div>
+        </div>
+
+        <!-- Step 2: 기업개황 확인 -->
+        <div class="feature-block reverse">
+            <div class="feature-text">
+                <span class="feature-step">STEP 2</span>
+                <h3>기업개황 정보</h3>
+                <p>기업을 선택하면 DART 기업개황 정보가 즉시 로드됩니다.</p>
+                <ul>
+                    <li>대표자, 업종, 설립일, 결산월 등 기본 정보</li>
+                    <li>법인번호, 사업자번호, 주소, 홈페이지</li>
+                    <li>추출 전에도 기업 기본 현황 빠르게 파악 가능</li>
+                </ul>
+            </div>
+            <div class="feature-img">
+                <img src="/static/images/step2_company_info.png" alt="기업개황 정보">
+            </div>
+        </div>
+
+        <!-- Step 3: 통합추출 -->
+        <div class="feature-block">
+            <div class="feature-text">
+                <span class="feature-step">STEP 3</span>
+                <h3>통합추출 (원클릭)</h3>
+                <p>시작 연도와 종료 연도를 선택한 후 <strong>"통합추출"</strong> 버튼 하나로 모든 분석이 시작됩니다.</p>
+                <ul>
+                    <li>DART 전자공시 재무제표 자동 추출 (BS / IS / CF)</li>
+                    <li>Financials 요약 테이블 자동 생성</li>
+                    <li>AI 재무분석 + 기업 리서치 동시 진행</li>
+                    <li>진행률 실시간 표시</li>
+                </ul>
+            </div>
+            <div class="feature-img">
+                <img src="/static/images/step3_extraction.png" alt="연도 선택 + 통합추출">
+            </div>
+        </div>
+
+        <!-- Step 4: Financials -->
+        <div class="feature-block reverse">
+            <div class="feature-text">
+                <span class="feature-step">STEP 4</span>
+                <h3>Financials 테이블</h3>
+                <p>추출이 완료되면 가장 먼저 <strong>Financials 탭</strong>에 재무 요약 테이블이 표시됩니다. 추출까지 약 1~2분 소요됩니다.</p>
+                <ul>
+                    <li>재무상태표 / 손익계산서를 한 눈에 요약</li>
+                    <li>주요 항목에 마우스를 올리면 세부 내역 툴팁 표시</li>
+                    <li>NWC, Net Debt, EBITDA 등 핵심 지표 자동 계산</li>
+                    <li>단위: 백만원, 전년 대비 변동 즉시 파악</li>
+                </ul>
+            </div>
+            <div class="feature-img">
+                <img src="/static/images/step4_financials.png" alt="Financials 테이블">
+            </div>
+        </div>
+
+        <!-- Step 5: AI 재무분석 -->
+        <div class="feature-block">
+            <div class="feature-text">
+                <span class="feature-step">STEP 5</span>
+                <h3>AI 재무분석 리포트</h3>
+                <p>Gemini AI가 재무 데이터의 이상 패턴을 자동 감지하고, 웹 검색으로 원인을 파악하여 M&A 실사용 인사이트를 생성합니다. 평균 2~3분 소요됩니다.</p>
+                <ul>
+                    <li>전년 대비 급격한 변동 자동 감지</li>
+                    <li>산업 동향, 경쟁사 대비 분석</li>
+                    <li>PE 관점의 리스크 / 기회 요인 정리</li>
+                    <li>마크다운 형식의 구조화된 보고서</li>
+                </ul>
+            </div>
+            <div class="feature-img">
+                <img src="/static/images/step6_ai_analysis.png" alt="AI 재무분석 리포트">
+            </div>
+        </div>
+
+        <!-- Step 6: 기업 리서치 -->
+        <div class="feature-block reverse">
+            <div class="feature-text">
+                <span class="feature-step">STEP 6</span>
+                <h3>기업 리서치 (딥 리서치)</h3>
+                <p><strong>"기업 리서치"</strong> 탭에서 AI가 자동 수집한 산업 분석, 주요 뉴스, 경쟁 환경을 확인할 수 있습니다. 최대 10분 이상 소요될 수 있습니다.</p>
+                <ul>
+                    <li>업종 파악 후 자동 검색 쿼리 생성</li>
+                    <li>병렬 웹 검색으로 빠른 정보 수집</li>
+                    <li>산업 개요, 시장 규모, 주요 뉴스 종합</li>
+                    <li>경쟁사 분석, 협력사 현황, M&A 사례</li>
+                    <li>PE 투자 관점의 핵심 포인트 정리</li>
+                </ul>
+            </div>
+            <div class="feature-img" style="display: flex; flex-direction: column; gap: 12px;">
+                <img src="/static/images/step7_research.png" alt="기업 리서치 - 기업 개요">
+                <img src="/static/images/research_competitors.png" alt="기업 리서치 - 경쟁사 분석">
+                <img src="/static/images/research_mna.png" alt="기업 리서치 - M&A 사례">
+                <img src="/static/images/research_news.png" alt="기업 리서치 - 주요 뉴스">
+            </div>
+        </div>
+
+        <!-- Step 7: AI 어시스턴트 -->
+        <div class="feature-block">
+            <div class="feature-text">
+                <span class="feature-step">STEP 7</span>
+                <h3>AI 어시스턴트 (PE 전문 챗봇)</h3>
+                <p>추출된 재무 데이터를 기반으로 PE 전문 AI에게 자유롭게 질문할 수 있습니다.</p>
+                <ul>
+                    <li>재무 데이터 + 기업개황을 컨텍스트로 주입</li>
+                    <li>복잡한 질문은 멀티 에이전트가 분석</li>
+                    <li>실시간 웹 검색 연동 가능</li>
+                    <li>전체화면 모드 지원</li>
+                </ul>
+            </div>
+            <div class="feature-img">
+                <img src="/static/images/step8_chatbot.png" alt="AI 어시스턴트 챗봇">
+            </div>
+        </div>
+
+        <!-- Step 8: 엑셀 다운로드 -->
+        <div class="feature-block reverse">
+            <div class="feature-text">
+                <span class="feature-step">STEP 8</span>
+                <h3>엑셀 다운로드</h3>
+                <p>분석이 완료되면 모든 결과를 하나의 엑셀 파일로 다운로드할 수 있습니다.</p>
+                <ul>
+                    <li>기업개황, Financials, 재무분석 AI 리포트</li>
+                    <li>재무상태표, 손익계산서, 현금흐름표 원본</li>
+                    <li>주석 데이터 포함</li>
+                    <li>동적 컬럼 너비 적용으로 깔끔한 출력</li>
+                </ul>
+            </div>
+            <div class="feature-img">
+                <img src="/static/images/step9_excel.png" alt="엑셀 다운로드">
+            </div>
+        </div>
+
+        <!-- Step 9: 재무 상세 (엑셀 Financials 탭) -->
+        <div class="feature-block">
+            <div class="feature-text">
+                <span class="feature-step">STEP 9</span>
+                <h3>재무 상세 데이터</h3>
+                <p>웹에서 확인한 Financials 데이터가 <strong>엑셀에도 동일하게 저장</strong>됩니다. 엑셀의 Financials 탭에서 더욱 디테일한 재무 데이터를 확인할 수 있습니다.</p>
+                <ul>
+                    <li>재무상태표, 손익계산서의 전 항목 상세 수치</li>
+                    <li>웹 화면과 동일한 데이터가 엑셀에 그대로 저장</li>
+                    <li>연결 / 별도 재무제표 자동 판별</li>
+                    <li>다년간 추이를 엑셀에서 자유롭게 가공 가능</li>
+                </ul>
+            </div>
+            <div class="feature-img">
+                <img src="/static/images/step5_detail.png" alt="엑셀 Financials 탭 상세">
+            </div>
+        </div>
+
+        <!-- CTA -->
+        <div class="intro-cta">
+            <p>로그인 없이 바로 검색을 시작해보세요!</p>
+            <button class="cta-btn" onclick="document.getElementById('companyInput').focus(); window.scrollTo({top: 0, behavior: 'smooth'});">검색 시작하기</button>
         </div>
     </div>
 
@@ -3687,6 +5022,79 @@
         </div>
     </div>
 
+    <!-- Pricing 모달 -->
+    <div class="pricing-modal-overlay" id="pricingModalOverlay" onclick="closePricingModal(event)">
+        <div class="pricing-modal" onclick="event.stopPropagation()">
+            <button class="pricing-modal-close" onclick="closePricingModal()">&times;</button>
+            <div class="pricing-header">
+                <h2>Pricing</h2>
+                <p>PE 실무에 최적화된 플랜을 선택하세요</p>
+            </div>
+            <div class="pricing-cards">
+                <!-- Free -->
+                <div class="pricing-card">
+                    <div class="card-badge" style="background: var(--primary);">한시적 얼리버드 무료</div>
+                    <div class="plan-name">Free</div>
+                    <div class="plan-original">하루 1회 추출 / 챗봇 2회</div>
+                    <div class="plan-price">무료</div>
+                    <div class="plan-period">한시적 제한 30개 계정</div>
+                    <div class="plan-divider"></div>
+                    <ul class="plan-features">
+                        <li>월 30회 추출</li>
+                        <li>AI 챗봇 50회</li>
+                        <li>AI 재무분석 리포트</li>
+                        <li>기업 리서치</li>
+                        <li>엑셀 다운로드</li>
+                    </ul>
+                </div>
+                <!-- Pro -->
+                <div class="pricing-card featured">
+                    <div class="card-badge">EARLY BIRD</div>
+                    <div class="plan-name">Pro</div>
+                    <div class="plan-original">월 990,000원</div>
+                    <div class="plan-price">790,000<span class="price-small">원/월</span></div>
+                    <div class="plan-period">얼리버드 특가 진행 중</div>
+                    <div class="plan-divider"></div>
+                    <ul class="plan-features">
+                        <li>월 300회 추출</li>
+                        <li>AI 챗봇 무제한</li>
+                        <li>AI 재무분석 리포트</li>
+                        <li>기업 리서치</li>
+                        <li>엑셀 다운로드</li>
+                        <li class="highlight-feature">유저 의견 최우선 개발 반영</li>
+                    </ul>
+                </div>
+                <!-- Team -->
+                <div class="pricing-card">
+                    <div class="plan-name">Team</div>
+                    <div class="plan-price">협의</div>
+                    <div class="plan-period">맞춤 플랜</div>
+                    <div class="plan-divider"></div>
+                    <ul class="plan-features">
+                        <li>추출 횟수 협의</li>
+                        <li>AI 챗봇 무제한</li>
+                        <li>팀 멤버 관리</li>
+                        <li>전용 고객 지원</li>
+                        <li>맞춤 기능 개발 협의</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="pricing-contact">
+                <div class="contact-left">
+                    <h4>결제 및 플랜 문의</h4>
+                    <p>담당자: 천영록 | 서울특별시 삼성동 코엑스 스파크플러스</p>
+                </div>
+                <div class="contact-right">
+                    <div class="contact-email" onclick="copyEmail()">
+                        finance@moatai.io
+                        <span class="copy-icon">&#x1F4CB;</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="copy-toast" id="copyToast">메일 주소가 복사되었습니다</div>
+
     <!-- 내 정보 모달 -->
     <div class="profile-modal-overlay" id="profileModalOverlay" onclick="closeProfileModal(event)">
         <div class="profile-modal" onclick="event.stopPropagation()">
@@ -3892,6 +5300,19 @@
             </div>
 
             <div class="admin-table-container">
+                <!-- 신규 가입자 기본 설정 -->
+                <div style="margin-bottom: 16px; padding: 16px 20px; background: #f0f9ff; border-radius: 10px; border: 1px solid #bae6fd;">
+                    <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 12px; color: #0369a1;">신규 가입자 기본 설정</div>
+                    <div style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label style="font-size: 0.75rem; color: #64748b;">통합검색 횟수</label>
+                            <input type="number" id="settingSearchCount" min="0" style="width: 100px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.875rem;">
+                        </div>
+                        <button onclick="saveAdminSettings()" style="padding: 6px 16px; background: #0284c7; color: white; border: none; border-radius: 6px; font-size: 0.875rem; cursor: pointer; height: 34px;">저장</button>
+                        <span id="settingsSaveStatus" style="font-size: 0.75rem; color: #16a34a; display: none;">저장됨</span>
+                    </div>
+                    <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 8px;">* 신규 가입자에게 부여되는 통합검색 기본 횟수입니다. 기존 가입자에는 영향 없음.</div>
+                </div>
                 <table class="admin-table" id="adminUserTable">
                     <thead>
                         <tr>
@@ -3919,6 +5340,7 @@
         // 전역 변수
         // ============================================================
         let currentUser = null;   // 현재 로그인한 사용자
+        let guestInfo = null;     // 게스트 체험 정보 {extract_used, extract_limit, chat_used, chat_limit}
         let selectedCorp = null;  // 선택된 기업 정보
         let currentTaskId = null;  // 현재 작업 ID
         let currentFilename = null;  // 현재 파일명 (다운로드용)
@@ -3946,8 +5368,6 @@
         // 모달 닫기 (로그인 상태에서만 가능)
         function closeAuthModal(event) {
             if (event && event.target !== event.currentTarget) return;
-            // 비로그인 상태에서는 닫을 수 없음
-            if (!currentUser) return;
 
             const overlay = document.getElementById('authModalOverlay');
             overlay.classList.remove('active');
@@ -4129,6 +5549,50 @@
             }
         });
 
+        // 개인정보 처리방침 / 이용약관
+        function showPrivacyPolicy() {
+            window.open('/privacy.html', '_blank');
+        }
+
+        function showTermsOfService() {
+            window.open('/terms.html', '_blank');
+        }
+
+        // 사용방법 스크롤
+        function scrollToGuide() {
+            const intro = document.getElementById('serviceIntro');
+            // 숨겨져 있으면 다시 표시
+            if (intro.style.display === 'none') {
+                intro.style.display = '';
+            }
+            // HOW IT WORKS 구분선 또는 첫 step으로 스크롤
+            const divider = intro.querySelector('.section-divider');
+            if (divider) {
+                divider.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                intro.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        // Pricing 모달
+        function showPricingModal() {
+            document.getElementById('pricingModalOverlay').classList.add('active');
+        }
+
+        function closePricingModal(e) {
+            if (!e || e.target === document.getElementById('pricingModalOverlay')) {
+                document.getElementById('pricingModalOverlay').classList.remove('active');
+            }
+        }
+
+        function copyEmail() {
+            navigator.clipboard.writeText('finance@moatai.io').then(() => {
+                const toast = document.getElementById('copyToast');
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 2000);
+            });
+        }
+
         // 내 정보 모달
         function showProfileModal() {
             closeUserMenu();
@@ -4265,8 +5729,22 @@
 
                 if (data.logged_in) {
                     currentUser = data.user;
+                    guestInfo = null;
                 } else {
                     currentUser = null;
+                    // 게스트 정보 저장 (서버 IP 기반 + localStorage 중 큰 값 사용)
+                    const serverGuest = data.guest || {};
+                    const localExtract = parseInt(localStorage.getItem('guest_extract_used') || '0');
+                    const localChat = parseInt(localStorage.getItem('guest_chat_used') || '0');
+                    guestInfo = {
+                        extract_used: Math.max(serverGuest.extract_used || 0, localExtract),
+                        extract_limit: serverGuest.extract_limit || 1,
+                        chat_used: Math.max(serverGuest.chat_used || 0, localChat),
+                        chat_limit: serverGuest.chat_limit || 5,
+                    };
+                    // localStorage 동기화
+                    localStorage.setItem('guest_extract_used', guestInfo.extract_used);
+                    localStorage.setItem('guest_chat_used', guestInfo.chat_used);
                 }
                 updateUserUI();
             } catch (err) {
@@ -4323,19 +5801,52 @@
                 overlay.classList.remove('active');
                 closeBtn.style.display = 'flex';
             } else {
-                // 비로그인 상태
+                // 비로그인 상태 — 게스트 무료 체험 허용
                 guestEl.style.display = 'flex';
                 loggedInEl.style.display = 'none';
                 adminMenuItem.style.display = 'none';
 
-                // 메인 콘텐츠 숨김
-                mainContent.style.display = 'none';
+                // 메인 콘텐츠 표시 (게스트도 검색 가능)
+                mainContent.style.display = 'block';
 
-                // 로그인 모달 자동 표시 (닫기 버튼 숨김)
-                overlay.classList.add('active');
-                closeBtn.style.display = 'none';
-                switchAuthForm('login');
+                // 로그인 모달 표시하지 않음 (게스트 체험)
+                overlay.classList.remove('active');
+                closeBtn.style.display = 'flex';
+
+                // 게스트 배너 표시
+                updateGuestBanner();
             }
+        }
+
+        // ============================================================
+        // 게스트 체험 관련 함수
+        // ============================================================
+        function updateGuestBanner() {
+            // 배너는 사용하지 않음 — 한도 소진 시 모달로만 안내
+            const banner = document.getElementById('guestTrialBanner');
+            if (banner) banner.style.display = 'none';
+        }
+
+        function showGuestLimitModal(type) {
+            const overlay = document.getElementById('authModalOverlay');
+            const loginForm = document.getElementById('loginForm');
+            const registerForm = document.getElementById('registerForm');
+
+            // 회원가입 폼으로 전환
+            loginForm.style.display = 'none';
+            registerForm.style.display = 'block';
+
+            // 안내 메시지 표시
+            const registerError = document.getElementById('registerError');
+            if (type === 'extract') {
+                registerError.textContent = '무료 체험 검색을 모두 사용하셨습니다. 회원가입 후 계속 이용하세요!';
+                registerError.style.color = 'var(--accent)';
+            } else {
+                registerError.textContent = '무료 AI 질문 횟수를 모두 사용하셨습니다. 회원가입 후 계속 이용하세요!';
+                registerError.style.color = 'var(--accent)';
+            }
+
+            overlay.classList.add('active');
         }
 
         // ============================================================
@@ -4345,12 +5856,47 @@
             const overlay = document.getElementById('adminModalOverlay');
             overlay.classList.add('active');
             loadUserList();
+            loadAdminSettings();
         }
 
         function closeAdminModal(event) {
             if (event && event.target !== event.currentTarget) return;
             const overlay = document.getElementById('adminModalOverlay');
             overlay.classList.remove('active');
+        }
+
+        async function loadAdminSettings() {
+            try {
+                const resp = await fetch('/api/admin/settings');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const s = data.settings || {};
+                document.getElementById('settingSearchCount').value = s.search_count ?? 30;
+            } catch (e) {
+                console.error('설정 로드 실패:', e);
+            }
+        }
+
+        async function saveAdminSettings() {
+            const body = {
+                free_search_count: parseInt(document.getElementById('settingSearchCount').value) || 0,
+            };
+            try {
+                const resp = await fetch('/api/admin/settings', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                });
+                if (resp.ok) {
+                    const status = document.getElementById('settingsSaveStatus');
+                    status.style.display = 'inline';
+                    setTimeout(() => { status.style.display = 'none'; }, 2000);
+                } else {
+                    alert('설정 저장 실패');
+                }
+            } catch (e) {
+                alert('설정 저장 중 오류: ' + e.message);
+            }
         }
 
         async function loadUserList() {
@@ -4754,6 +6300,7 @@
 
             // 태그라인 숨기고 검색 섹션 상단으로 복귀
             document.getElementById('mainContainer').classList.remove('centered');
+            document.getElementById('serviceIntro').style.display = 'none';
 
             // UI 업데이트
             document.getElementById('searchResults').classList.remove('show');
@@ -4935,10 +6482,18 @@
         async function startExtraction(integrated = false) {
             if (!selectedCorp) return;
 
-            // 검색횟수 체크
+            // 로그인 사용자: 검색횟수 체크
             if (currentUser && currentUser.search_count !== null && currentUser.search_count !== undefined && currentUser.search_count <= 0) {
                 alert('검색횟수가 부족합니다.\n유료 결제를 진행해 주세요.');
                 return;
+            }
+
+            // 게스트: 프론트 사전 체크 (localStorage)
+            if (!currentUser && guestInfo) {
+                if (guestInfo.extract_used >= guestInfo.extract_limit) {
+                    showGuestLimitModal('extract');
+                    return;
+                }
             }
 
             // 상태 플래그 초기화
@@ -4959,6 +6514,7 @@
 
             // UI 전환
             document.getElementById('mainContainer').classList.remove('centered');
+            document.getElementById('serviceIntro').style.display = 'none';
             document.getElementById('progressSection').classList.remove('show');
             document.getElementById('extractingSection').classList.add('show');
 
@@ -4974,18 +6530,31 @@
                         company_info: companyInfoData  // 기업개황정보 추가
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (!response.ok) {
+                    // 게스트 한도 초과 감지
+                    if (data.detail === 'GUEST_LIMIT_EXTRACT') {
+                        showGuestLimitModal('extract');
+                        document.getElementById('extractingSection').classList.remove('show');
+                        return;
+                    }
                     throw new Error(data.detail || '추출 시작 실패');
                 }
-                
+
                 currentTaskId = data.task_id;
-                
+
+                // 게스트 사용량 업데이트
+                if (!currentUser && guestInfo) {
+                    guestInfo.extract_used++;
+                    localStorage.setItem('guest_extract_used', guestInfo.extract_used);
+                    updateGuestBanner();
+                }
+
                 // 상태 확인 시작
                 startStatusCheck();
-                
+
             } catch (error) {
                 showError(error.message);
                 resetAll();
@@ -8638,6 +10207,7 @@
             document.getElementById('completeSection').classList.remove('show');
             document.getElementById('companyInfoWrapper').style.display = 'none';
             document.getElementById('mainContainer').classList.add('centered');
+            document.getElementById('serviceIntro').style.display = '';
             hideError();
 
             // 기업개황정보 초기화
@@ -8994,6 +10564,14 @@
             const message = input.value.trim();
             if (!message) return;
 
+            // 게스트: 프론트 사전 체크
+            if (!currentUser && guestInfo) {
+                if (guestInfo.chat_used >= guestInfo.chat_limit) {
+                    showGuestLimitModal('chat');
+                    return;
+                }
+            }
+
             chatbotSending = true;
             input.value = '';
             input.style.height = 'auto';
@@ -9017,7 +10595,26 @@
                 });
 
                 if (!resp.ok) {
+                    // 게스트 챗 한도 초과 감지
+                    try {
+                        const errData = await resp.json();
+                        if (errData.detail === 'GUEST_LIMIT_CHAT') {
+                            removeTypingIndicator();
+                            chatbotSending = false;
+                            document.getElementById('chatSendBtn').disabled = false;
+                            document.getElementById('chatbotStatus').textContent = '준비 완료';
+                            showGuestLimitModal('chat');
+                            return;
+                        }
+                    } catch (e) { /* ignore parse error */ }
                     throw new Error(`HTTP ${resp.status}`);
+                }
+
+                // 게스트 챗 사용량 업데이트
+                if (!currentUser && guestInfo) {
+                    guestInfo.chat_used++;
+                    localStorage.setItem('guest_chat_used', guestInfo.chat_used);
+                    updateGuestBanner();
                 }
 
                 // SSE 스트리밍 처리 (타이핑 인디케이터는 첫 토큰까지 유지)
@@ -9162,5 +10759,37 @@
             document.querySelectorAll('.ci-tab').forEach(t => t.classList.add('active'));
         }
     </script>
+
+    <!-- 푸터 -->
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <div class="footer-top">
+                <div class="footer-col footer-brand">
+                    <div class="footer-logo">Valulens</div>
+                    <p class="footer-desc">PE 실사를 위한 올인원 재무 분석 플랫폼.<br>DART 재무제표 추출부터 AI 분석, 기업 리서치까지<br>하나의 플랫폼에서 완성합니다.</p>
+                </div>
+                <div class="footer-col">
+                    <h4>서비스</h4>
+                    <ul>
+                        <li><span onclick="scrollToGuide()">사용방법</span></li>
+                        <li><span onclick="showPricingModal()">Price</span></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>Contact</h4>
+                    <div class="footer-contact-item"><strong>담당자</strong> 천영록</div>
+                    <div class="footer-contact-item"><strong>이메일</strong> <span style="cursor:pointer; text-decoration:underline;" onclick="copyEmail()">finance@moatai.io</span></div>
+                    <div class="footer-contact-item"><strong>주소</strong> 서울특별시 강남구 삼성동 코엑스 스파크플러스</div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>&copy; 2026 Valulens. All rights reserved.</span>
+                <div class="footer-legal">
+                    <a href="/privacy.html" target="_blank">개인정보 처리방침</a>
+                    <a href="/terms.html" target="_blank">이용약관</a>
+                </div>
+            </div>
+        </div>
+    </footer>
 </body>
 </html>
