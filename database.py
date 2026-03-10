@@ -44,15 +44,15 @@ def init_db():
                 phone TEXT,                         -- 연락처
                 role TEXT DEFAULT 'user',           -- 'admin' / 'user'
                 tier TEXT DEFAULT 'free',           -- 'free' / 'basic' / 'pro'
-                search_limit INTEGER DEFAULT 10,    -- 무료 검색 한도
+                search_limit INTEGER DEFAULT 9999,  -- 검색 한도 (무제한)
                 search_used INTEGER DEFAULT 0,      -- 사용한 검색 수
-                extract_limit INTEGER DEFAULT 5,    -- 무료 추출 한도
+                extract_limit INTEGER DEFAULT 9999, -- 추출 한도 (무제한)
                 extract_used INTEGER DEFAULT 0,     -- 사용한 추출 수
-                ai_limit INTEGER DEFAULT 3,         -- 무료 AI 분석 한도
+                ai_limit INTEGER DEFAULT 9999,      -- AI 분석 한도 (무제한)
                 ai_used INTEGER DEFAULT 0,          -- 사용한 AI 분석 수
                 subscription_start TIMESTAMP,       -- 유료 시작일
                 expires_at TIMESTAMP,               -- 유료 만료일 (NULL이면 무료)
-                search_count INTEGER DEFAULT 5,      -- 검색횟수 (Free 기본 5회)
+                search_count INTEGER DEFAULT 30,     -- 통합검색 횟수 (Free 기본 30회)
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -65,6 +65,8 @@ def init_db():
             'ALTER TABLE users ADD COLUMN name TEXT',
             'ALTER TABLE users ADD COLUMN company TEXT',
             'ALTER TABLE users ADD COLUMN phone TEXT',
+            'ALTER TABLE users ADD COLUMN chat_used INTEGER DEFAULT 0',
+            'ALTER TABLE llm_usage ADD COLUMN ip_address TEXT',
         ]:
             try:
                 cursor.execute(col_def)
@@ -198,6 +200,59 @@ def init_db():
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_recent_q_user ON chat_recent_questions(user_id)')
 
+        # 챗봇 대화 이력 테이블
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                corp_code TEXT,
+                corp_name TEXT,
+                question TEXT NOT NULL,
+                response TEXT,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_chat_history_user ON chat_history(user_id)')
+
+        # 앱 설정 테이블 (key-value 방식)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # 게스트 사용량 테이블 (비로그인 무료 체험)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS guest_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip_address TEXT NOT NULL,
+                extract_used INTEGER DEFAULT 0,
+                chat_used INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_guest_ip ON guest_usage(ip_address)')
+
+        # 기본 설정값 삽입 (없는 경우에만)
+        default_settings = {
+            'free_search_limit': '9999',
+            'free_extract_limit': '9999',
+            'free_ai_limit': '9999',
+            'free_search_count': '30',
+            'guest_extract_limit': '1',
+            'guest_chat_limit': '5',
+        }
+        for key, value in default_settings.items():
+            cursor.execute('''
+                INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)
+            ''', (key, value))
+
         print("[DB] 데이터베이스 초기화 완료")
 
 
@@ -222,19 +277,70 @@ def generate_session_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+# ==================== 앱 설정 관리 ====================
+
+def get_setting(key: str, default: str = None) -> Optional[str]:
+    """설정값 조회"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT value FROM app_settings WHERE key = ?', (key,))
+        row = cursor.fetchone()
+        return row[0] if row else default
+
+
+def get_free_tier_settings() -> Dict:
+    """Free tier 기본 한도 설정값 일괄 조회"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT key, value FROM app_settings WHERE key LIKE 'free_%'")
+        settings = {row[0]: int(row[1]) for row in cursor.fetchall()}
+    return {
+        'search_limit': settings.get('free_search_limit', 10),
+        'extract_limit': settings.get('free_extract_limit', 30),
+        'ai_limit': settings.get('free_ai_limit', 3),
+        'search_count': settings.get('free_search_count', 5),
+    }
+
+
+def update_setting(key: str, value: str):
+    """설정값 업데이트 (없으면 생성)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
+        ''', (key, value, value))
+
+
 # ==================== 사용자 관리 ====================
 
 def create_user(email: str, password: str, role: str = 'user', tier: str = 'free',
                 name: str = None, company: str = None, phone: str = None) -> Optional[int]:
-    """사용자 생성"""
+    """사용자 생성 - free tier는 app_settings에서 기본 한도 조회"""
+    # free tier 기본 한도를 settings에서 가져오기
+    if tier == 'free':
+        free_settings = get_free_tier_settings()
+        search_limit = free_settings['search_limit']
+        extract_limit = free_settings['extract_limit']
+        ai_limit = free_settings['ai_limit']
+        search_count = free_settings['search_count']
+    else:
+        search_limit = 10
+        extract_limit = 5
+        ai_limit = 3
+        search_count = 5
+
     with get_db() as conn:
         cursor = conn.cursor()
         try:
             password_hash = hash_password(password)
             cursor.execute('''
-                INSERT INTO users (email, password_hash, role, tier, name, company, phone)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (email, password_hash, role, tier, name, company, phone))
+                INSERT INTO users (email, password_hash, role, tier, name, company, phone,
+                                   search_limit, extract_limit, ai_limit, search_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (email, password_hash, role, tier, name, company, phone,
+                  search_limit, extract_limit, ai_limit, search_count))
             user_id = cursor.lastrowid
             print(f"[DB] 사용자 생성: {email} / {name} / {company} (ID: {user_id})")
             return user_id
@@ -282,16 +388,17 @@ def update_user_tier(user_id: int, tier: str, expires_at: Optional[datetime] = N
 
 def reset_user_usage(user_id: int):
     """사용자 사용량 초기화 (월간 리셋 등) - search_count도 tier에 맞게 복원"""
-    tier_search_count = {'free': 5, 'basic': 300, 'pro': 4000}
+    free_settings = get_free_tier_settings()
+    tier_search_count = {'free': free_settings['search_count'], 'basic': 300, 'pro': 4000}
     with get_db() as conn:
         cursor = conn.cursor()
         # 현재 tier 조회
         cursor.execute('SELECT tier FROM users WHERE id = ?', (user_id,))
         row = cursor.fetchone()
-        restore_count = tier_search_count.get(row[0], 5) if row else 5
+        restore_count = tier_search_count.get(row[0], free_settings['search_count']) if row else free_settings['search_count']
         cursor.execute('''
             UPDATE users
-            SET search_used = 0, extract_used = 0, ai_used = 0,
+            SET search_used = 0, extract_used = 0, ai_used = 0, chat_used = 0,
                 search_count = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
@@ -333,15 +440,17 @@ def check_and_expire_subscription(user_id: int, expires_at: str) -> bool:
         today = datetime.now().date()
 
         if today > expiry_date:
-            # 만료됨 - Free로 전환하고 검색횟수 0으로
+            # 만료됨 - Free로 전환 (한도는 settings에서 조회)
+            free_settings = get_free_tier_settings()
             with get_db() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
                     UPDATE users SET tier = 'free', search_count = 0,
-                           search_limit = 10, extract_limit = 5, ai_limit = 3,
+                           search_limit = ?, extract_limit = ?, ai_limit = ?,
                            updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
-                ''', (user_id,))
+                ''', (free_settings['search_limit'], free_settings['extract_limit'],
+                      free_settings['ai_limit'], user_id))
             print(f"[DB] 구독 만료: user_id={user_id}, 만료일={expires_at}")
             return True
     except Exception as e:
@@ -441,25 +550,37 @@ def log_extraction(user_id: int, corp_code: str, corp_name: str,
         ''', (user_id,))
 
 
-def log_llm_usage(user_id: int, corp_code: str, corp_name: str, model_name: str,
-                  input_tokens: int, output_tokens: int, cost: float = 0):
-    """LLM 사용량 기록 및 AI 사용 횟수 증가"""
+def log_llm_usage(user_id: Optional[int], corp_code: str, corp_name: str, model_name: str,
+                  input_tokens: int, output_tokens: int, cost: float = 0,
+                  increment_used: bool = True, usage_type: str = 'ai',
+                  ip_address: str = None):
+    """LLM 사용량 기록. increment_used=False이면 토큰만 기록하고 횟수는 안 올림.
+    usage_type: 'ai' (재무분석/리서치) 또는 'chat' (챗봇)
+    ip_address: 게스트 사용자의 경우 IP로 추적"""
     with get_db() as conn:
         cursor = conn.cursor()
 
-        # LLM 사용량 저장
+        # LLM 사용량 저장 (user_id가 None이면 게스트 → 0으로 저장)
+        effective_user_id = user_id if user_id else 0
         cursor.execute('''
             INSERT INTO llm_usage (user_id, corp_code, corp_name, model_name,
-                                   input_tokens, output_tokens, total_tokens, cost)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (user_id, corp_code, corp_name, model_name,
-              input_tokens, output_tokens, input_tokens + output_tokens, cost))
+                                   input_tokens, output_tokens, total_tokens, cost, ip_address)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (effective_user_id, corp_code, corp_name, model_name,
+              input_tokens, output_tokens, input_tokens + output_tokens, cost, ip_address))
 
-        # AI 사용 횟수 증가
-        cursor.execute('''
-            UPDATE users SET ai_used = ai_used + 1, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        ''', (user_id,))
+        # 사용 횟수 증가 (로그인 사용자만)
+        if increment_used and user_id:
+            if usage_type == 'chat':
+                cursor.execute('''
+                    UPDATE users SET chat_used = chat_used + 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (user_id,))
+            else:
+                cursor.execute('''
+                    UPDATE users SET ai_used = ai_used + 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (user_id,))
 
 
 # ==================== 통계 조회 ====================
@@ -530,14 +651,23 @@ def get_user_activity_history(user_id: int) -> Optional[Dict]:
         ''', (user_id,))
         extractions = [dict(row) for row in cursor.fetchall()]
 
-        # AI 분석 기록 (전체)
+        # AI 분석 기록 (챗봇 제외)
         cursor.execute('''
             SELECT corp_name, model_name, total_tokens, cost, created_at
             FROM llm_usage
-            WHERE user_id = ?
+            WHERE user_id = ? AND model_name != 'gemini-chat'
             ORDER BY created_at DESC
         ''', (user_id,))
         analyses = [dict(row) for row in cursor.fetchall()]
+
+        # 챗봇 대화 이력
+        cursor.execute('''
+            SELECT corp_name, question, response, input_tokens, output_tokens, created_at
+            FROM chat_history
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        ''', (user_id,))
+        chats = [dict(row) for row in cursor.fetchall()]
 
     return {
         'user': {
@@ -550,6 +680,7 @@ def get_user_activity_history(user_id: int) -> Optional[Dict]:
         'searches': searches,
         'extractions': extractions,
         'analyses': analyses,
+        'chats': chats,
     }
 
 
@@ -574,7 +705,7 @@ def get_all_users() -> List[Dict]:
         cursor.execute('''
             SELECT
                 u.id, u.email, u.name, u.company, u.phone, u.role, u.tier,
-                u.search_used, u.extract_used, u.ai_used,
+                u.search_used, u.extract_used, u.ai_used, u.chat_used,
                 u.subscription_start, u.expires_at, u.search_count, u.created_at,
                 -- 마지막 로그인
                 (SELECT MAX(login_at) FROM login_history WHERE user_id = u.id) as last_login,
@@ -858,6 +989,20 @@ def delete_payment(payment_id: int) -> bool:
 
 # ==================== 챗봇 최근 질문 관리 ====================
 
+def log_chat_history(user_id: int, corp_code: str, corp_name: str,
+                     question: str, response: str,
+                     input_tokens: int = 0, output_tokens: int = 0):
+    """챗봇 대화 이력 저장 (질문 + 응답)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # 응답이 너무 길면 앞부분만 저장 (10000자)
+        resp_trimmed = response[:10000] if response else ''
+        cursor.execute('''
+            INSERT INTO chat_history (user_id, corp_code, corp_name, question, response, input_tokens, output_tokens)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, corp_code, corp_name, question, resp_trimmed, input_tokens, output_tokens))
+
+
 def save_recent_question(user_id, question, max_count=4):
     """최근 질문 저장 (중복 시 최신으로, 최대 max_count개)"""
     with get_db() as conn:
@@ -888,6 +1033,62 @@ def delete_recent_question(user_id, question_id):
         cursor = conn.cursor()
         cursor.execute('DELETE FROM chat_recent_questions WHERE id=? AND user_id=?', (question_id, user_id))
         return cursor.rowcount > 0
+
+
+# ==================== 게스트(비로그인) 사용량 관리 ====================
+
+def get_guest_usage(ip_address: str) -> Dict:
+    """게스트 사용량 조회 (없으면 생성)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM guest_usage WHERE ip_address = ?', (ip_address,))
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        # 없으면 생성
+        cursor.execute('INSERT INTO guest_usage (ip_address) VALUES (?)', (ip_address,))
+        return {'ip_address': ip_address, 'extract_used': 0, 'chat_used': 0}
+
+
+def use_guest_extract(ip_address: str) -> bool:
+    """게스트 추출 1회 사용. 성공하면 True, 한도 초과면 False (원자적)"""
+    limit = int(get_setting('guest_extract_limit', '1'))
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # UPSERT + WHERE 조건으로 원자적 체크
+        cursor.execute('''
+            INSERT INTO guest_usage (ip_address, extract_used)
+            VALUES (?, 1)
+            ON CONFLICT(ip_address) DO UPDATE SET
+                extract_used = extract_used + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE extract_used < ?
+        ''', (ip_address, limit))
+        return cursor.rowcount > 0
+
+
+def use_guest_chat(ip_address: str) -> bool:
+    """게스트 챗 1회 사용. 성공하면 True, 한도 초과면 False (원자적)"""
+    limit = int(get_setting('guest_chat_limit', '5'))
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO guest_usage (ip_address, chat_used)
+            VALUES (?, 1)
+            ON CONFLICT(ip_address) DO UPDATE SET
+                chat_used = chat_used + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE chat_used < ?
+        ''', (ip_address, limit))
+        return cursor.rowcount > 0
+
+
+def get_guest_limits() -> Dict:
+    """게스트 한도 설정값 조회"""
+    return {
+        'extract_limit': int(get_setting('guest_extract_limit', '1')),
+        'chat_limit': int(get_setting('guest_chat_limit', '5')),
+    }
 
 
 # 초기화

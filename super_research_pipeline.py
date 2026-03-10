@@ -59,8 +59,8 @@ gemini_client = genai.Client(
 firecrawl_client = FirecrawlApp(api_key=os.getenv('FIRECRAWL_API_KEY'))
 
 # 모델 설정
-MODEL_PRO = "gemini-3-pro-preview"
-MODEL_FLASH = "gemini-3-flash-preview"
+MODEL_PRO = "gemini-3.1-pro-preview"
+MODEL_FLASH = "gemini-3.1-pro-preview"
 
 # 재시도 설정
 MAX_RETRIES = 5
