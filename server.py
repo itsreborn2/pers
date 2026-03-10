@@ -2097,6 +2097,8 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                                 print(f"[FS] 주석 데이터 병합: IS={len(extracted['notes'].get('is_notes', []))}개 (총 {len(all_notes['is_notes'])}개)")
                     else:
                         print(f"[FS] XBRL 없음, 페이지에서 추출 시도...")
+                        # 연결감사보고서 vs 별도감사보고서 구분
+                        is_consolidated = '연결' in report_name
                         # 페이지에서 재무제표 테이블 추출 시도
                         extracted = extract_fs_from_pages(filing, report_period)
                         if extracted:
@@ -2104,8 +2106,14 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                                 if extracted.get(key) is not None:
                                     df = extracted[key]
                                     if report_period and len(df.columns) >= 2:
+                                        # 연결감사보고서 데이터가 이미 있으면 별도감사보고서로 덮어쓰지 않음
+                                        if report_period in yearly_data[key] and not is_consolidated:
+                                            print(f"[FS] {key}: {report_period} 이미 연결 데이터 존재, 별도 스킵")
+                                            continue
                                         # 기간별로 데이터 저장
                                         yearly_data[key][report_period] = df
+                                        if is_consolidated:
+                                            print(f"[FS] {key}: {report_period} 연결감사보고서 데이터 저장")
                             # 주석 테이블도 병합 (XBRL 없는 감사보고서에서도)
                             if extracted.get('notes'):
                                 for note_type in ['is_notes', 'bs_notes', 'cf_notes']:
@@ -2846,22 +2854,45 @@ def normalize_yearly_data(yearly_data: dict, fs_type: str):
         df = yearly_data[period]
         if df is None or df.empty:
             continue
-        
+
+        # 숫자 컬럼명 처리: pd.read_html이 <th> 없는 테이블에서 헤더를 인식하지 못한 경우
+        # 첫 행이 '과 목', '주 석' 등을 포함하면 헤더로 승격
+        if all(isinstance(c, (int, float)) for c in df.columns):
+            first_row = df.iloc[0]
+            first_val = str(first_row.iloc[0]).replace(' ', '') if pd.notna(first_row.iloc[0]) else ''
+            if '과목' in first_val or '항목' in first_val or '구분' in first_val:
+                # 첫 행을 컬럼명으로 사용
+                new_cols = []
+                col_count = {}
+                for val in first_row:
+                    col_name = str(val).strip() if pd.notna(val) else f'col_{len(new_cols)}'
+                    # 중복 컬럼명 처리 (pandas의 .1 접미사와 동일)
+                    if col_name in col_count:
+                        col_count[col_name] += 1
+                        col_name = f'{col_name}.{col_count[col_name]}'
+                    else:
+                        col_count[col_name] = 0
+                    new_cols.append(col_name)
+                df.columns = new_cols
+                df = df.iloc[1:].reset_index(drop=True)
+                yearly_data[period] = df
+                print(f"[NORMALIZE] {period}: 숫자 컬럼명 → 헤더 승격: {new_cols}")
+
         # 첫 번째 열을 계정과목으로 가정
         account_col = df.columns[0]
-        
+
         # 당기 금액 열 찾기
         # HTML 테이블에서 당기 열이 두 개의 하위 열(소계/금액)로 나뉘어 있음
         # 일부 항목은 첫 번째 열에, 일부(법인세 등)는 두 번째 열(.1)에 값이 있음
         # 따라서 후보 열들을 모두 저장해두고 각 행에서 값이 있는 열 사용
         period_str = str(period)
         candidate_cols = []
-        
+
         for col in df.columns[1:]:
             col_str = str(col).replace(' ', '')
             if '당' in col_str or period_str in col_str:
                 candidate_cols.append(col)
-        
+
         if not candidate_cols and len(df.columns) >= 2:
             candidate_cols = [df.columns[1]]  # 두 번째 열을 기본값으로
         

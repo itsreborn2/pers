@@ -1,0 +1,1310 @@
+{
+  "test_date": "2026-02-26",
+  "total": 50,
+  "pass_count": 36,
+  "fail_count": 10,
+  "no_data": 2,
+  "task_fail": 0,
+  "resolve_fail": 2,
+  "error": 0,
+  "results": [
+    {
+      "name": "캐리",
+      "stock_code": "313760",
+      "corp_code": "00863038",
+      "market": "KOSDAQ",
+      "cap_eok": 64,
+      "status": "FAIL",
+      "fs_type": "별도",
+      "rows": 65,
+      "time": 190.8,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 12898.0
+        },
+        "2024": {
+          "asset_check": "FAIL(d=1097)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 20057.0
+        }
+      }
+    },
+    {
+      "name": "투비소프트",
+      "stock_code": "079970",
+      "corp_code": "00596260",
+      "market": "KOSDAQ",
+      "cap_eok": 76,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 62,
+      "time": 272.8,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 34767.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 18383.0
+        }
+      }
+    },
+    {
+      "name": "디에이치엑스컴퍼니",
+      "stock_code": "031860",
+      "corp_code": "00180865",
+      "market": "KOSDAQ",
+      "cap_eok": 82,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 64,
+      "time": 400.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 59749.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 47247.0
+        }
+      }
+    },
+    {
+      "name": "아이톡시",
+      "stock_code": "052770",
+      "corp_code": "00346911",
+      "market": "KOSDAQ",
+      "cap_eok": 88,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 60,
+      "time": 295.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 11192.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 5485.0
+        }
+      }
+    },
+    {
+      "name": "KD",
+      "stock_code": "044180",
+      "corp_code": "00111218",
+      "market": "KOSDAQ",
+      "cap_eok": 95,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 65,
+      "time": 281.4,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 32557.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 39447.0
+        }
+      }
+    },
+    {
+      "name": "스타코링크",
+      "stock_code": "060240",
+      "corp_code": "00373571",
+      "market": "KOSDAQ",
+      "cap_eok": 115,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 48,
+      "time": 181.5,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 25225.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 6519.0
+        }
+      }
+    },
+    {
+      "name": "삼영이엔씨",
+      "stock_code": "065570",
+      "corp_code": "00288343",
+      "market": "KOSDAQ",
+      "cap_eok": 123,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 64,
+      "time": 194.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 33744.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 16430.0
+        }
+      }
+    },
+    {
+      "name": "메디콕스",
+      "stock_code": "054180",
+      "corp_code": "00356839",
+      "market": "KOSDAQ",
+      "cap_eok": 127,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 65,
+      "time": 193.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 63304.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 52445.0
+        }
+      }
+    },
+    {
+      "name": "비케이홀딩스",
+      "stock_code": "050090",
+      "corp_code": "00369569",
+      "market": "KOSDAQ",
+      "cap_eok": 130,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 56,
+      "time": 245.7,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 17205.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 15056.0
+        }
+      }
+    },
+    {
+      "name": "세니젠",
+      "stock_code": "188260",
+      "corp_code": "01305869",
+      "market": "KOSDAQ",
+      "cap_eok": 132,
+      "status": "NO_DATA",
+      "fs_type": "별도",
+      "rows": 0,
+      "time": 67.3,
+      "err": null,
+      "note": "",
+      "years": {}
+    },
+    {
+      "name": "올리패스",
+      "stock_code": "244460",
+      "corp_code": "01070149",
+      "market": "KOSDAQ",
+      "cap_eok": 134,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 58,
+      "time": 174.9,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "MISS",
+          "balance_check": "MISS",
+          "capital_impaired": false,
+          "equity": null
+        },
+        "2024": {
+          "asset_check": "MISS",
+          "balance_check": "MISS",
+          "capital_impaired": false,
+          "equity": null
+        }
+      }
+    },
+    {
+      "name": "한주에이알티",
+      "stock_code": "058450",
+      "corp_code": "00146427",
+      "market": "KOSDAQ",
+      "cap_eok": 134,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 75,
+      "time": 274.7,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 19103.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 20376.0
+        }
+      }
+    },
+    {
+      "name": "에스아이리소스",
+      "stock_code": "065420",
+      "corp_code": "00120906",
+      "market": "KOSDAQ",
+      "cap_eok": 136,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 58,
+      "time": 224.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 9790.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 7623.0
+        }
+      }
+    },
+    {
+      "name": "셀레스트라",
+      "stock_code": "352770",
+      "corp_code": "01201970",
+      "market": "KOSDAQ",
+      "cap_eok": 136,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 60,
+      "time": 199.3,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 38997.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 5478.0
+        }
+      }
+    },
+    {
+      "name": "케이엠제약",
+      "stock_code": "225430",
+      "corp_code": "01095704",
+      "market": "KOSDAQ",
+      "cap_eok": 137,
+      "status": "FAIL",
+      "fs_type": "별도",
+      "rows": 57,
+      "time": 169.8,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "FAIL(d=5742)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 35479.0
+        },
+        "2024": {
+          "asset_check": "FAIL(d=4555)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 32615.0
+        }
+      }
+    },
+    {
+      "name": "에이리츠",
+      "stock_code": "140910",
+      "corp_code": "00860730",
+      "market": "KOSPI",
+      "cap_eok": 140,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 58,
+      "time": 192.7,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 32365.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 30276.0
+        }
+      }
+    },
+    {
+      "name": "씨엑스아이",
+      "stock_code": "900120",
+      "corp_code": "00800084",
+      "market": "KOSDAQ",
+      "cap_eok": 143,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 47,
+      "time": 122.3,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 2278.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 2527.0
+        }
+      }
+    },
+    {
+      "name": "뉴보텍",
+      "stock_code": "060260",
+      "corp_code": "00351375",
+      "market": "KOSDAQ",
+      "cap_eok": 145,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 65,
+      "time": 185.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 13146.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 20951.0
+        }
+      }
+    },
+    {
+      "name": "코이즈",
+      "stock_code": "121850",
+      "corp_code": "00807397",
+      "market": "KOSDAQ",
+      "cap_eok": 147,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 61,
+      "time": 248.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 14994.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 12278.0
+        }
+      }
+    },
+    {
+      "name": "프로브잇",
+      "stock_code": "227100",
+      "corp_code": "01207761",
+      "market": "KOSDAQ",
+      "cap_eok": 148,
+      "status": "FAIL",
+      "fs_type": "별도",
+      "rows": 68,
+      "time": 248.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 17495.0
+        },
+        "2024": {
+          "asset_check": "FAIL(d=6000)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 4564.0
+        }
+      }
+    },
+    {
+      "name": "CS",
+      "stock_code": "065770",
+      "corp_code": "00303703",
+      "market": "KOSDAQ",
+      "cap_eok": 151,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 72,
+      "time": 221.4,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 17509.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 18581.0
+        }
+      }
+    },
+    {
+      "name": "원풍물산",
+      "stock_code": "008290",
+      "corp_code": "00144021",
+      "market": "KOSDAQ",
+      "cap_eok": 151,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 59,
+      "time": 214.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 11396.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 20544.0
+        }
+      }
+    },
+    {
+      "name": "광진실업",
+      "stock_code": "026910",
+      "corp_code": "00104120",
+      "market": "KOSDAQ",
+      "cap_eok": 151,
+      "status": "FAIL",
+      "fs_type": "별도",
+      "rows": 57,
+      "time": 158.1,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "FAIL(d=8336)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 21950.0
+        },
+        "2024": {
+          "asset_check": "FAIL(d=8337)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 24776.0
+        }
+      }
+    },
+    {
+      "name": "드래곤플라이",
+      "stock_code": "030350",
+      "corp_code": "00230036",
+      "market": "KOSDAQ",
+      "cap_eok": 152,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 58,
+      "time": 170.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 28364.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 13248.0
+        }
+      }
+    },
+    {
+      "name": "유아이디",
+      "stock_code": "069330",
+      "corp_code": "00400121",
+      "market": "KOSDAQ",
+      "cap_eok": 153,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 63,
+      "time": 183.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 18828.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 19488.0
+        }
+      }
+    },
+    {
+      "name": "골드앤에스",
+      "stock_code": "035290",
+      "corp_code": "00249502",
+      "market": "KOSDAQ",
+      "cap_eok": 156,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 63,
+      "time": 199.1,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "MISS",
+          "balance_check": "MISS",
+          "capital_impaired": false,
+          "equity": null
+        },
+        "2024": {
+          "asset_check": "MISS",
+          "balance_check": "MISS",
+          "capital_impaired": false,
+          "equity": null
+        }
+      }
+    },
+    {
+      "name": "예선테크",
+      "stock_code": "250930",
+      "corp_code": "01166109",
+      "market": "KOSDAQ",
+      "cap_eok": 156,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 63,
+      "time": 230.4,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 22035.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 16290.0
+        }
+      }
+    },
+    {
+      "name": "케이이엠텍",
+      "stock_code": "106080",
+      "corp_code": "00542898",
+      "market": "KOSDAQ",
+      "cap_eok": 157,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 63,
+      "time": 229.9,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 11936.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 34734.0
+        }
+      }
+    },
+    {
+      "name": "노블엠앤비",
+      "stock_code": "106520",
+      "corp_code": "00536329",
+      "market": "KOSDAQ",
+      "cap_eok": 159,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 64,
+      "time": 258.2,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 10477.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 3736.0
+        }
+      }
+    },
+    {
+      "name": "서울전자통신",
+      "stock_code": "027040",
+      "corp_code": "00130587",
+      "market": "KOSDAQ",
+      "cap_eok": 161,
+      "status": "FAIL",
+      "fs_type": "별도",
+      "rows": 58,
+      "time": 197.7,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "FAIL(d=9572)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 38934.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 15003.0
+        }
+      }
+    },
+    {
+      "name": "이노인스트루먼트",
+      "stock_code": "215790",
+      "corp_code": "01065679",
+      "market": "KOSDAQ",
+      "cap_eok": 163,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 54,
+      "time": 179.9,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 79069.0
+        },
+        "2024": {
+          "asset_check": "MISS",
+          "balance_check": "MISS",
+          "capital_impaired": false,
+          "equity": 44406.0
+        }
+      }
+    },
+    {
+      "name": "오에스피",
+      "stock_code": "368970",
+      "corp_code": "01491607",
+      "market": "KOSDAQ",
+      "cap_eok": 164,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 73,
+      "time": 156.1,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 44325.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 48124.0
+        }
+      }
+    },
+    {
+      "name": "지엔코",
+      "stock_code": "065060",
+      "corp_code": "00258102",
+      "market": "KOSDAQ",
+      "cap_eok": 164,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 60,
+      "time": 224.6,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 131597.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 123931.0
+        }
+      }
+    },
+    {
+      "name": "에스에스알",
+      "stock_code": "275630",
+      "corp_code": "01250374",
+      "market": "KOSDAQ",
+      "cap_eok": 166,
+      "status": "FAIL",
+      "fs_type": "별도",
+      "rows": 59,
+      "time": 177.7,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "FAIL(d=1338)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 27216.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 26712.0
+        }
+      }
+    },
+    {
+      "name": "피씨엘",
+      "stock_code": "241820",
+      "corp_code": "01051092",
+      "market": "KOSDAQ",
+      "cap_eok": 168,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 62,
+      "time": 183.0,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 37611.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 7116.0
+        }
+      }
+    },
+    {
+      "name": "듀오백",
+      "stock_code": "073190",
+      "corp_code": "00407771",
+      "market": "KOSDAQ",
+      "cap_eok": 169,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 54,
+      "time": 117.9,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "MISS",
+          "balance_check": "MISS",
+          "capital_impaired": false,
+          "equity": null
+        },
+        "2024": {
+          "asset_check": "MISS",
+          "balance_check": "MISS",
+          "capital_impaired": false,
+          "equity": null
+        }
+      }
+    },
+    {
+      "name": "코퍼스코리아",
+      "stock_code": "322780",
+      "corp_code": "01364297",
+      "market": "KOSDAQ",
+      "cap_eok": 171,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 67,
+      "time": 203.4,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 56916.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 32173.0
+        }
+      }
+    },
+    {
+      "name": "피플바이오",
+      "stock_code": "304840",
+      "corp_code": "01118281",
+      "market": "KOSDAQ",
+      "cap_eok": 173,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 55,
+      "time": 186.5,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 19664.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 7621.0
+        }
+      }
+    },
+    {
+      "name": "판타지오",
+      "stock_code": "032800",
+      "corp_code": "00231691",
+      "market": "KOSDAQ",
+      "cap_eok": 174,
+      "status": "NO_DATA",
+      "fs_type": "별도",
+      "rows": 0,
+      "time": 201.3,
+      "err": null,
+      "note": "",
+      "years": {}
+    },
+    {
+      "name": "다이나믹디자인",
+      "stock_code": "145210",
+      "corp_code": "00453488",
+      "market": "KOSPI",
+      "cap_eok": 175,
+      "status": "FAIL",
+      "fs_type": "별도",
+      "rows": 65,
+      "time": 232.9,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "FAIL(d=68)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 52288.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 46931.0
+        }
+      }
+    },
+    {
+      "name": "에스코넥",
+      "stock_code": "067010",
+      "corp_code": "00573269",
+      "market": "KOSDAQ",
+      "cap_eok": 176,
+      "status": "FAIL",
+      "fs_type": "별도",
+      "rows": 67,
+      "time": 260.9,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "FAIL(d=13767)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 75754.0
+        },
+        "2024": {
+          "asset_check": "FAIL(d=13768)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 53794.0
+        }
+      }
+    },
+    {
+      "name": "하림지주",
+      "stock_code": "003380",
+      "corp_code": "00148364",
+      "market": "KOSPI",
+      "cap_eok": 177,
+      "status": "FAIL",
+      "fs_type": "별도",
+      "rows": 48,
+      "time": 283.8,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "FAIL(d=40247)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 5247514.0
+        },
+        "2024": {
+          "asset_check": "FAIL(d=109171)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 5941952.0
+        }
+      }
+    },
+    {
+      "name": "엘티씨",
+      "stock_code": "170920",
+      "corp_code": "00866062",
+      "market": "KOSDAQ",
+      "cap_eok": 177,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 54,
+      "time": 132.9,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 109274.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 187274.0
+        }
+      }
+    },
+    {
+      "name": "한국정보공학",
+      "stock_code": "039740",
+      "corp_code": "00261957",
+      "market": "KOSDAQ",
+      "cap_eok": 178,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 64,
+      "time": 161.4,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 47426.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 50740.0
+        }
+      }
+    },
+    {
+      "name": "디와이씨",
+      "stock_code": "310870",
+      "corp_code": "01336443",
+      "market": "KOSDAQ",
+      "cap_eok": 178,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 64,
+      "time": 191.6,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 50987.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 50734.0
+        }
+      }
+    },
+    {
+      "name": "한국IT전문학교",
+      "stock_code": "226440",
+      "corp_code": "",
+      "market": "KOSDAQ",
+      "cap_eok": 179,
+      "status": "RESOLVE_FAIL",
+      "fs_type": "",
+      "rows": 0,
+      "time": 0,
+      "err": "Cannot find corp_code for 226440",
+      "note": "",
+      "years": {}
+    },
+    {
+      "name": "바이오노트",
+      "stock_code": "086040",
+      "corp_code": "00622787",
+      "market": "KOSDAQ",
+      "cap_eok": 180,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 60,
+      "time": 253.4,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 1556576.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 1635773.0
+        }
+      }
+    },
+    {
+      "name": "폴라리스오피스",
+      "stock_code": "041020",
+      "corp_code": "00269852",
+      "market": "KOSDAQ",
+      "cap_eok": 181,
+      "status": "FAIL",
+      "fs_type": "별도",
+      "rows": 240,
+      "time": 274.9,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "FAIL(d=1457)",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 257114.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 434060.0
+        }
+      }
+    },
+    {
+      "name": "다이얼로그",
+      "stock_code": "064260",
+      "corp_code": "",
+      "market": "KOSDAQ",
+      "cap_eok": 183,
+      "status": "RESOLVE_FAIL",
+      "fs_type": "",
+      "rows": 0,
+      "time": 0,
+      "err": "Cannot find corp_code for 064260",
+      "note": "",
+      "years": {}
+    },
+    {
+      "name": "인콘",
+      "stock_code": "083640",
+      "corp_code": "00475976",
+      "market": "KOSDAQ",
+      "cap_eok": 184,
+      "status": "PASS",
+      "fs_type": "별도",
+      "rows": 46,
+      "time": 212.3,
+      "err": null,
+      "note": "",
+      "years": {
+        "2023": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 83151.0
+        },
+        "2024": {
+          "asset_check": "PASS",
+          "balance_check": "PASS",
+          "capital_impaired": false,
+          "equity": 77462.0
+        }
+      }
+    }
+  ]
+}

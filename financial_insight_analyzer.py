@@ -14,6 +14,7 @@ LLM을 활용하여 재무제표의 이상 패턴을 감지하고,
 import os
 import json
 import asyncio
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
@@ -61,9 +62,9 @@ client = genai.Client(
 )
 
 # 모델 설정
-MODEL_PRO = "gemini-3-pro-preview"  # Pro 모델 (분석용)
-MODEL_FLASH = "gemini-3-flash-preview"  # Flash 모델 (빠른 처리)
-MODEL_RESEARCH = "gemini-3-pro-preview"  # 리서치 모델 (검색 + 분석)
+MODEL_PRO = "gemini-3.1-pro-preview"  # Pro 모델 (분석용)
+MODEL_FLASH = "gemini-3.1-pro-preview"  # Flash 모델 (빠른 처리)
+MODEL_RESEARCH = "gemini-3.1-pro-preview"  # 리서치 모델 (검색 + 분석)
 
 # 재시도 설정
 MAX_RETRIES = 5
@@ -349,6 +350,34 @@ class FinancialInsightAnalyzer:
 
     def __init__(self):
         self.client = client
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+        self._token_lock = threading.Lock()
+
+    def _track_tokens(self, response):
+        """Gemini API 응답에서 토큰 사용량 누적 (thread-safe)"""
+        try:
+            meta = getattr(response, 'usage_metadata', None)
+            if meta:
+                with self._token_lock:
+                    self._total_input_tokens += getattr(meta, 'prompt_token_count', 0) or 0
+                    self._total_output_tokens += getattr(meta, 'candidates_token_count', 0) or 0
+        except Exception:
+            pass
+        return response
+
+    def _get_token_usage(self) -> dict:
+        """현재까지 누적된 토큰 사용량 반환"""
+        with self._token_lock:
+            input_t = self._total_input_tokens
+            output_t = self._total_output_tokens
+        return {
+            "model": MODEL_PRO,
+            "input_tokens": input_t,
+            "output_tokens": output_t,
+            "total_tokens": input_t + output_t,
+            "cost": round((input_t * 1.25 + output_t * 10) / 1_000_000, 4)
+        }
 
     async def analyze(
         self,
@@ -403,7 +432,8 @@ class FinancialInsightAnalyzer:
                 "anomalies": [],
                 "insights": "이상 패턴 감지에 실패했습니다. 다시 시도해주세요.",
                 "report": None,
-                "error": "이상 패턴을 감지하지 못했습니다. AI 분석을 다시 시도해주세요."
+                "error": "이상 패턴을 감지하지 못했습니다. AI 분석을 다시 시도해주세요.",
+                "token_usage": self._get_token_usage()
             }
 
         # 4단계: 원인 추적 검색어 생성 (Pro)
@@ -462,7 +492,8 @@ class FinancialInsightAnalyzer:
                 for sr in search_results
             ],
             "report": report,
-            "summary_report": summary_report
+            "summary_report": summary_report,
+            "token_usage": self._get_token_usage()
         }
 
     async def _extract_notes(self, company_info: Dict[str, Any]) -> Dict[str, Any]:
@@ -534,13 +565,13 @@ class FinancialInsightAnalyzer:
 
         try:
             # Flash 모델 + Search로 빠르게 업종 파악
-            response = generate_with_retry(
+            response = self._track_tokens(generate_with_retry(
                 self.client, MODEL_FLASH, prompt,
                 config=types.GenerateContentConfig(
                     tools=[types.Tool(google_search=types.GoogleSearch())]
                 ),
                 step_name="업종 파악"
-            )
+            ))
 
             # JSON 파싱 시도
             result_text = response.text
@@ -665,11 +696,11 @@ JSON 배열로 반환:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                response = generate_with_retry(
+                response = self._track_tokens(generate_with_retry(
                     self.client, MODEL_PRO, prompt,
                     max_retries=1,  # 내부 재시도는 1회 (외부 루프가 JSON 파싱 재시도 담당)
                     step_name="이상 감지"
-                )
+                ))
 
                 result_text = response.text
                 if not result_text or not result_text.strip():
@@ -803,10 +834,10 @@ JSON 배열로 반환:
         try:
             print(f"  [검색어 생성 시작] {len(anomalies)}개 이상 패턴")
 
-            response = generate_with_retry(
+            response = self._track_tokens(generate_with_retry(
                 self.client, MODEL_PRO, prompt,
                 step_name="검색어 생성"
-            )
+            ))
 
             result_text = response.text
 
@@ -1628,13 +1659,13 @@ Write content immediately after the colon
                 # 2. Pro + Search로 실제 웹 리서치 수행 (1차 시도)
                 print(f"    [웹 리서치 시작] {anomaly.period} {anomaly.item}")
 
-                response = generate_with_retry(
+                response = self._track_tokens(generate_with_retry(
                     self.client, MODEL_RESEARCH, prompt,
                     config=types.GenerateContentConfig(
                         tools=[types.Tool(google_search=types.GoogleSearch())]
                     ),
                     step_name=f"리서치:{anomaly.item}"
-                )
+                ))
 
                 # 소스 URL + 그라운딩 메타데이터 추출
                 source_info = extract_sources(response)
@@ -1866,10 +1897,10 @@ Write content immediately after the colon
 """
 
         try:
-            response = generate_with_retry(
+            response = self._track_tokens(generate_with_retry(
                 self.client, MODEL_PRO, prompt,
                 step_name="보고서 생성"
-            )
+            ))
             # FY 형식을 연도 형식으로 변환 (FY2020 → 2020년)
             return convert_fy_to_year(response.text)
 
@@ -1998,10 +2029,10 @@ Write content immediately after the colon
 **주의: "## 주석 요약" 섹션은 절대 포함하지 마라.**"""
 
         try:
-            response = generate_with_retry(
+            response = self._track_tokens(generate_with_retry(
                 self.client, MODEL_PRO, prompt,
                 step_name="요약본 생성"
-            )
+            ))
             # FY 형식을 연도 형식으로 변환 (FY2020 → 2020년)
             return convert_fy_to_year(response.text)
 
@@ -2176,10 +2207,10 @@ Write content immediately after the colon
 4. 수정된 전체 요약본을 출력하세요"""
 
             try:
-                response = generate_with_retry(
+                response = self._track_tokens(generate_with_retry(
                     self.client, MODEL_PRO, fix_prompt,
                     step_name="요약 보정"
-                )
+                ))
                 fixed_summary = convert_fy_to_year(response.text)
                 print(f"  [요약 검증] LLM 보정 패스 완료")
             except Exception as e:

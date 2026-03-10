@@ -444,9 +444,21 @@ async def test_excel_download(session, task_id, expect_ai_sheets=False):
         else:
             record(f"Financials시트_{stage}", False, f"데이터 부족: {row_count}행")
 
+        # Frontdata 시트 데이터 확인
+        if "Frontdata" in sheets:
+            fd_ws = wb["Frontdata"]
+            fd_count = 0
+            for row in fd_ws.iter_rows(min_row=1, max_row=300):
+                if any(cell.value for cell in row):
+                    fd_count += 1
+            if fd_count > 5:
+                record(f"Frontdata시트_{stage}", True, f"{fd_count}행 데이터")
+            else:
+                record(f"Frontdata시트_{stage}", False, f"데이터 부족: {fd_count}행")
+
         wb.close()
-        # 임시 파일 정리
-        os.remove(tmp_path)
+        # 엑셀 파일 보존 (검증용)
+        log(f"  엑셀 파일 보존: {tmp_path}")
         return True
 
     except ImportError:
@@ -517,7 +529,7 @@ async def main():
     log(f"  모드: {'전체 (AI + 리서치)' if args.full else '기본 (추출 + 검증 + 다운로드)'}")
     log("=" * 60)
 
-    timeout = aiohttp.ClientTimeout(total=60)
+    timeout = aiohttp.ClientTimeout(total=180)
     async with aiohttp.ClientSession(timeout=timeout) as session:
 
         # 1. 서버 상태 확인

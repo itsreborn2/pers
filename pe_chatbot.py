@@ -29,14 +29,14 @@ from firecrawl import FirecrawlApp
 API_TIMEOUT_MS = 300_000
 
 gemini_client = genai.Client(
-    api_key=os.getenv('GEMINI_API_KEY'),
+    api_key=os.getenv('GEMINI_CHATBOT_API_KEY') or os.getenv('GEMINI_API_KEY'),
     http_options=types.HttpOptions(timeout=API_TIMEOUT_MS)
 )
 
 firecrawl_client = FirecrawlApp(api_key=os.getenv('FIRECRAWL_API_KEY'))
 
-MODEL_PRO = "gemini-3-pro-preview"
-MODEL_FLASH = "gemini-3-flash-preview"
+MODEL_PRO = "gemini-3.1-pro-preview"
+MODEL_FLASH = "gemini-3.1-pro-preview"
 
 MAX_RETRIES = 5
 INITIAL_RETRY_DELAY = 10
@@ -132,6 +132,26 @@ class PEChatbot:
         self.conversation_history = []
         self.company_name = self.company_info.get('corp_name', '알 수 없음')
         self.system_prompt = self._build_system_prompt()
+        self._last_input_tokens = 0
+        self._last_output_tokens = 0
+
+    def _track_tokens(self, response):
+        """Gemini 응답에서 토큰 사용량 추출"""
+        try:
+            meta = getattr(response, 'usage_metadata', None)
+            if meta:
+                self._last_input_tokens = getattr(meta, 'prompt_token_count', 0) or 0
+                self._last_output_tokens = getattr(meta, 'candidates_token_count', 0) or 0
+        except Exception:
+            pass
+
+    def get_last_token_usage(self):
+        """마지막 chat() 호출의 토큰 사용량 반환"""
+        return {
+            'input_tokens': self._last_input_tokens,
+            'output_tokens': self._last_output_tokens,
+            'total_tokens': self._last_input_tokens + self._last_output_tokens,
+        }
 
     def _build_system_prompt(self) -> str:
         """PE 전문 시스템 프롬프트 + 재무데이터 컨텍스트"""
@@ -155,12 +175,60 @@ class PEChatbot:
 
 {analysis_context}
 
+## 제공 데이터 구조 가이드 (★숙지 필수★)
+아래 데이터들은 DART 전자공시에서 직접 추출한 원본 재무제표이다. 질문에 답할 때 반드시 아래 테이블에서 해당 항목을 찾아 인용하라.
+
+### [BS원본] 재무상태표 — 기말 잔액 조회용
+- **유동자산**: 현금및현금성자산, 매출채권, 재고자산, 선급금, 미수금, 기타유동자산 등
+- **비유동자산**: 유형자산, 무형자산, 투자부동산, 장기금융자산, 사용권자산 등
+- **유동부채**: 매입채무, 미지급금, 미지급비용, 선수금, 단기차입금, 유동성장기부채, 리스부채 등
+- **비유동부채**: 장기차입금, 사채, 장기미지급금, 퇴직급여충당부채, 이연법인세부채 등
+- **자본**: 자본금, 자본잉여금, 이익잉여금, 기타포괄손익누계액, 자본조정 등
+- ★ 회전율, 운전자본 등 계산 시 **반드시 BS원본에서 기말 잔액을 직접 찾아라** (예: 매입채무, 매출채권, 재고자산)
+
+### [IS원본] 손익계산서 — 손익 항목 조회용
+- 매출액, 매출원가, 매출총이익, 판매비와관리비, 영업이익
+- 영업외수익/비용, 법인세비용차감전순이익, 법인세비용, 당기순이익
+- 감가상각비, 무형자산상각비는 주석 또는 CF에서 확인 가능
+
+### [CF원본] 현금흐름표 — 현금 변동 조회용
+- 영업활동: 감가상각비, 무형자산상각비, 운전자본 변동(매출채권/재고자산/매입채무 증감 등)
+- 투자활동: 유형자산 취득/처분, 투자자산 변동
+- 재무활동: 차입금 차입/상환, 배당금 지급
+
+### [CIS원본] 포괄손익계산서 — 기타포괄손익 조회용
+- 당기순이익 + 기타포괄손익 = 총포괄손익
+
+### [주석] DART 공시 주석 테이블
+- 재무제표 주석의 상세 내역 (차입금 내역, 유형자산 상세, 매출채권 연령분석 등)
+
+## PE 핵심 지표 계산 공식 (★직접 계산★)
+아래 지표는 위 데이터에서 직접 계산하라. 계산 과정을 테이블로 보여주면 더 좋다.
+
+- **EBITDA** = 영업이익(IS) + 감가상각비(CF영업활동) + 무형자산상각비(CF영업활동)
+- **Net Debt (순차입금)** = (단기차입금 + 유동성장기부채 + 사채 + 장기차입금)(BS) - 현금및현금성자산(BS) - 단기금융자산(BS)
+- **NWC (순운전자본)** = 유동자산(BS) - 유동부채(BS) 또는 (매출채권 + 재고자산 - 매입채무) 등 세부 조정 가능
+- **EV (기업가치)** = 시가총액 + Net Debt (비상장사는 시가총액 대신 추정치 명시)
+- **매출채권 회전율** = 매출액(IS) / 매출채권 기말잔액(BS) → 회전일수 = 365 / 회전율
+- **매입채무 회전율** = 매출원가(IS) / 매입채무 기말잔액(BS) → 회전일수 = 365 / 회전율
+- **재고자산 회전율** = 매출원가(IS) / 재고자산 기말잔액(BS) → 회전일수 = 365 / 회전율
+- **CCC (현금전환주기)** = 재고자산 회전일수 + 매출채권 회전일수 - 매입채무 회전일수
+- **부채비율** = 부채총계(BS) / 자본총계(BS) × 100
+- **유동비율** = 유동자산(BS) / 유동부채(BS) × 100
+- **영업이익률** = 영업이익(IS) / 매출액(IS) × 100
+- **순이익률** = 당기순이익(IS) / 매출액(IS) × 100
+- **ROE** = 당기순이익(IS) / 자본총계(BS) × 100
+- **ROA** = 당기순이익(IS) / 자산총계(BS) × 100
+- **이자보상배율** = 영업이익(IS) / 이자비용(IS)
+
 ## 반할루시네이션 규칙 (★절대 준수★)
 1. 위 재무 데이터에 없는 수치는 절대 생성하지 마라
-2. 수치를 인용할 때 반드시 연도와 출처를 명시하라 (예: "2023년 DART 기준 매출 1,234백만원")
+2. 수치를 인용할 때 반드시 연도와 출처 테이블을 명시하라 (예: "[BS원본] 2024년 매입채무 12,345백만원")
 3. 데이터에서 직접 확인할 수 없는 사항은 "DART 데이터에서 확인 불가"라고 명시하라
-4. 웹 검색 결과 기반 정보는 [웹검색] 태그를, DART 데이터 기반 정보는 [DART] 태그를 붙여라
+4. 웹 검색 결과 기반 정보는 [웹검색] 태그를, DART 데이터 기반 정보는 해당 테이블 태그([BS원본], [IS원본] 등)를 붙여라
 5. 추정이나 가정을 할 경우 "추정" 또는 "가정"이라고 명시하라
+6. 계산 시 사용한 항목명과 금액을 반드시 명시하라 (계산 근거 투명성)
+7. ★ 데이터에는 최대 5개년(FY2020~FY2024) 컬럼이 있을 수 있다. 사용자가 특정 연도 범위를 요청하면 해당 테이블의 **모든 연도 컬럼을 빠짐없이 확인**하라. "데이터 없음"이라고 답하기 전에 반드시 테이블 헤더의 연도 컬럼을 재확인하라.
 
 ## PE 관점 응답 프레임워크
 답변 시 다음 관점을 자동 반영:
@@ -171,7 +239,7 @@ class PEChatbot:
 
 ## 대화 규칙 (★최우선★)
 - 사용자가 인사(안녕, 안녕하세요, 하이, hi 등)를 하면 **짧고 자연스럽게 인사로 응답**하라
-  - 예: "안녕하세요! 노랑풍선에 대해 궁금한 점이 있으시면 편하게 물어보세요."
+  - 예: "안녕하세요! {self.company_name}에 대해 궁금한 점이 있으시면 편하게 물어보세요."
   - 인사에 재무분석을 시작하지 마라
 - 사용자가 간단한 질문(예: "매출이 얼마야?")을 하면 **짧게 핵심만 답변**하라
 - 사용자가 심화 분석을 요청할 때만 상세한 PE 관점 분석을 제공하라
@@ -218,18 +286,8 @@ class PEChatbot:
         return '\n'.join(lines)
 
     def _build_financial_context(self) -> str:
-        """preview_data → 구조화된 재무 참조 테이블 생성 (엑셀에 포함되는 모든 데이터)"""
+        """preview_data → DART 원본 재무제표 테이블 생성 (BS/IS/CF/CIS + 주석)"""
         sections = []
-
-        # VCM 데이터 (핵심 요약)
-        vcm_display = self.preview_data.get('vcm_display')
-        if vcm_display and isinstance(vcm_display, list) and len(vcm_display) > 0:
-            sections.append(self._format_table_data("[VCM] Financials (단위: 백만원)", vcm_display))
-
-        # VCM 메타데이터 (세부 하위항목 — 툴팁 데이터)
-        vcm_meta = self.preview_data.get('vcm')
-        if vcm_meta and isinstance(vcm_meta, list) and len(vcm_meta) > 0:
-            sections.append(self._format_table_data("[VCM-Frontdata] 세부항목 메타데이터 (원 단위)", vcm_meta))
 
         # IS 원본
         is_data = self.preview_data.get('is')
@@ -524,6 +582,7 @@ PE(Private Equity) 관점에서 이 질문에 답하기 위한 웹 검색어를 
                 )
             )
             text = response.text or ""
+            self._track_tokens(response)
             for chunk in self._simulate_streaming(text):
                 yield chunk
         except Exception as e:
@@ -577,7 +636,7 @@ PE(Private Equity) 관점에서 이 질문에 답하기 위한 웹 검색어를 
 검색 결과:
 {search_text[:6000]}
 
-분석 결과만 출력하세요. 출처 URL을 포함하세요."""
+분석 결과만 출력하세요. 웹검색 정보를 인용할 때 반드시 해당 내용 뒤에 출처 하이퍼링크를 마크다운으로 포함하세요. 형식: [기사제목](URL)"""
 
             try:
                 result = await asyncio.get_event_loop().run_in_executor(
@@ -634,6 +693,7 @@ PE(Private Equity) 관점에서 이 질문에 답하기 위한 웹 검색어를 
                 )
             )
             text = result.text or ""
+            self._track_tokens(result)
             for chunk in self._simulate_streaming(text):
                 yield chunk
             # 참조 URL 전달
@@ -655,12 +715,26 @@ PE(Private Equity) 관점에서 이 질문에 답하기 위한 웹 검색어를 
 
         yield {"type": "search_done"}
 
-        # 검색 결과 기반 답변 생성
-        messages = self._build_messages(user_message, extra_context=f"""
+        # 검색 결과 기반 답변 — 검색 내용 전달에 집중, 자체 분석 최소화
+        company = sanitize_for_prompt(self.company_name, 50)
+        search_prompt = f"""당신은 PE(Private Equity) 전문 리서치 어시스턴트입니다. 모든 답변은 한국어로 작성합니다.
+
+대상 기업: {company}
+사용자 질문: {sanitize_for_prompt(user_message)}
+
 ## 웹 검색 결과
-아래 검색 결과를 참고하여 답변하되, DART 데이터와 구분하여 출처를 명시하세요.
 {search_text[:6000]}
-""")
+
+## 응답 규칙 (★절대 준수★)
+1. **검색 결과에서 확인된 내용만 전달하라.** 검색 결과에 없는 내용을 추가하거나 자체 분석하지 마라.
+2. 각 뉴스/정보 항목마다 반드시 출처 하이퍼링크를 마크다운으로 포함하라. 형식: [기사제목](URL)
+3. DART 재무 데이터를 활용한 자체 분석(재무비율 계산, 실적 테이블 등)은 하지 마라 — 사용자가 별도로 요청할 때만 하라.
+4. 검색 결과를 PE 관점에서 간결하게 분류·정리하되, 원문 정보를 왜곡하지 마라.
+5. 마크다운 형식으로 깔끔하게 구조화하라.
+
+위 검색 결과를 바탕으로 사용자의 질문에 답변하세요."""
+
+        messages = search_prompt
 
         try:
             response = await asyncio.get_event_loop().run_in_executor(
@@ -674,6 +748,7 @@ PE(Private Equity) 관점에서 이 질문에 답하기 위한 웹 검색어를 
                 )
             )
             text = response.text or ""
+            self._track_tokens(response)
             for chunk in self._simulate_streaming(text):
                 yield chunk
             # 참조 URL 전달
@@ -729,6 +804,8 @@ PE(Private Equity) 관점에서 이 질문에 답하기 위한 웹 검색어를 
 
     async def chat(self, user_message: str) -> AsyncGenerator[dict, None]:
         """메인 챗 함수 — SSE 이벤트 생성"""
+        self._last_input_tokens = 0
+        self._last_output_tokens = 0
 
         # 대화 내역 관리
         if len(self.conversation_history) >= MAX_CONVERSATION_TURNS * 2:

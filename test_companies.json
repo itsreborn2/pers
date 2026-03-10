@@ -1,7 +1,7 @@
 {
   "_description": "재무제표 추출 테스트용 기업 리스트. 버그 수정 후 회귀 테스트에 사용.",
   "_usage": "python3 scripts/test_extraction.py 로 실행하거나, 수동으로 웹에서 검증",
-  "_last_updated": "2026-02-25",
+  "_last_updated": "2026-02-26",
   "listed": {
     "_description": "상장사 (KOSPI/KOSDAQ/KONEX)",
     "standard": [
@@ -358,6 +358,5465 @@
         "verified": "2026-02-23",
         "fs_type": "별도",
         "note": "자본잠식 (자본총계 -4,426M)"
+      }
+    ],
+    "small_cap_batch2": [
+      {
+        "name": "캐리",
+        "corp_code": "00863038",
+        "stock_code": "313760",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "투비소프트",
+        "corp_code": "00596260",
+        "stock_code": "079970",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "디에이치엑스컴퍼니",
+        "corp_code": "00180865",
+        "stock_code": "031860",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "아이톡시",
+        "corp_code": "00346911",
+        "stock_code": "052770",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "KD",
+        "corp_code": "00111218",
+        "stock_code": "044180",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "스타코링크",
+        "corp_code": "00373571",
+        "stock_code": "060240",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "삼영이엔씨",
+        "corp_code": "00288343",
+        "stock_code": "065570",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "메디콕스",
+        "corp_code": "00356839",
+        "stock_code": "054180",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "비케이홀딩스",
+        "corp_code": "00369569",
+        "stock_code": "050090",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "올리패스",
+        "corp_code": "01070149",
+        "stock_code": "244460",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "일부 항목 MISS (유동/비유동 분류 없음)"
+      },
+      {
+        "name": "한주에이알티",
+        "corp_code": "00146427",
+        "stock_code": "058450",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "에스아이리소스",
+        "corp_code": "00120906",
+        "stock_code": "065420",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "셀레스트라",
+        "corp_code": "01201970",
+        "stock_code": "352770",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "케이엠제약",
+        "corp_code": "01095704",
+        "stock_code": "225430",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "에이리츠",
+        "corp_code": "00860730",
+        "stock_code": "140910",
+        "market": "KOSPI",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "씨엑스아이",
+        "corp_code": "00800084",
+        "stock_code": "900120",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "뉴보텍",
+        "corp_code": "00351375",
+        "stock_code": "060260",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "코이즈",
+        "corp_code": "00807397",
+        "stock_code": "121850",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "프로브잇",
+        "corp_code": "01207761",
+        "stock_code": "227100",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "CS",
+        "corp_code": "00303703",
+        "stock_code": "065770",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "원풍물산",
+        "corp_code": "00144021",
+        "stock_code": "008290",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "광진실업",
+        "corp_code": "00104120",
+        "stock_code": "026910",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "드래곤플라이",
+        "corp_code": "00230036",
+        "stock_code": "030350",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "유아이디",
+        "corp_code": "00400121",
+        "stock_code": "069330",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "골드앤에스",
+        "corp_code": "00249502",
+        "stock_code": "035290",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "일부 항목 MISS (유동/비유동 분류 없음)"
+      },
+      {
+        "name": "예선테크",
+        "corp_code": "01166109",
+        "stock_code": "250930",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "케이이엠텍",
+        "corp_code": "00542898",
+        "stock_code": "106080",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "노블엠앤비",
+        "corp_code": "00536329",
+        "stock_code": "106520",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "서울전자통신",
+        "corp_code": "00130587",
+        "stock_code": "027040",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "이노인스트루먼트",
+        "corp_code": "01065679",
+        "stock_code": "215790",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "일부 항목 MISS (유동/비유동 분류 없음)"
+      },
+      {
+        "name": "오에스피",
+        "corp_code": "01491607",
+        "stock_code": "368970",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "지엔코",
+        "corp_code": "00258102",
+        "stock_code": "065060",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "에스에스알",
+        "corp_code": "01250374",
+        "stock_code": "275630",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "피씨엘",
+        "corp_code": "01051092",
+        "stock_code": "241820",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "듀오백",
+        "corp_code": "00407771",
+        "stock_code": "073190",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "일부 항목 MISS (유동/비유동 분류 없음)"
+      },
+      {
+        "name": "코퍼스코리아",
+        "corp_code": "01364297",
+        "stock_code": "322780",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "피플바이오",
+        "corp_code": "01118281",
+        "stock_code": "304840",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "다이나믹디자인",
+        "corp_code": "00453488",
+        "stock_code": "145210",
+        "market": "KOSPI",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "에스코넥",
+        "corp_code": "00573269",
+        "stock_code": "067010",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "하림지주",
+        "corp_code": "00148364",
+        "stock_code": "003380",
+        "market": "KOSPI",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "엘티씨",
+        "corp_code": "00866062",
+        "stock_code": "170920",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "한국정보공학",
+        "corp_code": "00261957",
+        "stock_code": "039740",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "디와이씨",
+        "corp_code": "01336443",
+        "stock_code": "310870",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "바이오노트",
+        "corp_code": "00622787",
+        "stock_code": "086040",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      },
+      {
+        "name": "폴라리스오피스",
+        "corp_code": "00269852",
+        "stock_code": "041020",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": "매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "인콘",
+        "corp_code": "00475976",
+        "stock_code": "083640",
+        "market": "KOSDAQ",
+        "verified": "2026-02-26",
+        "fs_type": "별도",
+        "note": ""
+      }
+    ],
+    "small_cap_batch3": [
+      {
+        "name": "윙입푸드",
+        "corp_code": "01328639",
+        "stock_code": "900340",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(192,946,548)",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "프레스티지바이오파마",
+        "corp_code": "01510489",
+        "stock_code": "950210",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "에이피알",
+        "corp_code": "01190568",
+        "stock_code": "278470",
+        "market": "KOSPI",
+        "verified": "2026-03-02",
+        "balance_check": "SKIP",
+        "asset_eq_check": "SKIP",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "이지바이오",
+        "corp_code": "01480568",
+        "stock_code": "353810",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "소룩스",
+        "corp_code": "00605522",
+        "stock_code": "290690",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(89,867,802,029)",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "넵튠",
+        "corp_code": "01067808",
+        "stock_code": "217270",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "케이엔제이",
+        "corp_code": "00769158",
+        "stock_code": "272110",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "알루코",
+        "corp_code": "00117027",
+        "stock_code": "321370",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(490,458,313,367)",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "석경에이티",
+        "corp_code": "00921916",
+        "stock_code": "357550",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "씨앤씨인터내셔널",
+        "corp_code": "01226410",
+        "stock_code": "352480",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "클리오",
+        "corp_code": "00957735",
+        "stock_code": "237880",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "서남",
+        "corp_code": "00867973",
+        "stock_code": "294630",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "알체라",
+        "corp_code": "01405451",
+        "stock_code": "347860",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "에코프로에이치엔",
+        "corp_code": "01566248",
+        "stock_code": "383310",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "펄어비스",
+        "corp_code": "01152470",
+        "stock_code": "263750",
+        "market": "KOSPI",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "티앤엘",
+        "corp_code": "00608440",
+        "stock_code": "340570",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "선진뷰티사이언스",
+        "corp_code": "00132202",
+        "stock_code": "086710",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "주성엔지니어링",
+        "corp_code": "00252135",
+        "stock_code": "036930",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(190,564,900,368)",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "대창솔루션",
+        "corp_code": "00177870",
+        "stock_code": "096350",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "한미반도체",
+        "corp_code": "00161383",
+        "stock_code": "042700",
+        "market": "KOSPI",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(299,693,389,710)",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "하나마이크론",
+        "corp_code": "00445054",
+        "stock_code": "067310",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(1,327,998,704,164)",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "신테카바이오",
+        "corp_code": "01344336",
+        "stock_code": "226330",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "파크시스템스",
+        "corp_code": "00244747",
+        "stock_code": "140860",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "메디톡스",
+        "corp_code": "00580199",
+        "stock_code": "086900",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "넷마블",
+        "corp_code": "00904672",
+        "stock_code": "251270",
+        "market": "KOSPI",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "브이티",
+        "corp_code": "00150165",
+        "stock_code": "018290",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "HPSP",
+        "corp_code": "01288827",
+        "stock_code": "403870",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "테스",
+        "corp_code": "00524421",
+        "stock_code": "095610",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "잉글우드랩",
+        "corp_code": "01165739",
+        "stock_code": "950140",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "클래시스",
+        "corp_code": "01061327",
+        "stock_code": "214150",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "제주반도체",
+        "corp_code": "00447487",
+        "stock_code": "080220",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "대주전자재료",
+        "corp_code": "00177816",
+        "stock_code": "078600",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "티에스이",
+        "corp_code": "00372226",
+        "stock_code": "131290",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "오상자이엘",
+        "corp_code": "00226547",
+        "stock_code": "053980",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "유진테크",
+        "corp_code": "00531014",
+        "stock_code": "084370",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(243,078,685,775)",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "이오테크닉스",
+        "corp_code": "00246417",
+        "stock_code": "039030",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "넥스틴",
+        "corp_code": "01080252",
+        "stock_code": "348210",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "현대무벡스",
+        "corp_code": "01358463",
+        "stock_code": "319400",
+        "market": "KOSDAQ",
+        "verified": "2026-03-02",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "note": "배치3 검증"
+      },
+      {
+        "name": "현대오토에버",
+        "corp_code": "00362441",
+        "stock_code": "307950",
+        "market": "KOSPI",
+        "verified": "2026-03-02",
+        "balance_check": "SKIP",
+        "asset_eq_check": "SKIP",
+        "note": "배치3 검증"
+      }
+    ],
+    "small_cap_batch4": [
+      {
+        "name": "자이언트스텝",
+        "corp_code": "01264438",
+        "stock_code": "289220",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 740,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "세토피아",
+        "corp_code": "01091382",
+        "stock_code": "222810",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 17,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "아이엠",
+        "corp_code": "00609634",
+        "stock_code": "101390",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 55,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "케스피온",
+        "corp_code": "00479705",
+        "stock_code": "079190",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 154,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "이엠앤아이",
+        "corp_code": "00475718",
+        "stock_code": "083470",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(7,367,845,696)",
+        "market_cap_억": 157,
+        "note": "배치4 검증, 매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "삼영에스앤씨",
+        "corp_code": "00405506",
+        "stock_code": "361670",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 159,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "엔피케이",
+        "corp_code": "00108490",
+        "stock_code": "048830",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 160,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "스코넥",
+        "corp_code": "01290248",
+        "stock_code": "276040",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 160,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "나노씨엠에스",
+        "corp_code": "00660459",
+        "stock_code": "247660",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 161,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "앤씨앤",
+        "corp_code": "00537337",
+        "stock_code": "092600",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 161,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "전진바이오팜",
+        "corp_code": "00632793",
+        "stock_code": "110020",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 164,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "세진티에스",
+        "corp_code": "00406727",
+        "stock_code": "067770",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 165,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "바이오인프라",
+        "corp_code": "01110058",
+        "stock_code": "199730",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 167,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "빌리언스",
+        "corp_code": "00173449",
+        "stock_code": "044480",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 168,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "아이씨에이치",
+        "corp_code": "01302853",
+        "stock_code": "368600",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 169,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "넥스트아이",
+        "corp_code": "00614593",
+        "stock_code": "137940",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 169,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "국일신동",
+        "corp_code": "00203847",
+        "stock_code": "060480",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 169,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "CSA 코스믹",
+        "corp_code": "00406037",
+        "stock_code": "083660",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 170,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "웰킵스하이텍",
+        "corp_code": "00260611",
+        "stock_code": "043590",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 170,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "삼진엘앤디",
+        "corp_code": "00239514",
+        "stock_code": "054090",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 174,
+        "note": "배치4 검증"
+      },
+      {
+        "name": "더코디",
+        "corp_code": "00530413",
+        "stock_code": "224060",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(19,327,070,982)",
+        "market_cap_억": 174,
+        "note": "배치4 검증, 매각예정자산 유동자산 포함 구조"
+      }
+    ],
+    "small_cap_batch5": [
+      {
+        "name": "이노진",
+        "corp_code": "01419135",
+        "stock_code": "344860",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 175,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "인베니아",
+        "corp_code": "00409371",
+        "stock_code": "079950",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 175,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "본느",
+        "corp_code": "01098792",
+        "stock_code": "226340",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 175,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "KC그린홀딩스",
+        "corp_code": "00159971",
+        "stock_code": "009440",
+        "market": "KOSPI",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(119,783,384,482)",
+        "market_cap_억": 176,
+        "note": "배치5 검증, 매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "한울앤제주",
+        "corp_code": "01230255",
+        "stock_code": "276730",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 177,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "윌비스",
+        "corp_code": "00104999",
+        "stock_code": "008600",
+        "market": "KOSPI",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(94,110,562,461)",
+        "market_cap_억": 177,
+        "note": "배치5 검증, 매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "제이케이시냅스",
+        "corp_code": "00363510",
+        "stock_code": "060230",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(103,611,363,573)",
+        "market_cap_억": 180,
+        "note": "배치5 검증, 매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "한국주강",
+        "corp_code": "00159564",
+        "stock_code": "025890",
+        "market": "KOSPI",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 180,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "애머릿지",
+        "corp_code": "00781202",
+        "stock_code": "900100",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 181,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "나노캠텍",
+        "corp_code": "00542074",
+        "stock_code": "091970",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 181,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "엘디티",
+        "corp_code": "00540571",
+        "stock_code": "096870",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 182,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "에스티오",
+        "corp_code": "00612188",
+        "stock_code": "098660",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 182,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "파커스",
+        "corp_code": "00384762",
+        "stock_code": "065690",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 182,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "씨엔플러스",
+        "corp_code": "00660033",
+        "stock_code": "115530",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 184,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "바이온",
+        "corp_code": "00232089",
+        "stock_code": "032980",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 184,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "에스폴리텍",
+        "corp_code": "00340272",
+        "stock_code": "050760",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 187,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "메디앙스",
+        "corp_code": "00267854",
+        "stock_code": "014100",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 187,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "신라에스지",
+        "corp_code": "00136004",
+        "stock_code": "025870",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 187,
+        "note": "배치5 검증"
+      },
+      {
+        "name": "유비온",
+        "corp_code": "00531078",
+        "stock_code": "084440",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(7,763,563,397)",
+        "market_cap_억": 189,
+        "note": "배치5 검증, 매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "토박스코리아",
+        "corp_code": "01064069",
+        "stock_code": "215480",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 190,
+        "note": "배치5 검증"
+      }
+    ],
+    "small_cap_batch6": [
+      {
+        "name": "벨로크",
+        "corp_code": "01622331",
+        "stock_code": "424760",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 190,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "이스타코",
+        "corp_code": "00134565",
+        "stock_code": "015020",
+        "market": "KOSPI",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 192,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "다산솔루에타",
+        "corp_code": "00624518",
+        "stock_code": "154040",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 193,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "에스디시스템",
+        "corp_code": "00604815",
+        "stock_code": "121890",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 193,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "케이피티유",
+        "corp_code": "00357607",
+        "stock_code": "054410",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 194,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "이퓨쳐",
+        "corp_code": "00788737",
+        "stock_code": "134060",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 195,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "에이에프더블류",
+        "corp_code": "01223219",
+        "stock_code": "312610",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 196,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "비스토스",
+        "corp_code": "01506848",
+        "stock_code": "419540",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 197,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "일정실업",
+        "corp_code": "00146542",
+        "stock_code": "008500",
+        "market": "KOSPI",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 197,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "휴맥스홀딩스",
+        "corp_code": "00219440",
+        "stock_code": "028080",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 201,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "지니틱스",
+        "corp_code": "01318933",
+        "stock_code": "303030",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 202,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "크린앤사이언스",
+        "corp_code": "00185222",
+        "stock_code": "045520",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 202,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "한국정밀기계",
+        "corp_code": "00257732",
+        "stock_code": "101680",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 203,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "이스트아시아홀딩스",
+        "corp_code": "00799070",
+        "stock_code": "900110",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(1,694,605,274)",
+        "market_cap_억": 204,
+        "note": "배치6 검증, 매각예정자산 유동자산 포함 구조"
+      },
+      {
+        "name": "바른손이앤에이",
+        "corp_code": "00259590",
+        "stock_code": "035620",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 204,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "우진비앤지",
+        "corp_code": "00103547",
+        "stock_code": "018620",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "SKIP",
+        "market_cap_억": 206,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "베셀",
+        "corp_code": "00813389",
+        "stock_code": "177350",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 206,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "SHD",
+        "corp_code": "00137809",
+        "stock_code": "001770",
+        "market": "KOSPI",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 207,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "주연테크",
+        "corp_code": "00269241",
+        "stock_code": "044380",
+        "market": "KOSPI",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 208,
+        "note": "배치6 검증"
+      },
+      {
+        "name": "대동금속",
+        "corp_code": "00191287",
+        "stock_code": "020400",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 209,
+        "note": "배치6 검증"
+      }
+    ],
+    "small_cap_batch7": [
+      {
+        "name": "큐로홀딩스",
+        "corp_code": "00296324",
+        "stock_code": "051780",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 209,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "유진테크놀로지",
+        "corp_code": "01085026",
+        "stock_code": "240600",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(31,854,990,066)",
+        "market_cap_억": 209,
+        "note": "배치7 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "엑사이엔씨",
+        "corp_code": "00360577",
+        "stock_code": "054940",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 211,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "롤링스톤",
+        "corp_code": "01049167",
+        "stock_code": "214610",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(26,846,073,077)",
+        "market_cap_억": 212,
+        "note": "배치7 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "태원물산",
+        "corp_code": "00154055",
+        "stock_code": "001420",
+        "market": "KOSPI",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(5,335,518,249)",
+        "market_cap_억": 212,
+        "note": "배치7 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "비유테크놀러지",
+        "corp_code": "01110076",
+        "stock_code": "230980",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(27,536,866,558)",
+        "market_cap_억": 214,
+        "note": "배치7 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "세동",
+        "corp_code": "00133663",
+        "stock_code": "053060",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 216,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "형지I&C",
+        "corp_code": "00142713",
+        "stock_code": "011080",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 216,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "한국유니온제약",
+        "corp_code": "00532855",
+        "stock_code": "080720",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 216,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "핌스",
+        "corp_code": "01405390",
+        "stock_code": "347770",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 216,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "인바이오",
+        "corp_code": "00367871",
+        "stock_code": "352940",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 217,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "인터엠",
+        "corp_code": "00145914",
+        "stock_code": "017250",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 217,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "아이스크림에듀",
+        "corp_code": "00983934",
+        "stock_code": "289010",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 218,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "조이웍스앤코",
+        "corp_code": "01335453",
+        "stock_code": "309930",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 219,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "브이씨",
+        "corp_code": "01354740",
+        "stock_code": "365900",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 219,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "윈하이텍",
+        "corp_code": "00910840",
+        "stock_code": "192390",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 221,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "에프알텍",
+        "corp_code": "00442561",
+        "stock_code": "073540",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(2,496,419,216)",
+        "market_cap_억": 223,
+        "note": "배치7 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "링크드",
+        "corp_code": "01035678",
+        "stock_code": "193250",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 223,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "모아데이타",
+        "corp_code": "01423837",
+        "stock_code": "288980",
+        "market": "KOSDAQ",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 224,
+        "note": "배치7 검증"
+      },
+      {
+        "name": "핸즈코퍼레이션",
+        "corp_code": "00119140",
+        "stock_code": "143210",
+        "market": "KOSPI",
+        "verified": "2026-03-05",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 224,
+        "note": "배치7 검증"
+      }
+    ],
+    "small_cap_batch8": [
+      {
+        "name": "정원엔시스",
+        "corp_code": "00147772",
+        "stock_code": "045510",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(19,153,127,905)",
+        "market_cap_억": 225,
+        "note": "배치8 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "티피씨글로벌",
+        "corp_code": "00578538",
+        "stock_code": "130740",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 226,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "비비안",
+        "corp_code": "00107677",
+        "stock_code": "002070",
+        "market": "KOSPI",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 226,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "디지아이",
+        "corp_code": "00295547",
+        "stock_code": "043360",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 227,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "삼일",
+        "corp_code": "00127909",
+        "stock_code": "032280",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 228,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "스타플렉스",
+        "corp_code": "00405959",
+        "stock_code": "115570",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 230,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "패션플랫폼",
+        "corp_code": "01101041",
+        "stock_code": "225590",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 231,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "대산F&B",
+        "corp_code": "00390860",
+        "stock_code": "065150",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 231,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "바른손",
+        "corp_code": "00122205",
+        "stock_code": "018700",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 231,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "진영",
+        "corp_code": "00816933",
+        "stock_code": "285800",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 231,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "스튜디오삼익",
+        "corp_code": "01540815",
+        "stock_code": "415380",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 232,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "세중",
+        "corp_code": "00264671",
+        "stock_code": "039310",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 232,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "시지트로닉스",
+        "corp_code": "01284751",
+        "stock_code": "429270",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 232,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "에이전트AI",
+        "corp_code": "00367695",
+        "stock_code": "060900",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(28,173,476,262)",
+        "market_cap_억": 233,
+        "note": "배치8 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "로지시스",
+        "corp_code": "00238199",
+        "stock_code": "067730",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 233,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "비피도",
+        "corp_code": "01109070",
+        "stock_code": "238200",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 235,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "이엘피",
+        "corp_code": "00374020",
+        "stock_code": "063760",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 235,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "스튜디오산타클로스",
+        "corp_code": "01046203",
+        "stock_code": "204630",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 237,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "이지트로닉스",
+        "corp_code": "01140837",
+        "stock_code": "377330",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 239,
+        "note": "배치8 검증"
+      },
+      {
+        "name": "웰크론한텍",
+        "corp_code": "00487546",
+        "stock_code": "076080",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 239,
+        "note": "배치8 검증"
+      }
+    ],
+    "small_cap_batch9": [
+      {
+        "name": "미디어젠",
+        "corp_code": "01190124",
+        "stock_code": "279600",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 240,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "이원컴포텍",
+        "corp_code": "00409140",
+        "stock_code": "088290",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "SKIP",
+        "asset_eq_check": "SKIP",
+        "market_cap_억": 241,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "아시아종묘",
+        "corp_code": "00867478",
+        "stock_code": "154030",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 241,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "BF랩스",
+        "corp_code": "00656021",
+        "stock_code": "139050",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 242,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "핀텔",
+        "corp_code": "01524507",
+        "stock_code": "291810",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 242,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "대성미생물",
+        "corp_code": "00177320",
+        "stock_code": "036480",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "SKIP",
+        "asset_eq_check": "SKIP",
+        "market_cap_억": 243,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "형지글로벌",
+        "corp_code": "01181807",
+        "stock_code": "308100",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 244,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "플루토스",
+        "corp_code": "00110750",
+        "stock_code": "019570",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 244,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "에이치케이",
+        "corp_code": "00235183",
+        "stock_code": "044780",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 245,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "E8",
+        "corp_code": "01516890",
+        "stock_code": "418620",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 245,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "플레이위드",
+        "corp_code": "00138367",
+        "stock_code": "023770",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 246,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "우리엔터프라이즈",
+        "corp_code": "00155692",
+        "stock_code": "037400",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 246,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "대호특수강",
+        "corp_code": "00166175",
+        "stock_code": "021040",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(66,048,928,884)",
+        "market_cap_억": 247,
+        "note": "배치9 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "한주라이트메탈",
+        "corp_code": "00156600",
+        "stock_code": "198940",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 247,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "솔트웨어",
+        "corp_code": "01390399",
+        "stock_code": "328380",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 247,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "한솔인티큐브",
+        "corp_code": "00470829",
+        "stock_code": "070590",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 247,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "참엔지니어링",
+        "corp_code": "00153621",
+        "stock_code": "009310",
+        "market": "KOSPI",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 247,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "알엔투테크놀로지",
+        "corp_code": "00915508",
+        "stock_code": "148250",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 248,
+        "note": "배치9 검증"
+      },
+      {
+        "name": "하이퍼코퍼레이션",
+        "corp_code": "00391197",
+        "stock_code": "065650",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(34,364,909,426)",
+        "market_cap_억": 248,
+        "note": "배치9 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "엑셀세라퓨틱스",
+        "corp_code": "01492217",
+        "stock_code": "373110",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(6,378,047,770)",
+        "market_cap_억": 249,
+        "note": "배치9 검증, 매각예정자산 구조"
+      }
+    ],
+    "small_cap_batch10": [
+      {
+        "name": "에스앤더블류",
+        "corp_code": "00137012",
+        "stock_code": "103230",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 249,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "스테이지원엔터",
+        "corp_code": "00543204",
+        "stock_code": "078860",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 249,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "아우딘퓨쳐스",
+        "corp_code": "01080687",
+        "stock_code": "227610",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 251,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "알파AI",
+        "corp_code": "00220109",
+        "stock_code": "043100",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 251,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "파인디앤씨",
+        "corp_code": "00350020",
+        "stock_code": "049120",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 254,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "플라즈맵",
+        "corp_code": "01575839",
+        "stock_code": "405000",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 254,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "드림인사이트",
+        "corp_code": "01492688",
+        "stock_code": "362990",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 254,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "코아스",
+        "corp_code": "00210856",
+        "stock_code": "071950",
+        "market": "KOSPI",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 254,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "에이엔피",
+        "corp_code": "00143314",
+        "stock_code": "015260",
+        "market": "KOSPI",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 254,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "카스",
+        "corp_code": "00152260",
+        "stock_code": "016920",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 255,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "디젠스",
+        "corp_code": "00576789",
+        "stock_code": "113810",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(21,497,185,313)",
+        "market_cap_억": 255,
+        "note": "배치10 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "포톤",
+        "corp_code": "01047707",
+        "stock_code": "208710",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 255,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "알엔티엑스",
+        "corp_code": "00615723",
+        "stock_code": "123010",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(26,361,759,789)",
+        "market_cap_억": 255,
+        "note": "배치10 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "엑시온그룹",
+        "corp_code": "00426068",
+        "stock_code": "069920",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 255,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "모비릭스",
+        "corp_code": "01210190",
+        "stock_code": "348030",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 255,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "풍강",
+        "corp_code": "00155373",
+        "stock_code": "093380",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 256,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "삼보산업",
+        "corp_code": "00125822",
+        "stock_code": "009620",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(2,003,291,739)",
+        "market_cap_억": 256,
+        "note": "배치10 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "진양폴리",
+        "corp_code": "00160375",
+        "stock_code": "010640",
+        "market": "KOSPI",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 256,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "모코엠시스",
+        "corp_code": "01407158",
+        "stock_code": "333050",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 257,
+        "note": "배치10 검증"
+      },
+      {
+        "name": "S&K폴리텍",
+        "corp_code": "00580667",
+        "stock_code": "091340",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(98,758,321,820)",
+        "market_cap_억": 258,
+        "note": "배치10 검증, 매각예정자산 구조"
+      }
+    ],
+    "small_cap_batch11": [
+      {
+        "name": "동성제약",
+        "corp_code": "00116268",
+        "stock_code": "002210",
+        "market": "KOSPI",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 259,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "벡트",
+        "corp_code": "01453944",
+        "stock_code": "457600",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 260,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "동일스틸럭스",
+        "corp_code": "00172945",
+        "stock_code": "023790",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 262,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "한세엠케이",
+        "corp_code": "00357360",
+        "stock_code": "069640",
+        "market": "KOSPI",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 262,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "한일화학",
+        "corp_code": "00267979",
+        "stock_code": "007770",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 263,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "아센디오",
+        "corp_code": "00145437",
+        "stock_code": "012170",
+        "market": "KOSPI",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(14,062,245,827)",
+        "market_cap_억": 263,
+        "note": "배치11 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "남성",
+        "corp_code": "00172185",
+        "stock_code": "004270",
+        "market": "KOSPI",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 263,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "신도기연",
+        "corp_code": "00961570",
+        "stock_code": "290520",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 265,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "멕아이씨에스",
+        "corp_code": "00270113",
+        "stock_code": "058110",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 265,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "한창",
+        "corp_code": "00163716",
+        "stock_code": "005110",
+        "market": "KOSPI",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 265,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "딜리",
+        "corp_code": "00629212",
+        "stock_code": "131180",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 266,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "키네마스터",
+        "corp_code": "00535375",
+        "stock_code": "139670",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 267,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "동양에스텍",
+        "corp_code": "00178851",
+        "stock_code": "060380",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 267,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "팜스빌",
+        "corp_code": "00986898",
+        "stock_code": "318010",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 267,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "선샤인푸드",
+        "corp_code": "01068658",
+        "stock_code": "217620",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(50,773,985,360)",
+        "market_cap_억": 268,
+        "note": "배치11 검증, 매각예정자산 구조"
+      },
+      {
+        "name": "조아제약",
+        "corp_code": "00231831",
+        "stock_code": "034940",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 269,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "동원수산",
+        "corp_code": "00118044",
+        "stock_code": "030720",
+        "market": "KOSPI",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 269,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "피씨디렉트",
+        "corp_code": "00297934",
+        "stock_code": "051380",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 270,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "유디엠텍",
+        "corp_code": "01498576",
+        "stock_code": "389680",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 271,
+        "note": "배치11 검증"
+      },
+      {
+        "name": "배럴",
+        "corp_code": "01182240",
+        "stock_code": "267790",
+        "market": "KOSDAQ",
+        "verified": "2026-03-08",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS",
+        "market_cap_억": 271,
+        "note": "배치11 검증"
+      }
+    ],
+    "small_cap_batch12": [
+      {
+        "name": "소프트센",
+        "stock_code": "032680",
+        "corp_code": "00204226",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "티에스넥스젠",
+        "stock_code": "043220",
+        "corp_code": "00317487",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "바이오포트",
+        "stock_code": "188040",
+        "corp_code": "01157846",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아즈텍WB",
+        "stock_code": "032080",
+        "corp_code": "00201131",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "디지캡",
+        "stock_code": "197140",
+        "corp_code": "00681373",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에넥스",
+        "stock_code": "011090",
+        "corp_code": "00139764",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "한빛소프트",
+        "stock_code": "047080",
+        "corp_code": "00348292",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "썸에이지",
+        "stock_code": "208640",
+        "corp_code": "01049422",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "휴럼",
+        "stock_code": "353190",
+        "corp_code": "01453670",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에스에너지",
+        "stock_code": "095910",
+        "corp_code": "00585538",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(100,896,407,909)"
+      },
+      {
+        "name": "한탑",
+        "stock_code": "002680",
+        "corp_code": "00140566",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "모아라이프플러스",
+        "stock_code": "142760",
+        "corp_code": "00587925",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "디모아",
+        "stock_code": "016670",
+        "corp_code": "00125725",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "밸로프",
+        "stock_code": "331520",
+        "corp_code": "01398151",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "티케이지애강",
+        "stock_code": "022220",
+        "corp_code": "00140061",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "SKIP",
+        "asset_eq_check": "SKIP"
+      },
+      {
+        "name": "SUN&L",
+        "stock_code": "002820",
+        "corp_code": "00132211",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(289,370,200,548)"
+      },
+      {
+        "name": "진도",
+        "stock_code": "088790",
+        "corp_code": "00557933",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "제이엠아이",
+        "stock_code": "033050",
+        "corp_code": "00222435",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "케이웨더",
+        "stock_code": "068100",
+        "corp_code": "00426828",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      }
+    ],
+    "small_cap_batch13": [
+      {
+        "name": "라닉스",
+        "stock_code": "317120",
+        "corp_code": "01327092",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "WISCOM",
+        "stock_code": "024070",
+        "corp_code": "00142865",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "우진아이엔에스",
+        "stock_code": "010400",
+        "corp_code": "00143262",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "알톤",
+        "stock_code": "123750",
+        "corp_code": "00821607",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "넥사다이내믹스",
+        "stock_code": "351320",
+        "corp_code": "01440153",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "서산",
+        "stock_code": "079650",
+        "corp_code": "00130408",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "피앤씨테크",
+        "stock_code": "237750",
+        "corp_code": "00525864",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(27,769,073,064)"
+      },
+      {
+        "name": "엔피",
+        "stock_code": "291230",
+        "corp_code": "01276901",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에이치와이티씨",
+        "stock_code": "148930",
+        "corp_code": "00885906",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "세종메디칼",
+        "stock_code": "258830",
+        "corp_code": "00959229",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "캠시스",
+        "stock_code": "050110",
+        "corp_code": "00330044",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "핑거스토리",
+        "stock_code": "417180",
+        "corp_code": "01584934",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "오스템",
+        "stock_code": "031510",
+        "corp_code": "00175173",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(4,010,156,191)"
+      },
+      {
+        "name": "성우테크론",
+        "stock_code": "045300",
+        "corp_code": "00350482",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "파인텍",
+        "stock_code": "131760",
+        "corp_code": "00820352",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "나라셀라",
+        "stock_code": "405920",
+        "corp_code": "01021639",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "시큐브",
+        "stock_code": "131090",
+        "corp_code": "00402110",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(5,791,571,931)"
+      },
+      {
+        "name": "애드바이오텍",
+        "stock_code": "179530",
+        "corp_code": "01022902",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에이텀",
+        "stock_code": "355690",
+        "corp_code": "01444380",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "서울제약",
+        "stock_code": "018680",
+        "corp_code": "00131018",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      }
+    ],
+    "small_cap_batch14": [
+      {
+        "name": "소프트캠프",
+        "stock_code": "258790",
+        "corp_code": "01182408",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "한국맥널티",
+        "stock_code": "222980",
+        "corp_code": "00579139",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "이노시뮬레이션",
+        "stock_code": "274400",
+        "corp_code": "00965318",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "삼진",
+        "stock_code": "032750",
+        "corp_code": "00173351",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "이노뎁",
+        "stock_code": "303530",
+        "corp_code": "01264872",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "디티앤씨",
+        "stock_code": "187220",
+        "corp_code": "00675594",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "휴맥스",
+        "stock_code": "115160",
+        "corp_code": "00787057",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(6,497,910,900)"
+      },
+      {
+        "name": "무림SP",
+        "stock_code": "001810",
+        "corp_code": "00121507",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "SKIP",
+        "asset_eq_check": "SKIP"
+      },
+      {
+        "name": "아이티아이즈",
+        "stock_code": "372800",
+        "corp_code": "01429840",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "성창오토텍",
+        "stock_code": "080470",
+        "corp_code": "00486370",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "한창제지",
+        "stock_code": "009460",
+        "corp_code": "00163761",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "엠에프씨",
+        "stock_code": "432980",
+        "corp_code": "01217795",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "캔버스엔",
+        "stock_code": "210120",
+        "corp_code": "00550082",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "SKIP",
+        "asset_eq_check": "SKIP"
+      },
+      {
+        "name": "에스엘에스바이오",
+        "stock_code": "246250",
+        "corp_code": "01112700",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "블루산업개발",
+        "stock_code": "006740",
+        "corp_code": "00141404",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "부스타",
+        "stock_code": "008470",
+        "corp_code": "00124276",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "씨유메디칼",
+        "stock_code": "115480",
+        "corp_code": "00681249",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "기산텔레콤",
+        "stock_code": "035460",
+        "corp_code": "00258421",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "신진에스엠",
+        "stock_code": "138070",
+        "corp_code": "00577380",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "오가닉티코스메틱",
+        "stock_code": "900300",
+        "corp_code": "01169434",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(1,133,888,177)"
+      }
+    ],
+    "small_cap_batch15": [
+      {
+        "name": "대동스틸",
+        "stock_code": "048470",
+        "corp_code": "00109268",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "MH에탄올",
+        "stock_code": "023150",
+        "corp_code": "00121534",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "바이브컴퍼니",
+        "stock_code": "301300",
+        "corp_code": "00403793",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "파인디지털",
+        "stock_code": "038950",
+        "corp_code": "00264732",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "컬러레이",
+        "stock_code": "900310",
+        "corp_code": "01236286",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "플레이그램",
+        "stock_code": "009810",
+        "corp_code": "00103130",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(638,161,990)"
+      },
+      {
+        "name": "플래티어",
+        "stock_code": "367000",
+        "corp_code": "01454341",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "씨싸이트",
+        "stock_code": "109670",
+        "corp_code": "00492706",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "한성기업",
+        "stock_code": "003680",
+        "corp_code": "00161860",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "동일제강",
+        "stock_code": "002690",
+        "corp_code": "00118451",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "힘스",
+        "stock_code": "238490",
+        "corp_code": "00556712",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "윙스풋",
+        "stock_code": "335870",
+        "corp_code": "01405585",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아이윈",
+        "stock_code": "090150",
+        "corp_code": "00365624",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "대림통상",
+        "stock_code": "006570",
+        "corp_code": "00109824",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "네오리진",
+        "stock_code": "094860",
+        "corp_code": "00599106",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "케이쓰리아이",
+        "stock_code": "431190",
+        "corp_code": "01689266",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "KR모터스",
+        "stock_code": "000040",
+        "corp_code": "00112378",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(73,328,470,079)"
+      },
+      {
+        "name": "수성웹툰",
+        "stock_code": "084180",
+        "corp_code": "00243979",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(180,200,353,160)"
+      },
+      {
+        "name": "체시스",
+        "stock_code": "033250",
+        "corp_code": "00125576",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "뉴인텍",
+        "stock_code": "012340",
+        "corp_code": "00105040",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      }
+    ],
+    "small_cap_batch16": [
+      {
+        "name": "뷰티스킨",
+        "stock_code": "406820",
+        "corp_code": "01147487",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "이미지스",
+        "stock_code": "115610",
+        "corp_code": "00694942",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "누리플랜",
+        "stock_code": "069140",
+        "corp_code": "00410997",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(92,893,054,517)"
+      },
+      {
+        "name": "씨케이솔루션",
+        "stock_code": "480370",
+        "corp_code": "01210677",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "NE능률",
+        "stock_code": "053290",
+        "corp_code": "00363927",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "피델릭스",
+        "stock_code": "032580",
+        "corp_code": "00189538",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에코글로우",
+        "stock_code": "159910",
+        "corp_code": "00896753",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "뉴키즈온",
+        "stock_code": "462310",
+        "corp_code": "01467503",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "세우글로벌",
+        "stock_code": "013000",
+        "corp_code": "00134176",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "엔비티",
+        "stock_code": "236810",
+        "corp_code": "01051065",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "라온피플",
+        "stock_code": "300120",
+        "corp_code": "01251489",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "리더스코스메틱",
+        "stock_code": "016100",
+        "corp_code": "00180263",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "모나미",
+        "stock_code": "005360",
+        "corp_code": "00121288",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "유니드비티플러스",
+        "stock_code": "446070",
+        "corp_code": "01702017",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "글로본",
+        "stock_code": "019660",
+        "corp_code": "00159731",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에스에이티",
+        "stock_code": "060540",
+        "corp_code": "00379229",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "애드포러스",
+        "stock_code": "397810",
+        "corp_code": "01551042",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "육일씨엔에쓰",
+        "stock_code": "191410",
+        "corp_code": "00843900",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "제놀루션",
+        "stock_code": "225220",
+        "corp_code": "01062177",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "케이피엠테크",
+        "stock_code": "042040",
+        "corp_code": "00206686",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      }
+    ],
+    "small_cap_batch17": [
+      {
+        "name": "오디텍",
+        "stock_code": "080520",
+        "corp_code": "00529815",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "휴네시온",
+        "stock_code": "290270",
+        "corp_code": "01251577",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "경인전자",
+        "stock_code": "009140",
+        "corp_code": "00102140",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "엠젠솔루션",
+        "stock_code": "032790",
+        "corp_code": "00110884",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "프럼파스트",
+        "stock_code": "035200",
+        "corp_code": "00356389",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "한창산업",
+        "stock_code": "079170",
+        "corp_code": "00202839",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "세화피앤씨",
+        "stock_code": "252500",
+        "corp_code": "01169267",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "대원화성",
+        "stock_code": "024890",
+        "corp_code": "00112022",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "브레인즈컴퍼니",
+        "stock_code": "099390",
+        "corp_code": "00642897",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "프롬바이오",
+        "stock_code": "377220",
+        "corp_code": "01217865",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "상보",
+        "stock_code": "027580",
+        "corp_code": "00129615",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(37,599,277,424)"
+      },
+      {
+        "name": "오션인더블유",
+        "stock_code": "052300",
+        "corp_code": "00349811",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(228,914,804,990)"
+      },
+      {
+        "name": "시선AI",
+        "stock_code": "340810",
+        "corp_code": "01315042",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "세기상사",
+        "stock_code": "002420",
+        "corp_code": "00133618",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "헝셩그룹",
+        "stock_code": "900270",
+        "corp_code": "01160512",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(2,142,348,954)"
+      },
+      {
+        "name": "한익스프레스",
+        "stock_code": "014130",
+        "corp_code": "00129509",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "오픈놀",
+        "stock_code": "440320",
+        "corp_code": "01585155",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "진시스템",
+        "stock_code": "363250",
+        "corp_code": "01437858",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "대한과학",
+        "stock_code": "131220",
+        "corp_code": "00608316",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      }
+    ],
+    "small_cap_batch18": [
+      {
+        "name": "원티드랩",
+        "stock_code": "376980",
+        "corp_code": "01441611",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에이루트",
+        "stock_code": "096690",
+        "corp_code": "00608839",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(145,083,374,793)"
+      },
+      {
+        "name": "KBG",
+        "stock_code": "318000",
+        "corp_code": "00876166",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "엠브레인",
+        "stock_code": "169330",
+        "corp_code": "00877174",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "세림B&G",
+        "stock_code": "340440",
+        "corp_code": "01416572",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "자비스",
+        "stock_code": "254120",
+        "corp_code": "01174038",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "루멘스",
+        "stock_code": "038060",
+        "corp_code": "00406329",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "삼화네트웍스",
+        "stock_code": "046390",
+        "corp_code": "00301112",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "엠아이큐브솔루션",
+        "stock_code": "373170",
+        "corp_code": "01497142",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "신화콘텍",
+        "stock_code": "187270",
+        "corp_code": "00925189",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "알티캐스트",
+        "stock_code": "085810",
+        "corp_code": "00364254",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "파루",
+        "stock_code": "043200",
+        "corp_code": "00266934",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "쏘닉스",
+        "stock_code": "088280",
+        "corp_code": "00561723",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "신원종합개발",
+        "stock_code": "017000",
+        "corp_code": "00136925",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "앱토크롬",
+        "stock_code": "109960",
+        "corp_code": "00653194",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "CNT85",
+        "stock_code": "056730",
+        "corp_code": "00318662",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "SKIP",
+        "asset_eq_check": "SKIP"
+      },
+      {
+        "name": "엔시트론",
+        "stock_code": "101400",
+        "corp_code": "00641393",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(23,128,575,726)"
+      },
+      {
+        "name": "디티앤씨알오",
+        "stock_code": "383930",
+        "corp_code": "01437432",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "캐스텍코리아",
+        "stock_code": "071850",
+        "corp_code": "00302582",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(73,103,715,557)"
+      },
+      {
+        "name": "유틸렉스",
+        "stock_code": "263050",
+        "corp_code": "01110678",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      }
+    ],
+    "small_cap_batch19": [
+      {
+        "name": "넥스턴앤롤코리아",
+        "stock_code": "089140",
+        "corp_code": "00416414",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "버넥트",
+        "stock_code": "438700",
+        "corp_code": "01605529",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "ES큐브",
+        "stock_code": "050120",
+        "corp_code": "00175623",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "위세아이텍",
+        "stock_code": "065370",
+        "corp_code": "00374738",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "우정바이오",
+        "stock_code": "215380",
+        "corp_code": "01065013",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "대한방직",
+        "stock_code": "001070",
+        "corp_code": "00112970",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "카티스",
+        "stock_code": "140430",
+        "corp_code": "01116265",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "웹스",
+        "stock_code": "196700",
+        "corp_code": "00864338",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "셀피글로벌",
+        "stock_code": "068940",
+        "corp_code": "00308896",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "GH신소재",
+        "stock_code": "130500",
+        "corp_code": "00491938",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "오토앤",
+        "stock_code": "353590",
+        "corp_code": "01084294",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "이루온",
+        "stock_code": "065440",
+        "corp_code": "00390514",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "씨이랩",
+        "stock_code": "189330",
+        "corp_code": "00991298",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "이스트에이드",
+        "stock_code": "239340",
+        "corp_code": "01128622",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "이화공영",
+        "stock_code": "001840",
+        "corp_code": "00145668",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(28,466,235,524)"
+      },
+      {
+        "name": "리튬포어스",
+        "stock_code": "073570",
+        "corp_code": "00440712",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "카이노스메드",
+        "stock_code": "284620",
+        "corp_code": "01263527",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아이즈비전",
+        "stock_code": "031310",
+        "corp_code": "00200910",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(4,224,902,760)"
+      },
+      {
+        "name": "이노룰스",
+        "stock_code": "296640",
+        "corp_code": "01341630",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "디에이테크놀로지",
+        "stock_code": "196490",
+        "corp_code": "00660121",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(19,741,234,646)"
+      }
+    ],
+    "small_cap_batch20": [
+      {
+        "name": "플랜티넷",
+        "stock_code": "075130",
+        "corp_code": "00490179",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "한국큐빅",
+        "stock_code": "021650",
+        "corp_code": "00160010",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "테크엘",
+        "stock_code": "064520",
+        "corp_code": "00370255",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "메타랩스",
+        "stock_code": "090370",
+        "corp_code": "00442835",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "미래아이앤지",
+        "stock_code": "007120",
+        "corp_code": "00104786",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "원림",
+        "stock_code": "005820",
+        "corp_code": "00143794",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "파라택시스이더리움",
+        "stock_code": "290560",
+        "corp_code": "01130849",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "한국전자홀딩스",
+        "stock_code": "006200",
+        "corp_code": "00159254",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아이컴포넌트",
+        "stock_code": "059100",
+        "corp_code": "00407285",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "엑스큐어",
+        "stock_code": "070300",
+        "corp_code": "00683007",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "파인메딕스",
+        "stock_code": "387570",
+        "corp_code": "01455410",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "파버나인",
+        "stock_code": "177830",
+        "corp_code": "00429694",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아이퀘스트",
+        "stock_code": "262840",
+        "corp_code": "01146822",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "율촌",
+        "stock_code": "146060",
+        "corp_code": "00495633",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "사토시홀딩스",
+        "stock_code": "223310",
+        "corp_code": "01075126",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "원일특강",
+        "stock_code": "012620",
+        "corp_code": "00143907",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "이엔플러스",
+        "stock_code": "074610",
+        "corp_code": "00469799",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "한네트",
+        "stock_code": "052600",
+        "corp_code": "00244783",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "대신정보통신",
+        "stock_code": "020180",
+        "corp_code": "00110875",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "인포뱅크",
+        "stock_code": "039290",
+        "corp_code": "00243757",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(60,406,379,126)"
+      }
+    ],
+    "small_cap_batch21": [
+      {
+        "name": "성문전자",
+        "stock_code": "014910",
+        "corp_code": "00132628",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "기가레인",
+        "stock_code": "049080",
+        "corp_code": "00377018",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "오브젠",
+        "stock_code": "417860",
+        "corp_code": "01472930",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "오공",
+        "stock_code": "045060",
+        "corp_code": "00220969",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "심플랫폼",
+        "stock_code": "444530",
+        "corp_code": "01590980",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에스씨엠생명과학",
+        "stock_code": "298060",
+        "corp_code": "01110474",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "부산주공",
+        "stock_code": "005030",
+        "corp_code": "00124151",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아이티센피엔에스",
+        "stock_code": "232830",
+        "corp_code": "01113499",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아이비젼웍스",
+        "stock_code": "469750",
+        "corp_code": "01516766",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "비츠로시스",
+        "stock_code": "054220",
+        "corp_code": "00201432",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "비큐AI",
+        "stock_code": "148780",
+        "corp_code": "00980043",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "케이씨티",
+        "stock_code": "089150",
+        "corp_code": "00441447",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "싸이버원",
+        "stock_code": "356890",
+        "corp_code": "01293953",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "동국알앤에스",
+        "stock_code": "075970",
+        "corp_code": "00472890",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에코바이오",
+        "stock_code": "038870",
+        "corp_code": "00287812",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "디케이앤디",
+        "stock_code": "263020",
+        "corp_code": "00892526",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "TBH글로벌",
+        "stock_code": "084870",
+        "corp_code": "00409672",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(33,299,537,816)"
+      },
+      {
+        "name": "시디즈",
+        "stock_code": "134790",
+        "corp_code": "00852087",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "휴엠앤씨",
+        "stock_code": "263920",
+        "corp_code": "01185566",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(26,288,164,125)"
+      },
+      {
+        "name": "뉴트리",
+        "stock_code": "270870",
+        "corp_code": "01214248",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      }
+    ],
+    "small_cap_batch22": [
+      {
+        "name": "비비씨",
+        "stock_code": "318410",
+        "corp_code": "01153105",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "디에이피",
+        "stock_code": "066900",
+        "corp_code": "00303192",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "부국철강",
+        "stock_code": "026940",
+        "corp_code": "00123781",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "KB오토시스",
+        "stock_code": "024120",
+        "corp_code": "00157539",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "우리이앤엘",
+        "stock_code": "153490",
+        "corp_code": "00815095",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "인크레더블버즈",
+        "stock_code": "064090",
+        "corp_code": "00390408",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "그리티",
+        "stock_code": "204020",
+        "corp_code": "00671978",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에이비프로바이오",
+        "stock_code": "195990",
+        "corp_code": "00620558",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(92,282,141,135)"
+      },
+      {
+        "name": "신풍",
+        "stock_code": "002870",
+        "corp_code": "00137368",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "오아",
+        "stock_code": "342870",
+        "corp_code": "01428948",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "한싹",
+        "stock_code": "430690",
+        "corp_code": "01602638",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "닷밀",
+        "stock_code": "464580",
+        "corp_code": "01605282",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "셀레믹스",
+        "stock_code": "331920",
+        "corp_code": "01114586",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "포인트모바일",
+        "stock_code": "318020",
+        "corp_code": "00962393",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "크라우드웍스",
+        "stock_code": "355390",
+        "corp_code": "01514005",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(9,313,080,869)"
+      },
+      {
+        "name": "파수",
+        "stock_code": "150900",
+        "corp_code": "00638487",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아티스트스튜디오",
+        "stock_code": "200350",
+        "corp_code": "00990819",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "이렘",
+        "stock_code": "009730",
+        "corp_code": "00116426",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "인스웨이브",
+        "stock_code": "450520",
+        "corp_code": "01222113",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      }
+    ],
+    "small_cap_batch23": [
+      {
+        "name": "피엔티엠에스",
+        "stock_code": "257370",
+        "corp_code": "01144569",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "이건산업",
+        "stock_code": "008250",
+        "corp_code": "00145446",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "라메디텍",
+        "stock_code": "462510",
+        "corp_code": "01504211",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "온타이드",
+        "stock_code": "005320",
+        "corp_code": "00168331",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "씨큐브",
+        "stock_code": "101240",
+        "corp_code": "00520610",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "미트박스",
+        "stock_code": "475460",
+        "corp_code": "01374717",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "엑시큐어하이트론",
+        "stock_code": "019490",
+        "corp_code": "00156150",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "서전기전",
+        "stock_code": "189860",
+        "corp_code": "00869272",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아이지넷",
+        "stock_code": "462980",
+        "corp_code": "01728167",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "KS인더스트리",
+        "stock_code": "101000",
+        "corp_code": "00618410",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "케이디켐",
+        "stock_code": "221980",
+        "corp_code": "00370918",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "스페코",
+        "stock_code": "013810",
+        "corp_code": "00136165",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "앱튼",
+        "stock_code": "270520",
+        "corp_code": "01228515",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "앱코",
+        "stock_code": "129890",
+        "corp_code": "01207716",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "메가엠디",
+        "stock_code": "133750",
+        "corp_code": "00807555",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "주성코퍼레이션",
+        "stock_code": "109070",
+        "corp_code": "00753643",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "이엠넷",
+        "stock_code": "123570",
+        "corp_code": "00616290",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "오텍",
+        "stock_code": "067170",
+        "corp_code": "00397289",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "남화토건",
+        "stock_code": "091590",
+        "corp_code": "00108001",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "대창스틸",
+        "stock_code": "140520",
+        "corp_code": "00112721",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      }
+    ],
+    "small_cap_batch24": [
+      {
+        "name": "인산가",
+        "stock_code": "277410",
+        "corp_code": "01243161",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "티엔엔터테인먼트",
+        "stock_code": "131100",
+        "corp_code": "00814786",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(43,366,747,099)"
+      },
+      {
+        "name": "이화산업",
+        "stock_code": "000760",
+        "corp_code": "00145686",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "케일럼",
+        "stock_code": "258610",
+        "corp_code": "00961507",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "뉴온",
+        "stock_code": "123840",
+        "corp_code": "00809429",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "모니터랩",
+        "stock_code": "434480",
+        "corp_code": "01583652",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "케이바이오",
+        "stock_code": "038530",
+        "corp_code": "00255105",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "위즈코프",
+        "stock_code": "038620",
+        "corp_code": "00264228",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "티웨이홀딩스",
+        "stock_code": "004870",
+        "corp_code": "00109514",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(679,774,316,314)"
+      },
+      {
+        "name": "문배철강",
+        "stock_code": "008420",
+        "corp_code": "00121570",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "팬엔터테인먼트",
+        "stock_code": "068050",
+        "corp_code": "00397191",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "웰크론",
+        "stock_code": "065950",
+        "corp_code": "00362159",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "피엠티",
+        "stock_code": "147760",
+        "corp_code": "00654175",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "케이엠",
+        "stock_code": "083550",
+        "corp_code": "00242934",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에이치엘사이언스",
+        "stock_code": "239610",
+        "corp_code": "01011438",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "폴라리스우노",
+        "stock_code": "114630",
+        "corp_code": "00663669",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "유니온바이오메트릭스",
+        "stock_code": "203450",
+        "corp_code": "00408266",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "고려제약",
+        "stock_code": "014570",
+        "corp_code": "00103015",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "마니커에프앤지",
+        "stock_code": "195500",
+        "corp_code": "00770312",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "한독크린텍",
+        "stock_code": "256150",
+        "corp_code": "01069736",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      }
+    ],
+    "small_cap_batch25": [
+      {
+        "name": "EG",
+        "stock_code": "037370",
+        "corp_code": "00261054",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(133,980,600,828)"
+      },
+      {
+        "name": "DH오토웨어",
+        "stock_code": "025440",
+        "corp_code": "00110583",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "SKIP",
+        "asset_eq_check": "SKIP"
+      },
+      {
+        "name": "트윔",
+        "stock_code": "290090",
+        "corp_code": "01217014",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "피코그램",
+        "stock_code": "376180",
+        "corp_code": "00604028",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "네이블",
+        "stock_code": "153460",
+        "corp_code": "00842585",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "SKIP",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "나래나노텍",
+        "stock_code": "137080",
+        "corp_code": "00362122",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "THE CUBE&",
+        "stock_code": "013720",
+        "corp_code": "00151605",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "손오공",
+        "stock_code": "066910",
+        "corp_code": "00306870",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "프로이천",
+        "stock_code": "321260",
+        "corp_code": "01359736",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "에스지헬스케어",
+        "stock_code": "398120",
+        "corp_code": "01179866",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "비투엔",
+        "stock_code": "307870",
+        "corp_code": "01326792",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "DH오토리드",
+        "stock_code": "290120",
+        "corp_code": "01182578",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(99,033,626,364)"
+      },
+      {
+        "name": "YBM넷",
+        "stock_code": "057030",
+        "corp_code": "00307222",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "나노실리칸첨단소재",
+        "stock_code": "286750",
+        "corp_code": "01136001",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "캡스톤파트너스",
+        "stock_code": "452300",
+        "corp_code": "01497124",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(27,442,596,981)"
+      },
+      {
+        "name": "진바이오텍",
+        "stock_code": "086060",
+        "corp_code": "00491053",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "팸텍",
+        "stock_code": "271830",
+        "corp_code": "01146220",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "차이커뮤니케이션",
+        "stock_code": "351870",
+        "corp_code": "00909835",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "프리엠스",
+        "stock_code": "053160",
+        "corp_code": "00352064",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아이크래프트",
+        "stock_code": "052460",
+        "corp_code": "00405719",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      }
+    ],
+    "small_cap_batch26": [
+      {
+        "name": "THE E&M",
+        "stock_code": "089230",
+        "corp_code": "00519252",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아이언디바이스",
+        "stock_code": "464500",
+        "corp_code": "01706794",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "대유에이텍",
+        "stock_code": "002880",
+        "corp_code": "00149804",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "FAIL(227,451,784,060)"
+      },
+      {
+        "name": "서연탑메탈",
+        "stock_code": "019770",
+        "corp_code": "00153278",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "국영지앤엠",
+        "stock_code": "006050",
+        "corp_code": "00104537",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "엔텔스",
+        "stock_code": "069410",
+        "corp_code": "00415707",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "제이엠티",
+        "stock_code": "094970",
+        "corp_code": "00533508",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "동양파일",
+        "stock_code": "228340",
+        "corp_code": "00993931",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "엘엠에스",
+        "stock_code": "073110",
+        "corp_code": "00494218",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "진매트릭스",
+        "stock_code": "109820",
+        "corp_code": "00552992",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "비트맥스",
+        "stock_code": "377030",
+        "corp_code": "01409095",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "웨이버스",
+        "stock_code": "336060",
+        "corp_code": "01408999",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "씨엔알리서치",
+        "stock_code": "359090",
+        "corp_code": "01487446",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "제이투케이바이오",
+        "stock_code": "420570",
+        "corp_code": "01553129",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "키이스트",
+        "stock_code": "054780",
+        "corp_code": "00353762",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "YW",
+        "stock_code": "051390",
+        "corp_code": "00296263",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "아세아텍",
+        "stock_code": "050860",
+        "corp_code": "00138747",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "진양화학",
+        "stock_code": "051630",
+        "corp_code": "00347734",
+        "market": "KOSPI",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "티사이언티픽",
+        "stock_code": "057680",
+        "corp_code": "00372688",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
+      },
+      {
+        "name": "베노티앤알",
+        "stock_code": "206400",
+        "corp_code": "01043853",
+        "market": "KOSDAQ",
+        "fs_type": "연결",
+        "balance_check": "PASS",
+        "asset_eq_check": "PASS"
       }
     ]
   },
@@ -1595,6 +7054,13 @@
         "corp_code": "01024982",
         "verified": "2026-02-25",
         "note": "농업회사법인 - DART 공시 없음"
+      },
+      {
+        "name": "큐브엔터테인먼트",
+        "corp_code": "00972716",
+        "stock_code": "436530",
+        "verified": "2026-03-02",
+        "note": "비상장사, DART 데이터 없음"
       }
     ]
   },
@@ -1604,13 +7070,91 @@
       "stock_code": "101390",
       "reason": "검색 시 '맥쿼리아이엠엠프라임7호채권형사모펀드'로 매칭됨 (종목코드 불일치)",
       "verified": "2026-02-23"
+    },
+    {
+      "name": "세니젠",
+      "stock_code": "188260",
+      "reason": "추출 성공했으나 VCM 데이터 없음 (rows=0)",
+      "verified": "2026-02-26"
+    },
+    {
+      "name": "판타지오",
+      "stock_code": "032800",
+      "reason": "추출 성공했으나 VCM 데이터 없음 (rows=0)",
+      "verified": "2026-02-26"
+    },
+    {
+      "name": "한국IT전문학교",
+      "stock_code": "226440",
+      "reason": "DART corp_code 조회 실패 (서버 검색 API 불일치)",
+      "verified": "2026-02-26"
+    },
+    {
+      "name": "다이얼로그",
+      "stock_code": "064260",
+      "reason": "DART corp_code 조회 실패 (서버 검색 API 불일치)",
+      "verified": "2026-02-26"
+    },
+    {
+      "name": "에이치피오",
+      "stock_code": "357230",
+      "corp_code": "01068737",
+      "market": "KOSDAQ",
+      "status": "NO_DATA",
+      "error": "VCM 없음",
+      "verified": "2026-03-02"
+    },
+    {
+      "name": "씨메스",
+      "stock_code": "439580",
+      "corp_code": "01588189",
+      "market": "KOSDAQ",
+      "status": "NO_DATA",
+      "error": "VCM 없음",
+      "verified": "2026-03-02"
+    },
+    {
+      "name": "자이언트스텝",
+      "stock_code": "289220",
+      "corp_code": "01264438",
+      "market": "KOSDAQ",
+      "status": "ERROR",
+      "error": "HTTPConnectionPool(host='localhost', port=8001): Max retries exceeded with url: ",
+      "verified": "2026-03-02"
+    },
+    {
+      "name": "JTC",
+      "stock_code": "950170",
+      "corp_code": "01041828",
+      "market": "KOSDAQ",
+      "status": "NO_DATA",
+      "error": "VCM 없음",
+      "verified": "2026-03-02"
+    },
+    {
+      "name": "레이",
+      "stock_code": "228670",
+      "corp_code": "00828761",
+      "market": "KOSDAQ",
+      "status": "RETRY",
+      "error": "corp_code 수정 (00435093→00828761)",
+      "verified": "2026-03-02"
+    },
+    {
+      "name": "3S",
+      "stock_code": "060310",
+      "corp_code": "00378363",
+      "market": "KOSDAQ",
+      "status": "NO_DATA",
+      "error": "VCM 없음",
+      "verified": "2026-03-02"
     }
   ],
   "stats": {
-    "total_listed": 40,
-    "total_unlisted_verified": 86,
+    "total_listed": 125,
+    "total_unlisted_verified": 136,
     "total_unlisted_no_data": 69,
-    "last_batch_test": "2026-02-25",
-    "last_batch_result": "비상장 대기업 49개 배치 추출 검증 (교보생명, 포스코, GS칼텍스, SK에너지 등 대형 비상장사)"
+    "last_batch_test": "2026-03-02",
+    "last_batch_result": "배치3: 39/46개 추출 성공, Balance 37/37 PASS"
   }
 }
