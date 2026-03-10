@@ -2675,6 +2675,70 @@ def extract_fs_from_pages(report, report_year=None):
     except Exception as e:
         print(f"[PAGES] 페이지 처리 실패: {e}")
 
+    # Fallback: BS/IS/CF를 개별 페이지에서 못 찾은 경우 통합 페이지에서 추출 시도
+    missing_types = [k for k in ['bs', 'is', 'cis', 'cf'] if fs_data[k] is None]
+    if missing_types:
+        print(f"[PAGES] 개별 페이지에서 누락된 재무제표: {missing_types}")
+        try:
+            for page in pages:
+                page_title = page.title if hasattr(page, 'title') else str(page)
+                page_title_normalized = re.sub(r'\s+', '', page_title)
+                # "(첨부)재무제표", "재무제표" 등 통합 페이지 찾기
+                if ('재무제표' in page_title_normalized or '첨부' in page_title_normalized) and \
+                   '재무상태표' not in page_title_normalized and '손익계산서' not in page_title_normalized:
+                    print(f"[PAGES] 통합 재무제표 페이지 발견: {page_title}")
+                    html = page.html if hasattr(page, 'html') else None
+                    if not html:
+                        continue
+
+                    # 통합 페이지에서 헤더 테이블 + 데이터 테이블 패턴으로 추출
+                    from io import StringIO
+                    combined_soup = BeautifulSoup(html, 'html.parser')
+                    all_dfs = pd.read_html(StringIO(str(combined_soup)))
+                    print(f"[PAGES] 통합 페이지 테이블 수: {len(all_dfs)}")
+
+                    # 헤더 테이블(≤5행) 뒤에 오는 데이터 테이블(≥5행)을 찾는 패턴
+                    fs_header_keywords = {
+                        'bs': ['재무상태표', '대차대조표'],
+                        'is': ['포괄손익계산서', '손익계산서'],
+                        'cf': ['현금흐름표'],
+                    }
+
+                    for i, df in enumerate(all_dfs):
+                        if len(df) > 5:
+                            continue  # 데이터 테이블은 건너뜀 (헤더만 확인)
+
+                        # 헤더 테이블의 텍스트에서 재무제표 유형 판별
+                        header_text = re.sub(r'\s+', '', df.to_string())
+
+                        for fs_type, keywords in fs_header_keywords.items():
+                            if fs_data[fs_type] is not None:
+                                continue
+
+                            if any(kw in header_text for kw in keywords):
+                                # 바로 다음 테이블이 데이터 테이블
+                                if i + 1 < len(all_dfs):
+                                    data_df = all_dfs[i + 1]
+                                    if len(data_df) >= 5:
+                                        # 'is' 키워드로 매칭되면 포괄손익계산서(cis)인지 확인
+                                        actual_type = fs_type
+                                        if fs_type == 'is' and '포괄손익' in header_text:
+                                            actual_type = 'cis'
+                                            # cis도 is가 없으면 is로도 저장
+                                            if fs_data['cis'] is None:
+                                                fs_data['cis'] = data_df
+                                            if fs_data['is'] is None:
+                                                fs_data['is'] = data_df
+                                        else:
+                                            fs_data[actual_type] = data_df
+                                        print(f"[PAGES] 통합 페이지에서 {actual_type} 추출 성공: {len(data_df)}행")
+                                break
+                    break  # 통합 페이지 하나만 처리
+        except Exception as e:
+            print(f"[PAGES] 통합 페이지 처리 실패: {e}")
+            import traceback
+            print(f"[PAGES] 상세: {traceback.format_exc()}")
+
     # 주석이 있으면 fs_data에 추가
     if any(notes_tables[key] for key in notes_tables):
         fs_data['notes'] = notes_tables
