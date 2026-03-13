@@ -1544,7 +1544,7 @@ async def extract_financial_data(
                                     print(f"[EXTRACT] Financials 좌우→상하 변환: BS {len(bs_df)}행 + IS {len(is_df)}행 = {len(fin_df)}행")
                             else:
                                 # 단일 구조면 첫 번째 컬럼명만 변경
-                                if len(fin_df.columns) > 0 and fin_df.columns[0] == '(단위: 백만원)':
+                                if len(fin_df.columns) > 0 and ('단위' in str(fin_df.columns[0]) or fin_df.columns[0] == '항목'):
                                     fin_df = fin_df.rename(columns={fin_df.columns[0]: '항목'})
 
                             task['preview_data']['vcm_display'] = safe_dataframe_to_json(fin_df)
@@ -1558,14 +1558,20 @@ async def extract_financial_data(
             # Excel 파일이 없을 때 fs_data에서 직접 VCM 데이터 생성
             try:
                 vcm_result = create_vcm_format(fs_data, None)
-                if isinstance(vcm_result, tuple):
+                if isinstance(vcm_result, tuple) and len(vcm_result) == 3:
+                    vcm_df, display_df, vcm_currency = vcm_result
+                elif isinstance(vcm_result, tuple):
                     vcm_df, display_df = vcm_result
+                    vcm_currency = 'KRW'
                 else:
                     vcm_df = vcm_result
                     display_df = None
+                    vcm_currency = 'KRW'
 
                 if vcm_df is not None and not vcm_df.empty:
                     task['preview_data']['vcm'] = safe_dataframe_to_json(vcm_df)
+                    if vcm_currency != 'KRW':
+                        task['preview_data']['reporting_currency'] = vcm_currency
                     print(f"[EXTRACT] preview_data['vcm'] 생성: {len(task['preview_data']['vcm'])}개 행")
 
                 if display_df is not None and not display_df.empty:
@@ -1875,8 +1881,23 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                     # ★ 핵심: 주석 데이터를 실제 DataFrame에 병합 (Excel 저장 전에 반영)
                     import pandas as pd
 
+                    # ★ 외화 보고 기업 감지: XBRL 컬럼명에서 Unit 확인
+                    # KDR 등 외화 보고 기업은 주석(KRW)과 본문(USD 등) 단위가 달라 병합하면 안 됨
+                    _is_foreign_for_notes = False
+                    for _check_key in ['is', 'cis', 'bs']:
+                        _check_df = fs_data.get(_check_key)
+                        if _check_df is not None:
+                            for _col in _check_df.columns:
+                                _col_str = str(_col)
+                                if 'Unit:' in _col_str and 'Unit: KRW' not in _col_str:
+                                    _is_foreign_for_notes = True
+                                    print(f"[FS] ★ 외화 보고 기업 감지 (Unit != KRW): 주석 병합 건너뜀")
+                                    break
+                            if _is_foreign_for_notes:
+                                break
+
                     # 손익계산서 주석을 cis 또는 is DataFrame에 병합
-                    if fs_data.get('notes'):
+                    if fs_data.get('notes') and not _is_foreign_for_notes:
                         is_notes = fs_data['notes'].get('is_notes', [])
                         if is_notes:
                             # cis 우선, 없으면 is 사용
@@ -1930,7 +1951,7 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
 
                         # 재무상태표 주석을 bs DataFrame에 병합
                         bs_notes = fs_data['notes'].get('bs_notes', [])
-                        if bs_notes and fs_data.get('bs') is not None:
+                        if bs_notes and fs_data.get('bs') is not None and not _is_foreign_for_notes:
                             print(f"[FS] bs에 HTML 주석 병합 시도...")
                             base_df = fs_data['bs']
 
@@ -3068,6 +3089,52 @@ def parse_fs_table_from_html(html, fs_type):
     return None
 
 
+# 환율 캐시 (API 호출 최소화)
+_exchange_rate_cache = {}
+
+def _get_exchange_rate(currency: str, fy_col_map: dict) -> float:
+    """외화→KRW 환율 조회 (회계연도 말 기준, frankfurter.app 무료 API)"""
+    import requests as _req
+
+    # 최신 회계연도 추출
+    fy_years = sorted([v for v in fy_col_map.values() if v.startswith('FY')])
+    latest_fy = fy_years[-1] if fy_years else 'FY2024'
+    year = int(latest_fy.replace('FY', ''))
+
+    cache_key = f"{currency}_{year}"
+    if cache_key in _exchange_rate_cache:
+        return _exchange_rate_cache[cache_key]
+
+    # 연말 환율 조회
+    try:
+        resp = _req.get(
+            f"https://api.frankfurter.app/{year}-12-31",
+            params={"from": currency, "to": "KRW"},
+            timeout=5
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            rate = data.get("rates", {}).get("KRW")
+            if rate:
+                _exchange_rate_cache[cache_key] = rate
+                return rate
+    except Exception as e:
+        print(f"[VCM] 환율 API 조회 실패: {e}")
+
+    # fallback: 주요 통화 기본 환율
+    fallback_rates = {
+        'USD': 1400.0,
+        'EUR': 1500.0,
+        'GBP': 1750.0,
+        'JPY': 9.5,
+        'CNY': 195.0,
+    }
+    rate = fallback_rates.get(currency, 1300.0)
+    _exchange_rate_cache[cache_key] = rate
+    print(f"[VCM] 환율 fallback 사용: 1 {currency} = {rate} KRW")
+    return rate
+
+
 def create_vcm_format(fs_data, excel_filepath=None):
     """VCM 전용 포맷 DataFrame 생성 - 감사보고서(FY컬럼)와 사업보고서(XBRL) 모두 지원
 
@@ -3332,7 +3399,27 @@ def create_vcm_format(fs_data, excel_filepath=None):
         return None
     
     print(f"[VCM] 데이터 형식: {'XBRL' if is_xbrl else '감사보고서'}, 연도: {list(fy_col_map.values())}, 계정과목컬럼: {account_col}")
-    
+
+    # ★ 통화 단위 감지 (XBRL 컬럼명에서 Unit: XXX 추출)
+    # 해외 보고 기업(KDR 등)은 USD 등 외화로 보고하므로 KRW 주석과 혼재 방지
+    reporting_currency = 'KRW'  # 기본값
+    if is_xbrl:
+        for col in [account_col, bs_account_col]:
+            col_str = str(col)
+            unit_match = re.search(r'Unit:\s*(\w+)', col_str)
+            if unit_match:
+                detected_unit = unit_match.group(1).upper()
+                if detected_unit != 'KRW':
+                    reporting_currency = detected_unit
+                    break
+    is_foreign_currency = reporting_currency != 'KRW'
+    exchange_rate = 1.0  # KRW→KRW 기본값
+    if is_foreign_currency:
+        print(f"[VCM] ★ 외화 보고 기업 감지: {reporting_currency} (KRW 환산 적용)")
+        # 회계연도 말 환율 조회 (frankfurter.app 무료 API)
+        exchange_rate = _get_exchange_rate(reporting_currency, fy_col_map)
+        print(f"[VCM] 환율 적용: 1 {reporting_currency} = {exchange_rate:,.2f} KRW")
+
     # 정렬된 원본 컬럼 목록
     fy_cols = sorted(fy_col_map.keys(), key=lambda c: fy_col_map[c])
 
@@ -3508,11 +3595,11 @@ def create_vcm_format(fs_data, excel_filepath=None):
             '비유동자산': ['매각예정', '소유주분배예정', '자산총계', '부채', '유동부채'],
             '유동부채': ['비유동부채', '부채총계'],
             '비유동부채': ['매각예정부채', '부채총계', '자본'],
-            '자본': ['자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계'],
+            '자본': ['자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계', '자본및부채총계'],
         }
 
         # 총계 마커
-        total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계']
+        total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계', '자본및부채총계']
 
         # 소계 마커 (유동자산합계 → 총계['유동자산']로 저장)
         subtotal_markers = {
@@ -3655,7 +3742,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
         }
 
         # 총계 마커
-        total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계']
+        total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계', '자본및부채총계']
 
         # 소계 마커 (유동자산합계 → 총계['유동자산']로 저장)
         subtotal_markers = {
@@ -3752,7 +3839,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
             '총계': {}
         }
 
-        total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계']
+        total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계', '자본및부채총계']
 
         # 소계 마커 (유동자산합계 → 총계['유동자산']로 저장)
         subtotal_markers = {
@@ -3974,7 +4061,13 @@ def create_vcm_format(fs_data, excel_filepath=None):
             return None
 
         # 검색 순서 결정
-        if search_notes_first:
+        # 외화 보고 기업: KRW 주석 검색 건너뛰기 + 환율 적용하여 KRW 변환
+        if is_foreign_currency:
+            result = search_is_df()
+            if result is not None:
+                result = result * exchange_rate  # 외화 → KRW 변환
+            return result
+        elif search_notes_first:
             result = search_notes()
             if result is not None:
                 return result
@@ -4674,6 +4767,12 @@ def create_vcm_format(fs_data, excel_filepath=None):
     # ========== 재무상태표 항목 추가 ==========
     # 재무상태표에서 값 찾기 (원 단위 그대로)
     def find_bs_val(keywords, year, excludes=[]):
+        result = _find_bs_val_raw(keywords, year, excludes)
+        if result is not None and is_foreign_currency:
+            result = result * exchange_rate  # 외화 → KRW 변환
+        return result
+
+    def _find_bs_val_raw(keywords, year, excludes=[]):
         # BS용 컬럼 사용 (IS와 다를 수 있음)
         # 1차: exact match 우선 (substring 오매칭 방지)
         for _, row in bs_df.iterrows():
@@ -4785,6 +4884,20 @@ def create_vcm_format(fs_data, excel_filepath=None):
         if total_section_items == 0 and has_asset_total:
             print(f"[VCM] {year_str} 유동/비유동 섹션 없음 → 금융업/비정형 BS flat 파싱 적용")
             all_sections[year_str] = parse_bs_sections_flat(bs_df, bs_year, bs_account_col)
+
+    # 외화 기업: 파싱된 BS 섹션 값에 환율 일괄 적용 (외화 → KRW)
+    if is_foreign_currency and exchange_rate != 1.0:
+        for year_str, sections in all_sections.items():
+            for section_key, section_data in sections.items():
+                if section_key == '총계':
+                    for k, v in section_data.items():
+                        if v is not None:
+                            section_data[k] = v * exchange_rate
+                else:
+                    for item in section_data:
+                        if item.get('value') is not None:
+                            item['value'] = item['value'] * exchange_rate
+        print(f"[VCM] 외화 BS 섹션 환율 적용 완료 (×{exchange_rate:,.2f})")
 
     # 항목 정의: (항목명, 부모, 값계산함수)
     # 부모가 있으면 세부항목, 없으면 합계 항목
@@ -5023,7 +5136,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
         # 자본총계/부채와자본총계 추출 (음수 허용)
         자본총계_from_총계 = 총계.get('자본총계')
         # '자본총계' 검색 시 '부채와자본총계', '부채및자본총계' 제외
-        자본총계_from_bs = find_bs_val(['자본총계'], year, excludes=['부채와', '부채및', '자본과부채'])
+        자본총계_from_bs = find_bs_val(['자본총계'], year, excludes=['부채와', '부채및', '자본과부채', '자본및부채'])
         # 자본총계가 음수인 경우도 허용 (자본잠식)
         if 자본총계_from_총계 is not None:
             자본총계 = 자본총계_from_총계
@@ -5032,7 +5145,12 @@ def create_vcm_format(fs_data, excel_filepath=None):
         else:
             자본총계 = 0
 
-        부채와자본총계 = 총계.get('부채와자본총계') or 총계.get('부채및자본총계') or 총계.get('자본과부채총계') or find_bs_val(['부채와자본총계', '부채및자본총계', '자본과부채총계'], year) or 0
+        # 부채와자본총계: 계정명 변형이 다양하므로 (부채와자본총계/부채및자본총계/자본및부채총계 등)
+        # 부채총계 + 자본총계로 항상 계산 (회계 항등식)
+        if 부채총계 and 자본총계:
+            부채와자본총계 = 부채총계 + 자본총계
+        else:
+            부채와자본총계 = 총계.get('부채와자본총계') or 총계.get('부채및자본총계') or 총계.get('자본과부채총계') or 총계.get('자본및부채총계') or find_bs_val(['부채와자본총계', '부채및자본총계', '자본과부채총계', '자본및부채총계'], year) or 0
 
         # ========== 계산 항목 ==========
         nwc = 유동자산 - 유동부채
@@ -5722,7 +5840,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
     # Financials(표시용) DataFrame
     display_df = pd.DataFrame(display_rows)
 
-    return vcm_df, display_df
+    return vcm_df, display_df, reporting_currency
 
 
 def normalize_xbrl_columns(df):
@@ -6032,12 +6150,16 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
             print(f"[VCM] create_vcm_format 호출 시작...")
             vcm_result = create_vcm_format(fs_data, filepath)
 
-            # 튜플 반환 (vcm_df, display_df) 처리
-            if isinstance(vcm_result, tuple):
+            # 튜플 반환 (vcm_df, display_df, reporting_currency) 처리
+            if isinstance(vcm_result, tuple) and len(vcm_result) == 3:
+                vcm_df, display_df, vcm_currency = vcm_result
+            elif isinstance(vcm_result, tuple):
                 vcm_df, display_df = vcm_result
+                vcm_currency = 'KRW'
             else:
                 vcm_df = vcm_result
                 display_df = None
+                vcm_currency = 'KRW'
 
             print(f"[VCM] create_vcm_format 완료: {len(vcm_df) if vcm_df is not None else 0}개 항목")
 
@@ -6593,7 +6715,9 @@ async def run_financial_analysis(task_id: str):
                     print(f"[ANALYSIS] Excel 없음, fs_data에서 VCM 재생성 시도...")
                     try:
                         vcm_result = create_vcm_format(fs_data, None)
-                        if isinstance(vcm_result, tuple):
+                        if isinstance(vcm_result, tuple) and len(vcm_result) == 3:
+                            vcm_df, display_df, _vcm_currency = vcm_result
+                        elif isinstance(vcm_result, tuple):
                             vcm_df, display_df = vcm_result
                         else:
                             vcm_df = vcm_result
