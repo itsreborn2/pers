@@ -2292,9 +2292,22 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
         return fs_data
     
     # 비상장사: 감사보고서 데이터 정규화
+    # 단, 사업보고서에서 이미 추출한 데이터(fs_data)가 더 최신이면 유지
+    current_year = int(end_date[:4]) - 1  # 요청된 최신 연도 (예: 2024)
     for key in ['bs', 'is', 'cis', 'cf']:
         if yearly_data[key]:
-            fs_data[key] = normalize_yearly_data(yearly_data[key], key)
+            yearly_periods = list(yearly_data[key].keys())
+            yearly_max = max(p for p in yearly_periods if isinstance(p, int)) if yearly_periods else 0
+
+            # 감사보고서가 최신 연도를 포함하면 사용 (정상 케이스)
+            if yearly_max >= current_year:
+                fs_data[key] = normalize_yearly_data(yearly_data[key], key)
+            elif fs_data.get(key) is not None:
+                # 감사보고서에 최신 연도가 없고, 사업보고서 데이터가 이미 있으면 유지
+                print(f"[FS] {key}: 감사보고서({yearly_max})가 사업보고서 데이터보다 오래됨, 사업보고서 데이터 유지")
+            else:
+                # 사업보고서 데이터도 없으면 감사보고서 데이터라도 사용
+                fs_data[key] = normalize_yearly_data(yearly_data[key], key)
     
     # 최소한 하나의 재무제표라도 있는지 확인
     has_data = any(fs_data[key] is not None for key in fs_data)
@@ -2712,6 +2725,21 @@ def extract_fs_from_pages(report, report_year=None):
                         'cf': ['현금흐름표'],
                     }
 
+                    def _is_restatement_table(candidate_df):
+                        """정정표(변경 전/후) 테이블인지 확인"""
+                        cols = list(candidate_df.columns)
+                        # tuple 컬럼 (MultiIndex) 체크: ('구분','구분'), ('전기말','변경 전') 패턴
+                        if any(isinstance(c, tuple) for c in cols):
+                            col_str = str(cols)
+                            if '변경' in col_str or '정정' in col_str or '재작성' in col_str:
+                                return True
+                        # 일반 컬럼에서도 변경 전/후 키워드 체크
+                        for c in cols:
+                            c_str = str(c)
+                            if '변경 전' in c_str or '변경 후' in c_str or '변경전' in c_str or '변경후' in c_str:
+                                return True
+                        return False
+
                     for i, df in enumerate(all_dfs):
                         if len(df) > 5:
                             continue  # 데이터 테이블은 건너뜀 (헤더만 확인)
@@ -2724,9 +2752,19 @@ def extract_fs_from_pages(report, report_year=None):
                                 continue
 
                             if any(kw in header_text for kw in keywords):
-                                # 바로 다음 테이블이 데이터 테이블
-                                if i + 1 < len(all_dfs):
-                                    data_df = all_dfs[i + 1]
+                                # 바로 다음 테이블이 데이터 테이블 (i+1, 안되면 i+2도 시도)
+                                data_df = None
+                                for offset in [1, 2]:
+                                    if i + offset < len(all_dfs):
+                                        candidate = all_dfs[i + offset]
+                                        if len(candidate) >= 5:
+                                            # 정정표 테이블은 건너뜀
+                                            if _is_restatement_table(candidate):
+                                                print(f"[PAGES] 통합 페이지 테이블[{i+offset}] 정정표 감지, 건너뜀: cols={list(candidate.columns)[:4]}")
+                                                continue
+                                            data_df = candidate
+                                            break
+                                if data_df is not None:
                                     if len(data_df) >= 5:
                                         # 'is' 키워드로 매칭되면 포괄손익계산서(cis)인지 확인
                                         actual_type = fs_type
@@ -2893,8 +2931,25 @@ def normalize_yearly_data(yearly_data: dict, fs_type: str):
             if '당' in col_str or period_str in col_str:
                 candidate_cols.append(col)
 
+        # '당' 키워드가 없는 경우: '기말' 컬럼 중 첫 번째(당기)를 후보로 추가
+        # 예: '제 31 기말' (당기), '제 30 기말' (전기) → 첫 번째 '기말' 사용
+        if not candidate_cols:
+            for col in df.columns[1:]:
+                col_str = str(col).replace(' ', '')
+                if '기말' in col_str or '기' in col_str:
+                    candidate_cols.append(col)
+                    break  # 첫 번째 기말 컬럼만 (당기)
+
         if not candidate_cols and len(df.columns) >= 2:
-            candidate_cols = [df.columns[1]]  # 두 번째 열을 기본값으로
+            # fallback: '주석' 컬럼은 건너뛰고 첫 번째 숫자 데이터 컬럼 사용
+            for col in df.columns[1:]:
+                col_str = str(col).replace(' ', '')
+                if col_str in ['주석', '주석번호', '참조']:
+                    continue
+                candidate_cols = [col]
+                break
+            if not candidate_cols:
+                candidate_cols = [df.columns[1]]  # 최종 fallback
         
         if not candidate_cols:
             continue
@@ -3459,6 +3514,14 @@ def create_vcm_format(fs_data, excel_filepath=None):
         # 총계 마커
         total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계']
 
+        # 소계 마커 (유동자산합계 → 총계['유동자산']로 저장)
+        subtotal_markers = {
+            '유동자산합계': '유동자산',
+            '비유동자산합계': '비유동자산',
+            '유동부채합계': '유동부채',
+            '비유동부채합계': '비유동부채',
+        }
+
         current_section = None
 
         for idx, row in df.iterrows():
@@ -3489,6 +3552,18 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     break
 
             if section_found:
+                continue
+
+            # 소계 항목 처리 (유동자산합계, 비유동자산합계 등)
+            is_subtotal = False
+            for subtotal_name, subtotal_key in subtotal_markers.items():
+                if acc_clean == normalize(subtotal_name):
+                    if val_num is not None:
+                        sections['총계'][subtotal_key] = val_num
+                        print(f"[섹션파싱] 소계 발견: {raw_acc} = {val_num} → 총계['{subtotal_key}']")
+                    is_subtotal = True
+                    break
+            if is_subtotal:
                 continue
 
             # 총계 항목 처리 (exact match 우선, substring fallback)
@@ -3582,6 +3657,14 @@ def create_vcm_format(fs_data, excel_filepath=None):
         # 총계 마커
         total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계']
 
+        # 소계 마커 (유동자산합계 → 총계['유동자산']로 저장)
+        subtotal_markers = {
+            '유동자산합계': '유동자산',
+            '비유동자산합계': '비유동자산',
+            '유동부채합계': '유동부채',
+            '비유동부채합계': '비유동부채',
+        }
+
         for idx, row in df.iterrows():
             raw_acc = str(row.get(acc_col, '')).strip()
             if not raw_acc or raw_acc == 'nan':
@@ -3598,6 +3681,17 @@ def create_vcm_format(fs_data, excel_filepath=None):
                     val_num = float(str(val).replace(',', ''))
                 except:
                     pass
+
+            # 소계 항목 처리 (유동자산합계, 비유동자산합계 등)
+            is_subtotal = False
+            for subtotal_name, subtotal_key in subtotal_markers.items():
+                if acc_clean == normalize(subtotal_name):
+                    if val_num is not None:
+                        sections['총계'][subtotal_key] = val_num
+                    is_subtotal = True
+                    break
+            if is_subtotal:
+                continue
 
             # 총계 항목 처리 (exact match 우선)
             is_total = False
@@ -3660,6 +3754,14 @@ def create_vcm_format(fs_data, excel_filepath=None):
 
         total_markers = ['자산총계', '부채총계', '자본총계', '부채와자본총계', '부채및자본총계', '자본과부채총계']
 
+        # 소계 마커 (유동자산합계 → 총계['유동자산']로 저장)
+        subtotal_markers = {
+            '유동자산합계': '유동자산',
+            '비유동자산합계': '비유동자산',
+            '유동부채합계': '유동부채',
+            '비유동부채합계': '비유동부채',
+        }
+
         # 1단계: 총계 행 위치 찾기
         asset_total_idx = None
         liability_total_idx = None
@@ -3695,6 +3797,12 @@ def create_vcm_format(fs_data, excel_filepath=None):
                         equity_total_idx = row_idx
                     break
 
+            # 소계 저장
+            for subtotal_name, subtotal_key in subtotal_markers.items():
+                if acc_clean == normalize(subtotal_name) and val_num is not None:
+                    sections['총계'][subtotal_key] = val_num
+                    break
+
         if asset_total_idx is None:
             print(f"[VCM FLAT] 자산총계 행을 찾을 수 없음, flat 파싱 중단")
             return sections
@@ -3716,6 +3824,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
             # 총계 행 스킵
             is_total = any(acc_clean == normalize(m) for m in total_markers)
             if is_total:
+                continue
+            # 소계 행 스킵 (유동자산합계, 비유동자산합계 등)
+            is_subtotal = any(acc_clean == normalize(m) for m in subtotal_markers)
+            if is_subtotal:
                 continue
             # 섹션 헤더 스킵
             if re.match(r'^(자산|부채|자본|투자자산|당좌자산)$', acc_clean):
@@ -3936,7 +4048,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
     # 수익/이익 분류 키워드 (항목명에 포함되면 영업외수익으로 분류)
     income_indicators = ['수익', '이익', '차익', '환입', '잡이익']
     # 비용/손실 분류 키워드 (항목명에 포함되면 영업외비용으로 분류)
-    expense_indicators = ['비용', '손실', '차손', '잡손실']
+    expense_indicators = ['비용', '손실', '차손', '잡손실', '원가']
     # 손익 항목 (지분법손익 등 - 영업외수익/비용과 별도로 표시)
     mixed_indicators = ['손익']
     # 손익 항목 별도 수집 리스트
@@ -4122,9 +4234,20 @@ def create_vcm_format(fs_data, excel_filepath=None):
 
     # ========== 영업외수익 상위 6개 항목 미리 결정 (모든 연도 합계 기준) ==========
     def get_non_op_income_items_for_year(is_df, year):
-        """특정 연도의 모든 영업외수익 항목 값을 반환"""
+        """특정 연도의 모든 영업외수익 항목 값을 반환 (이중 카운팅 방지)"""
+        # 먼저 합계 항목 확인
+        금융수익_합계 = find_val(is_df, ['금융수익'], year, ['기타']) or 0
+
+        # 금융수익 합계가 있으면 하위항목(이자수익, 기타금융수익)은 이미 포함되어 있으므로 0 처리
+        if 금융수익_합계:
+            이자수익_val = 0
+            기타금융수익_val = 0
+        else:
+            이자수익_val = find_val(is_df, ['이자수익'], year) or 0
+            기타금융수익_val = find_val(is_df, ['기타금융수익'], year) or 0
+
         return {
-            '이자수익': find_val(is_df, ['이자수익'], year) or 0,
+            '이자수익': 이자수익_val,
             '배당금수익': find_val(is_df, ['배당금수익'], year) or 0,
             '외환차익': find_val(is_df, ['외환차익'], year) or 0,
             '외화환산이익': find_val(is_df, ['외화환산이익'], year) or 0,
@@ -4134,16 +4257,26 @@ def create_vcm_format(fs_data, excel_filepath=None):
             '자산처분이익': find_val(is_df, ['당기손익인식금융자산처분이익', '금융자산처분이익'], year) or 0,
             '파생상품평가이익': find_val(is_df, ['파생상품평가이익'], year) or 0,
             '지분법이익': find_val(is_df, ['지분법이익', '관계기업투자이익'], year) or 0,
-            '기타금융수익': find_val(is_df, ['기타금융수익'], year) or 0,
-            '기타영업외수익': find_val(is_df, ['기타영업외수익', '기타수익', '잡이익'], year) or 0,
-            # 금융수익 (일부 기업에서 합계 항목으로 표시) - 이자수익 등이 없을 때 fallback
-            '금융수익': find_val(is_df, ['금융수익'], year, ['기타']) or 0,
+            '기타금융수익': 기타금융수익_val,
+            '기타영업외수익': find_val(is_df, ['기타영업외수익', '기타수익', '기타이익', '잡이익'], year) or 0,
+            '금융수익': 금융수익_합계,
         }
 
     def get_non_op_expense_items_for_year(is_df, year):
-        """특정 연도의 모든 영업외비용 항목 값을 반환"""
+        """특정 연도의 모든 영업외비용 항목 값을 반환 (이중 카운팅 방지)"""
+        # 먼저 합계 항목 확인
+        금융비용_합계 = find_val(is_df, ['금융비용', '금융원가'], year, ['기타']) or 0
+
+        # 금융비용 합계가 있으면 하위항목(이자비용, 기타금융비용)은 이미 포함되어 있으므로 0 처리
+        if 금융비용_합계:
+            이자비용_val = 0
+            기타금융비용_val = 0
+        else:
+            이자비용_val = find_val(is_df, ['이자비용'], year) or 0
+            기타금융비용_val = find_val(is_df, ['기타금융비용'], year) or 0
+
         return {
-            '이자비용': find_val(is_df, ['이자비용'], year) or 0,
+            '이자비용': 이자비용_val,
             '외환차손': find_val(is_df, ['외환차손'], year) or 0,
             '외화환산손실': find_val(is_df, ['외화환산손실'], year) or 0,
             '유형자산처분손실': find_val(is_df, ['유형자산처분손실', '유무형리스자산처분손실'], year) or 0,
@@ -4152,39 +4285,47 @@ def create_vcm_format(fs_data, excel_filepath=None):
             '자산손상차손': find_val(is_df, ['자산손상차손', '유형자산손상차손', '무형자산손상차손'], year) or 0,
             '파생상품평가손실': find_val(is_df, ['파생상품평가손실'], year) or 0,
             '지분법손실': find_val(is_df, ['지분법손실'], year) or 0,
-            '기타금융비용': find_val(is_df, ['기타금융비용'], year) or 0,
-            '기타영업외비용': find_val(is_df, ['기타영업외비용', '기타비용', '잡손실'], year) or 0,
-            # 금융비용 (일부 기업에서 합계 항목으로 표시) - 이자비용 등이 없을 때 fallback
-            '금융비용': find_val(is_df, ['금융비용'], year, ['기타']) or 0,
+            '기타금융비용': 기타금융비용_val,
+            '기타영업외비용': find_val(is_df, ['기타영업외비용', '기타비용', '기타손실', '잡손실'], year) or 0,
+            '금융비용': 금융비용_합계,
         }
 
-    # 영업외수익 모든 연도 합계 계산
+    # ========== 영업외수익/비용 상위 항목 결정 (동적 분류 항목 사용 — 이중 카운팅 방지) ==========
+    # 동적 분류된 항목(main IS의 영업이익~법인세비용차감전 사이 항목만)을 사용하여
+    # notes 데이터의 하위항목과 이중 카운팅되는 문제를 방지
+    # (기존 hardcoded dict는 is_df 전체를 검색하여 notes 하위항목도 찾아 이중 카운팅 발생)
+
+    # 영업외수익 모든 연도 합계 계산 (동적 분류 항목)
     non_op_income_totals = {}
     for year in fy_cols:
-        non_op_income_year = get_non_op_income_items_for_year(is_df, year)
-        for item_name, val in non_op_income_year.items():
-            non_op_income_totals[item_name] = non_op_income_totals.get(item_name, 0) + (val or 0)
+        for item_name, item_keyword in non_op_income_items:
+            val = find_val(is_df, [item_keyword], year) or 0
+            if val:
+                non_op_income_totals[item_name] = non_op_income_totals.get(item_name, 0) + val
 
-    # 영업외수익 상위 5개 항목 선택 (기타영업외수익 제외)
-    non_op_income_totals_nonzero = {k: v for k, v in non_op_income_totals.items() if v and v > 0 and k != '기타영업외수익'}
-    non_op_income_sorted = sorted(non_op_income_totals_nonzero.items(), key=lambda x: abs(x[1]), reverse=True)
+    # 상위 5개 항목 선택
+    non_op_income_sorted = sorted(non_op_income_totals.items(), key=lambda x: abs(x[1]), reverse=True)
     non_op_income_top5_names = [item[0] for item in non_op_income_sorted[:5]]
-    non_op_income_rest_names = [item[0] for item in non_op_income_sorted[5:]]  # 기타에 포함될 항목들
-    print(f"[VCM] 영업외수익 상위 5개 항목: {non_op_income_top5_names}")
+    non_op_income_rest_names = [item[0] for item in non_op_income_sorted[5:]]
+    # 동적 항목의 keyword 매핑 (item_name → item_keyword)
+    non_op_income_keyword_map = {item_name: item_keyword for item_name, item_keyword in non_op_income_items}
+    print(f"[VCM] 영업외수익 상위 항목 (동적): {non_op_income_top5_names}")
 
-    # 영업외비용 모든 연도 합계 계산
+    # 영업외비용 모든 연도 합계 계산 (동적 분류 항목)
     non_op_expense_totals = {}
     for year in fy_cols:
-        non_op_expense_year = get_non_op_expense_items_for_year(is_df, year)
-        for item_name, val in non_op_expense_year.items():
-            non_op_expense_totals[item_name] = non_op_expense_totals.get(item_name, 0) + (val or 0)
+        for item_name, item_keyword in non_op_expense_items:
+            val = find_val(is_df, [item_keyword], year) or 0
+            if val:
+                non_op_expense_totals[item_name] = non_op_expense_totals.get(item_name, 0) + val
 
-    # 영업외비용 상위 5개 항목 선택 (기타영업외비용 제외)
-    non_op_expense_totals_nonzero = {k: v for k, v in non_op_expense_totals.items() if v and v > 0 and k != '기타영업외비용'}
-    non_op_expense_sorted = sorted(non_op_expense_totals_nonzero.items(), key=lambda x: abs(x[1]), reverse=True)
+    # 상위 5개 항목 선택
+    non_op_expense_sorted = sorted(non_op_expense_totals.items(), key=lambda x: abs(x[1]), reverse=True)
     non_op_expense_top5_names = [item[0] for item in non_op_expense_sorted[:5]]
-    non_op_expense_rest_names = [item[0] for item in non_op_expense_sorted[5:]]  # 기타에 포함될 항목들
-    print(f"[VCM] 영업외비용 상위 5개 항목: {non_op_expense_top5_names}")
+    non_op_expense_rest_names = [item[0] for item in non_op_expense_sorted[5:]]
+    # 동적 항목의 keyword 매핑 (item_name → item_keyword)
+    non_op_expense_keyword_map = {item_name: item_keyword for item_name, item_keyword in non_op_expense_items}
+    print(f"[VCM] 영업외비용 상위 항목 (동적): {non_op_expense_top5_names}")
 
     # ========== 서비스업 여부를 연도 루프 전에 미리 결정 ==========
     # 어떤 연도라도 판관비가 존재하면 제조업으로 판단 (첫 연도 기준 오류 방지)
@@ -4241,16 +4382,22 @@ def create_vcm_format(fs_data, excel_filepath=None):
         영업외수익_direct = find_val(is_df, ['영업외수익'], year) or 0
         영업외비용_direct = find_val(is_df, ['영업외비용'], year) or 0
 
-        # 영업외수익/비용 항목 값 계산 (새 함수 사용)
-        non_op_income_year_vals = get_non_op_income_items_for_year(is_df, year)
-        non_op_expense_year_vals = get_non_op_expense_items_for_year(is_df, year)
+        # 영업외수익/비용: 동적 분류 항목으로 계산 (이중 카운팅 방지)
+        # main IS의 영업이익~법인세비용차감전 사이 항목만 사용하여 notes 데이터 이중 카운팅 방지
+        동적_영업외수익 = 0
+        for _item_name, _item_keyword in non_op_income_items:
+            동적_영업외수익 += find_val(is_df, [_item_keyword], year) or 0
+        동적_영업외비용 = 0
+        for _item_name, _item_keyword in non_op_expense_items:
+            동적_영업외비용 += find_val(is_df, [_item_keyword], year) or 0
 
-        # 금융수익/비용 (fallback용)
-        이자수익 = non_op_income_year_vals.get('이자수익', 0)
-        기타금융수익 = non_op_income_year_vals.get('기타금융수익', 0)
-        금융수익 = 이자수익 + 기타금융수익
-        이자비용 = non_op_expense_year_vals.get('이자비용', 0)
-        금융비용 = 이자비용
+        # mixed items (지분법손익 등) 별도 계산
+        mixed_values_year = {}
+        mixed_net = 0
+        for _item_name, _item_keyword in mixed_items:
+            val = find_val(is_df, [_item_keyword], year) or 0
+            mixed_values_year[_item_name] = val
+            mixed_net += val
         법인세 = find_val(is_df, ['법인세비용', '법인세등'], year, ['차감전']) or 0
 
         # 계산 값
@@ -4285,15 +4432,14 @@ def create_vcm_format(fs_data, excel_filepath=None):
                 영업이익_direct = -영업손실_direct  # 영업손실은 음수로 변환
         영업이익 = 영업이익_direct if 영업이익_direct else (매출총이익 - 판관비)
 
-        # 영업외수익/비용: 직접 찾은 값 > 항목 합계 > fallback
-        항목_영업외수익 = sum(non_op_income_year_vals.values())
-        항목_영업외비용 = sum(non_op_expense_year_vals.values())
-        영업외수익 = 영업외수익_direct if 영업외수익_direct else (항목_영업외수익 if 항목_영업외수익 else 금융수익)
-        영업외비용 = 영업외비용_direct if 영업외비용_direct else (항목_영업외비용 if 항목_영업외비용 else 금융비용)
+        # 영업외수익/비용: 직접 찾은 값 > 동적 분류 항목 합계
+        영업외수익 = 영업외수익_direct if 영업외수익_direct else 동적_영업외수익
+        영업외비용 = 영업외비용_direct if 영업외비용_direct else 동적_영업외비용
 
         # 법인세비용차감전이익: 손익계산서에서 직접 찾기 시도
+        # fallback 시 mixed items (지분법손익 등)도 포함
         세전이익_direct = find_val(is_df, ['법인세비용차감전순이익', '법인세비용차감전이익', '법인세차감전순이익', '세전이익'], year) or 0
-        세전이익 = 세전이익_direct if 세전이익_direct else (영업이익 + 영업외수익 - 영업외비용)
+        세전이익 = 세전이익_direct if 세전이익_direct else (영업이익 + 영업외수익 - 영업외비용 + mixed_net)
 
         # 당기순이익: 손익계산서에서 직접 찾기 시도
         # 당기순손실은 음수로 변환 필요
@@ -4367,23 +4513,23 @@ def create_vcm_format(fs_data, excel_filepath=None):
             '영업외수익': 영업외수익,
         })
 
-        # 영업외수익 하위 항목 (상위 5개 + 기타)
-        non_op_income_year = get_non_op_income_items_for_year(is_df, year)
+        # 영업외수익 하위 항목 (동적 분류 항목 사용 — 이중 카운팅 방지)
         non_op_income_top5_sum = 0
-        non_op_income_total_sum = sum(non_op_income_year.values())
 
         for item_name in non_op_income_top5_names:
-            val = non_op_income_year.get(item_name, 0)
+            kw = non_op_income_keyword_map.get(item_name, item_name)
+            val = find_val(is_df, [kw], year) or 0
             values[f'  {item_name}'] = val if val else None
             non_op_income_top5_sum += val
 
-        # 기타영업외수익 = 전체 합계 - 상위 5개 합계
-        기타영업외수익 = non_op_income_total_sum - non_op_income_top5_sum
+        # 기타영업외수익 = 전체 동적 합계 - 상위 5개 합계
+        기타영업외수익 = 동적_영업외수익 - non_op_income_top5_sum
 
         # 기타영업외수익 세부항목 수집 (툴팁용)
         기타영업외수익_세부 = []
         for item_name in non_op_income_rest_names:
-            val = non_op_income_year.get(item_name, 0)
+            kw = non_op_income_keyword_map.get(item_name, item_name)
+            val = find_val(is_df, [kw], year) or 0
             if val:
                 기타영업외수익_세부.append((item_name, val))
 
@@ -4396,23 +4542,23 @@ def create_vcm_format(fs_data, excel_filepath=None):
 
         values['영업외비용'] = 영업외비용
 
-        # 영업외비용 하위 항목 (상위 5개 + 기타)
-        non_op_expense_year = get_non_op_expense_items_for_year(is_df, year)
+        # 영업외비용 하위 항목 (동적 분류 항목 사용 — 이중 카운팅 방지)
         non_op_expense_top5_sum = 0
-        non_op_expense_total_sum = sum(non_op_expense_year.values())
 
         for item_name in non_op_expense_top5_names:
-            val = non_op_expense_year.get(item_name, 0)
+            kw = non_op_expense_keyword_map.get(item_name, item_name)
+            val = find_val(is_df, [kw], year) or 0
             values[f'  {item_name}'] = val if val else None
             non_op_expense_top5_sum += val
 
-        # 기타영업외비용 = 전체 합계 - 상위 5개 합계
-        기타영업외비용 = non_op_expense_total_sum - non_op_expense_top5_sum
+        # 기타영업외비용 = 전체 동적 합계 - 상위 5개 합계
+        기타영업외비용 = 동적_영업외비용 - non_op_expense_top5_sum
 
         # 기타영업외비용 세부항목 수집 (툴팁용)
         기타영업외비용_세부 = []
         for item_name in non_op_expense_rest_names:
-            val = non_op_expense_year.get(item_name, 0)
+            kw = non_op_expense_keyword_map.get(item_name, item_name)
+            val = find_val(is_df, [kw], year) or 0
             if val:
                 기타영업외비용_세부.append((item_name, val))
 
@@ -4422,6 +4568,10 @@ def create_vcm_format(fs_data, excel_filepath=None):
             # 세부항목 추가 (기타영업외비용 바로 다음에)
             for item_name, val in 기타영업외비용_세부:
                 values[f'    {item_name}'] = val
+
+        # 손익 항목 (지분법손익 등) - 영업외수익/비용과 별도 표시
+        for _item_name, val in mixed_values_year.items():
+            values[_item_name] = val if val else None
 
         values.update({
             '법인세비용차감전이익': 세전이익,
@@ -5110,9 +5260,15 @@ def create_vcm_format(fs_data, excel_filepath=None):
                                    if not is_redundant_child(cat, i['name'])
                                    or normalize(i['name']) == normalize(cat)]
                     sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                    shown_sum = 0
                     for item in sorted_items[:5]:  # 최대 5개까지
                         display_name = get_display_name(item['name'], cat)
                         bs_items.append((display_name, cat, item['value']))
+                        shown_sum += item['value']
+                    # 표시된 하위항목 합계와 본체가 다르면 나머지를 세부 항목으로 추가
+                    remainder = cat_info['total'] - shown_sum
+                    if abs(remainder) > 0:
+                        bs_items.append((f'{cat}(세부)', cat, remainder))
 
         # 기타유동자산 (남은 항목 합계)
         # 중요: 기타유동자산_total은 MAX_ITEMS 초과된 모든 카테고리의 합계이므로,
@@ -5129,9 +5285,15 @@ def create_vcm_format(fs_data, excel_filepath=None):
                                if not is_redundant_child('기타유동자산', i['name'])
                                or normalize(i['name']) == normalize('기타유동자산')]
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                shown_sum = 0
                 for item in sorted_items[:5]:
                     display_name = get_display_name(item['name'], '기타유동자산')
                     bs_items.append((display_name, '기타유동자산', item['value']))
+                    shown_sum += item['value']
+                # 표시된 하위항목 합계와 본체가 다르면 나머지를 세부 항목으로 추가 (합계 일치)
+                remainder = 기타유동자산_total - shown_sum
+                if abs(remainder) > 0:
+                    bs_items.append(('기타유동자산(세부)', '기타유동자산', remainder))
 
         # 매각예정자산 (IFRS 5: 유동/비유동 밖 별도 카테고리)
         매각예정자산 = find_bs_val(['매각예정비유동자산', '매각예정자산', '처분자산집단', '소유주분배예정자산집단', '소유주분배예정'], year) or 0
@@ -5164,9 +5326,15 @@ def create_vcm_format(fs_data, excel_filepath=None):
                                if not is_redundant_child(cat_display, i['name'])
                                or normalize(i['name']) == normalize(cat)]
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                shown_sum = 0
                 for item in sorted_items[:5]:  # 최대 5개까지
                     display_name = get_display_name(item['name'], cat)
                     bs_items.append((display_name, cat_display, item['value']))
+                    shown_sum += item['value']
+                # 표시된 하위항목 합계와 본체가 다르면 나머지를 세부 항목으로 추가
+                remainder = cat_info['total'] - shown_sum
+                if abs(remainder) > 0:
+                    bs_items.append((f'{cat_display}(세부)', cat_display, remainder))
 
         if 기타비유동자산_total and abs(기타비유동자산_total) > 0:
             bs_items.append(('기타비유동자산', '비유동자산', 기타비유동자산_total))
@@ -5180,9 +5348,15 @@ def create_vcm_format(fs_data, excel_filepath=None):
                                if not is_redundant_child('기타비유동자산', i['name'])
                                or normalize(i['name']) == normalize('기타비유동자산')]
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                shown_sum = 0
                 for item in sorted_items[:5]:
                     display_name = get_display_name(item['name'], '기타비유동자산')
                     bs_items.append((display_name, '기타비유동자산', item['value']))
+                    shown_sum += item['value']
+                # 표시된 하위항목 합계와 본체가 다르면 나머지를 세부 항목으로 추가 (합계 일치)
+                remainder = 기타비유동자산_total - shown_sum
+                if abs(remainder) > 0:
+                    bs_items.append(('기타비유동자산(세부)', '기타비유동자산', remainder))
 
         bs_items.append(('자산총계', '', 자산총계))
 
@@ -5206,9 +5380,15 @@ def create_vcm_format(fs_data, excel_filepath=None):
                                if not is_redundant_child(cat, i['name'])
                                or normalize(i['name']) == normalize(cat)]
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                shown_sum = 0
                 for item in sorted_items[:5]:  # 최대 5개까지
                     display_name = get_display_name(item['name'], cat)
                     bs_items.append((display_name, cat, item['value']))
+                    shown_sum += item['value']
+                # 표시된 하위항목 합계와 본체가 다르면 나머지를 세부 항목으로 추가
+                remainder = cat_info['total'] - shown_sum
+                if abs(remainder) > 0:
+                    bs_items.append((f'{cat}(세부)', cat, remainder))
 
         if 기타유동부채_total and abs(기타유동부채_total) > 0:
             bs_items.append(('기타유동부채', '유동부채', 기타유동부채_total))
@@ -5222,9 +5402,15 @@ def create_vcm_format(fs_data, excel_filepath=None):
                                if not is_redundant_child('기타유동부채', i['name'])
                                or normalize(i['name']) == normalize('기타유동부채')]
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                shown_sum = 0
                 for item in sorted_items[:5]:
                     display_name = get_display_name(item['name'], '기타유동부채')
                     bs_items.append((display_name, '기타유동부채', item['value']))
+                    shown_sum += item['value']
+                # 표시된 하위항목 합계와 본체가 다르면 나머지를 세부 항목으로 추가 (합계 일치)
+                remainder = 기타유동부채_total - shown_sum
+                if abs(remainder) > 0:
+                    bs_items.append(('기타유동부채(세부)', '기타유동부채', remainder))
 
         # 매각예정부채 별도 추출 (섹션 외부에 있을 수 있음)
         매각예정부채 = find_bs_val(['매각예정비유동부채', '매각예정부채'], year) or 0
@@ -5259,9 +5445,15 @@ def create_vcm_format(fs_data, excel_filepath=None):
                                if not is_redundant_child(cat_display, i['name'])
                                or normalize(i['name']) == normalize(cat)]
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                shown_sum = 0
                 for item in sorted_items[:5]:  # 최대 5개까지
                     display_name = get_display_name(item['name'], cat)
                     bs_items.append((display_name, cat_display, item['value']))
+                    shown_sum += item['value']
+                # 표시된 하위항목 합계와 본체가 다르면 나머지를 세부 항목으로 추가
+                remainder = cat_info['total'] - shown_sum
+                if abs(remainder) > 0:
+                    bs_items.append((f'{cat_display}(세부)', cat_display, remainder))
 
         if 기타비유동부채_total and abs(기타비유동부채_total) > 0:
             bs_items.append(('기타비유동부채', '비유동부채', 기타비유동부채_total))
@@ -5275,9 +5467,15 @@ def create_vcm_format(fs_data, excel_filepath=None):
                                if not is_redundant_child('기타비유동부채', i['name'])
                                or normalize(i['name']) == normalize('기타비유동부채')]
                 sorted_items = sorted(valid_items, key=lambda x: abs(x['value']), reverse=True)
+                shown_sum = 0
                 for item in sorted_items[:5]:
                     display_name = get_display_name(item['name'], '기타비유동부채')
                     bs_items.append((display_name, '기타비유동부채', item['value']))
+                    shown_sum += item['value']
+                # 표시된 하위항목 합계와 본체가 다르면 나머지를 세부 항목으로 추가 (합계 일치)
+                remainder = 기타비유동부채_total - shown_sum
+                if abs(remainder) > 0:
+                    bs_items.append(('기타비유동부채(세부)', '기타비유동부채', remainder))
 
         bs_items.append(('부채총계', '', 부채총계))
 
