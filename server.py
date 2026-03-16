@@ -6271,22 +6271,31 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             # 현재 연도 abs 기준 재정렬
             selected.sort(key=lambda x: abs(x['total']), reverse=True)
 
+            # H2 fix: 이전 섹션에서 이미 사용된 이름 추적 (동명 항목 충돌 방지)
+            existing_parent_names = {item[0] for item in bs_items if item[1] in ('', section_name) or item[1] in section_cat_map.values()}
+
             for cand in selected:
                 cand_name = cand['name']
+                orig_name = cand_name  # H3 fix: 원래 이름 보존 (하위항목 비교용)
                 # 비유동 구분이 필요한 경우 표시명 조정
                 if section_name in ('비유동부채',) and cand_name in ('매입채무및기타채무', '기타금융부채', '기타비금융부채'):
                     cand_name = f"{cand_name}[비유동]"
                 elif section_name == '비유동자산' and cand_name == '매출채권및기타채권':
                     cand_name = f"{cand_name}[비유동]"
+                # H2: 동적 충돌 감지 — 다른 섹션에서 이미 사용된 이름이면 접미사 추가
+                elif cand_name in existing_parent_names:
+                    cand_name = f"{cand_name}[{section_name}]"
 
                 bs_items.append((cand_name, section_name, cand['total']))
+                existing_parent_names.add(cand_name)
 
                 # 그룹 하위항목 (툴팁용)
                 if cand['is_group'] and len(cand['items']) >= 1:
                     shown_sum = 0
                     for sub in sorted(cand['items'], key=lambda x: abs(x['value']), reverse=True)[:5]:
                         sub_name = sub['name']
-                        if sub_name == cand_name:
+                        # H3 fix: 원래 이름(orig_name)과 비교 — [비유동] 접미사 후에도 정상 동작
+                        if sub_name == orig_name or sub_name == cand_name:
                             sub_name = f"{sub_name}(개별)"
                         bs_items.append((sub_name, cand_name, sub['value']))
                         shown_sum += sub['value']
@@ -6302,28 +6311,29 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 if 기타_name in existing_names:
                     기타_name = f"기타{section_name}(합산)"
                 기타_total = sum(c['total'] for c in overflow)
-                if 기타_total and abs(기타_total) > 0:
-                    bs_items.append((기타_name, section_name, 기타_total))
-                    all_overflow_items = []
-                    for c in overflow:
-                        all_overflow_items.extend(c['items'])
-                    sorted_overflow = sorted(all_overflow_items, key=lambda x: abs(x['value']), reverse=True)
-                    shown_sum = 0
-                    for item in sorted_overflow[:5]:
-                        child_name = item['name']
-                        if child_name == 기타_name:
-                            child_name = f"{child_name}(개별)"
-                        bs_items.append((child_name, 기타_name, item['value']))
-                        shown_sum += item['value']
-                    remainder = 기타_total - shown_sum
-                    if abs(remainder) > 0:
-                        bs_items.append((f"{기타_name}(세부)", 기타_name, remainder))
+                # H1 fix: 기타_total=0이어도 overflow 항목이 있으면 컨테이너 생성 (양/음 상쇄 소실 방지)
+                bs_items.append((기타_name, section_name, 기타_total))
+                all_overflow_items = []
+                for c in overflow:
+                    all_overflow_items.extend(c['items'])
+                sorted_overflow = sorted(all_overflow_items, key=lambda x: abs(x['value']), reverse=True)
+                shown_sum = 0
+                for item in sorted_overflow[:5]:
+                    child_name = item['name']
+                    if child_name == 기타_name:
+                        child_name = f"{child_name}(개별)"
+                    bs_items.append((child_name, 기타_name, item['value']))
+                    shown_sum += item['value']
+                remainder = 기타_total - shown_sum
+                if abs(remainder) > 0:
+                    bs_items.append((f"{기타_name}(세부)", 기타_name, remainder))
 
         # 자산총계, 부채총계, 자본총계
         자산총계 = totals.get('자산총계', 0)
         부채총계 = totals.get('부채총계', 0)
         자본총계 = totals.get('자본총계', 0)
-        부채와자본총계 = 부채총계 + 자본총계 if 부채총계 and 자본총계 else totals.get('부채와자본총계', totals.get('부채및자본총계', 0))
+        # H4 fix: truthiness 대신 is not None 사용 (자본총계=0인 자본잠식 기업 대응)
+        부채와자본총계 = (부채총계 + 자본총계) if (부채총계 is not None and 자본총계 is not None) else totals.get('부채와자본총계', totals.get('부채및자본총계', 0))
 
         bs_items.append(('자산총계', '', 자산총계))
         bs_items.append(('부채총계', '', 부채총계))
