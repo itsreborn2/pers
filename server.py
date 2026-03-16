@@ -6559,9 +6559,9 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             for item in is_values.get(cat_key, []):
                 values[f"  {item['name']}"] = item['value']
 
-        # 첫 연도에 행 구조 생성
+        # 행 구조 생성/병합
         if not is_rows:
-            # 기본 IS 구조
+            # 첫 연도: 기본 IS 구조 생성
             is_row_order = ['매출', '매출원가', '매출총이익', '% of Sales', '판매비와관리비']
             for name, val in sga_display:
                 is_row_order.append(name)
@@ -6582,7 +6582,6 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             for name in is_row_order:
                 parent = ''
                 if name.startswith('  '):
-                    # 부모 결정
                     clean = name.strip()
                     if any(clean in str(i.get('name', '')) for i in is_values.get('interest_income', []) + is_values.get('other_income', [])):
                         parent = '영업외수익'
@@ -6591,6 +6590,38 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                     elif '인건비' in clean or any(clean in str(i.get('name', '')) for i in sga_details):
                         parent = '판매비와관리비'
                 is_rows.append({'항목': name, '부모': parent})
+        else:
+            # M1 fix: 다른 연도의 고유 항목 병합 (BS master_order와 동일 패턴)
+            is_row_names = {r['항목'] for r in is_rows}
+
+            # SGA 신규 항목 → 영업이익 앞에 삽입
+            for name, val in sga_display:
+                if name not in is_row_names:
+                    for i, r in enumerate(is_rows):
+                        if r['항목'] == '영업이익':
+                            is_rows.insert(i, {'항목': name, '부모': '판매비와관리비'})
+                            is_row_names.add(name)
+                            break
+
+            # 영업외수익 신규 항목 → 영업외비용 앞에 삽입
+            for item in is_values.get('interest_income', []) + is_values.get('other_income', []):
+                item_name = f"  {item['name']}"
+                if item_name not in is_row_names:
+                    for i, r in enumerate(is_rows):
+                        if r['항목'] == '영업외비용':
+                            is_rows.insert(i, {'항목': item_name, '부모': '영업외수익'})
+                            is_row_names.add(item_name)
+                            break
+
+            # 영업외비용 신규 항목 → 법인세비용차감전이익 앞에 삽입
+            for item in is_values.get('interest_expense', []) + is_values.get('other_expense', []):
+                item_name = f"  {item['name']}"
+                if item_name not in is_row_names:
+                    for i, r in enumerate(is_rows):
+                        if r['항목'] == '법인세비용차감전이익':
+                            is_rows.insert(i, {'항목': item_name, '부모': '영업외비용'})
+                            is_row_names.add(item_name)
+                            break
 
         # 값 채우기
         for row in is_rows:
