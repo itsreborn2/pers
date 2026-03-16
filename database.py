@@ -239,6 +239,31 @@ def init_db():
         ''')
         cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_guest_ip ON guest_usage(ip_address)')
 
+        # LLM 계정과목 분류 캐시 테이블
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS account_classification_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                company_code TEXT NOT NULL,
+                report_type TEXT NOT NULL CHECK(report_type IN ('BS', 'IS', 'CF')),
+                account_name_raw TEXT NOT NULL,
+                standard_category TEXT,
+                display_name TEXT,
+                group_name TEXT,
+                sign_convention TEXT CHECK(sign_convention IN ('+', '-')),
+                confidence REAL,
+                reason TEXT,
+                source TEXT NOT NULL CHECK(source IN ('rule', 'llm', 'manual')),
+                model_version TEXT,
+                prompt_hash TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(company_code, report_type, account_name_raw)
+            )
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_acc_cache_company
+            ON account_classification_cache(company_code, report_type)
+        ''')
+
         # 기본 설정값 삽입 (없는 경우에만)
         default_settings = {
             'free_search_limit': '9999',

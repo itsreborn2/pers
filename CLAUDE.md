@@ -7,13 +7,13 @@
 
 ### 환경 구성
 
-| 항목 | Production | Development |
-|------|------------|-------------|
-| 디렉토리 | `/home/servermanager/pers` | `/home/servermanager/pers-dev` |
-| 브랜치 | `main` | `develop` |
-| 포트 | 8000 | 8001 |
-| URL | https://pers.moatai.app | https://pers-dev.moatai.app |
-| systemd | `pers.service` | `pers-dev.service` |
+| 항목 | Production | Development | Dev2 (LLM분류) |
+|------|------------|-------------|----------------|
+| 디렉토리 | `/home/servermanager/pers` | `/home/servermanager/pers-dev` | `/home/servermanager/pers-dev2` |
+| 브랜치 | `main` | `develop` | `feature/llm-classification` |
+| 포트 | 8000 | 8001 | 8002 |
+| URL | https://pers.moatai.app | https://pers-dev.moatai.app | localhost:8002 |
+| systemd | `pers.service` | `pers-dev.service` | (수동 실행) |
 
 ### 서버 하드웨어 사양 (vm-docker-01)
 
@@ -692,6 +692,39 @@ DART 재무제표 추출 완료 후 기업개황정보 우측에 활성화되는
 - `task['chatbot']`에 PEChatbot 인스턴스 저장
 - 챗봇 활성화 시 `preview_data` cleanup 방지 (`'chatbot' not in task` 조건)
 - 대화 최대 50턴 → 오래된 대화 자동 제거
+
+---
+
+## LLM 기반 계정 분류 파이프라인 (Phase 2)
+
+### 개요
+DART 재무데이터의 100+개 하드코딩 키워드 매칭을 LLM(Gemini 3.1 Pro Preview)으로 대체.
+BS/IS/CF 전체 계정명을 LLM에 보내 분류/그룹핑 매핑 테이블을 받고, 코드가 숫자를 조립.
+
+### 핵심 원칙
+1. **LLM은 매핑만, 숫자는 코드만** — LLM은 숫자를 보지도 못함
+2. **전체 계정 LLM 거침** — BS+IS+CF 전부
+3. **하드코딩 → 프롬프트** — 규칙을 프롬프트 지시사항으로 변환
+4. **캐시 필수** — 동일 회사 재분석시 LLM 비용 0원
+
+### 관련 파일
+- `account_classifier.py`: LLM 분류 모듈 (프롬프트, 캐시, Structured Output)
+- `database.py`: `account_classification_cache` 테이블 추가
+- `server.py`: `create_vcm_format_v2()` + 비교 API
+
+### API 엔드포인트
+- `POST /api/vcm-v2/{task_id}`: VCM v2(LLM) 단독 실행
+- `POST /api/vcm-compare/{task_id}`: v1(하드코딩) vs v2(LLM) 비교
+
+### 데이터베이스
+```sql
+account_classification_cache (
+    company_code, report_type, account_name_raw,
+    standard_category, display_name, group_name,
+    sign_convention, confidence, reason,
+    source, model_version, prompt_hash
+)
+```
 
 ---
 
