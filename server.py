@@ -6088,6 +6088,74 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
     # ========== 5. BS 매핑 기반 숫자 조립 ==========
     all_bs_items_by_year = {}
 
+    # 카테고리 → VCM 섹션 매핑 (상수)
+    section_cat_map = {
+        'current_asset': '유동자산',
+        'non_current_asset': '비유동자산',
+        'current_liability': '유동부채',
+        'non_current_liability': '비유동부채',
+        'equity': '자본',
+    }
+    MAX_ITEMS = 6
+
+    # ---- Pre-scan: 전체 연도 기준 글로벌 선택 결정 (Bug #5 fix) ----
+    # 각 섹션별 항목의 전체 연도 최대 절대값 수집
+    _section_item_max_abs = {}  # {section_name: {item_name: max_abs_value}}
+
+    for _pre_year in fy_cols:
+        _pre_cat_items = {}
+        for acc_name in bs_accounts:
+            cls = bs_map.get(acc_name)
+            if not cls:
+                continue
+            cat = cls.get('standard_category')
+            if not cat or cat in ('total', 'subtotal', 'section_header', 'skip'):
+                continue
+            val = get_value(bs_df, bs_acc_col, acc_name, _pre_year)
+            if val is None:
+                val = 0
+            if cls.get('sign') == '-' and val > 0:
+                val = -val
+            display = cls.get('display_name', normalize(acc_name) or acc_name)
+            group = cls.get('group')
+            if cat not in _pre_cat_items:
+                _pre_cat_items[cat] = []
+            _pre_cat_items[cat].append({'name': display, 'value': val, 'group': group})
+
+        for cat_key, section_name in section_cat_map.items():
+            items = _pre_cat_items.get(cat_key, [])
+            if not items:
+                continue
+            # display_candidates와 동일한 그룹핑 로직
+            _grouped = {}
+            _ungrouped = []
+            for item in items:
+                grp = item.get('group')
+                if grp:
+                    if grp not in _grouped:
+                        _grouped[grp] = 0
+                    _grouped[grp] += item['value']
+                else:
+                    _ungrouped.append(item)
+
+            if section_name not in _section_item_max_abs:
+                _section_item_max_abs[section_name] = {}
+
+            for grp_name, grp_total in _grouped.items():
+                prev = _section_item_max_abs[section_name].get(grp_name, 0)
+                _section_item_max_abs[section_name][grp_name] = max(prev, abs(grp_total))
+
+            for item in _ungrouped:
+                prev = _section_item_max_abs[section_name].get(item['name'], 0)
+                _section_item_max_abs[section_name][item['name']] = max(prev, abs(item['value']))
+
+    # 글로벌 선택: 각 섹션별 max abs 상위 MAX_ITEMS개
+    global_selected_per_section = {}
+    for section_name, items in _section_item_max_abs.items():
+        sorted_items = sorted(items.items(), key=lambda x: x[1], reverse=True)
+        global_selected_per_section[section_name] = {name for name, _ in sorted_items[:MAX_ITEMS]}
+
+    # ---- 메인 루프 ----
     for year_col in fy_cols:
         year_str = str(year_col)
 
@@ -6151,17 +6219,6 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         # ========== BS 구조 조립 ==========
         bs_items = []
 
-        # 카테고리 → VCM 섹션 매핑
-        section_cat_map = {
-            'current_asset': '유동자산',
-            'non_current_asset': '비유동자산',
-            'current_liability': '유동부채',
-            'non_current_liability': '비유동부채',
-            'equity': '자본',
-        }
-
-        MAX_ITEMS = 6
-
         for cat_key, section_name in section_cat_map.items():
             items = category_items.get(cat_key, [])
             if not items:
@@ -6207,9 +6264,12 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             # 금액 절대값 기준 정렬
             display_candidates.sort(key=lambda x: abs(x['total']), reverse=True)
 
-            # 상위 MAX_ITEMS개 선택, 나머지는 기타
-            selected = display_candidates[:MAX_ITEMS]
-            overflow = display_candidates[MAX_ITEMS:]
+            # 글로벌 선택 기반 (Bug #5 fix: 전체 연도 일관된 selected/overflow)
+            global_sel = global_selected_per_section.get(section_name, set())
+            selected = [c for c in display_candidates if c['name'] in global_sel]
+            overflow = [c for c in display_candidates if c['name'] not in global_sel]
+            # 현재 연도 abs 기준 재정렬
+            selected.sort(key=lambda x: abs(x['total']), reverse=True)
 
             for cand in selected:
                 cand_name = cand['name']
