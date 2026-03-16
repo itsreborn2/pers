@@ -278,3 +278,80 @@ ps aux | grep server.py | grep -v grep | awk '{printf "RSS:%.0fMB\n", $6/1024}'
 3. `account_classifier.py` 프롬프트 sign 규칙 명확화
 4. `create_vcm_format_v2` IS→CIS 폴백 추가: IS에 매출/영업수익 없으면 CIS 사용 (벡트 등)
 5. `create_vcm_format_v2` IS 주석 필터링: 분류1 기반으로 주석(notes) 데이터 제외, 당기순이익은 주석에서 복구 (이노시뮬레이션 등)
+6. BS overflow 이름 충돌 수정 (2026-03-16):
+   - `len(items) > 1` → `>= 1`: 1개 항목 그룹의 툴팁 하위 표시
+   - overflow 하위/selected 하위 이름 충돌 → `(개별)` 접미사
+   - overflow 컨테이너와 selected 이름 충돌 → `(합산)` 접미사
+   - master_order 첫 연도 dedup: 동일 이름 중복 row 방지
+7. Bug #5: 다중 연도 BS overflow 불일치 수정 (2026-03-16):
+   - 연도별 독립 selected/overflow 결정 → 전체 연도 max abs 기준 글로벌 결정
+   - Pre-scan: 전체 연도 display_candidates 수집 → 항목별 max abs 계산
+   - Global selection: 섹션별 max abs 상위 MAX_ITEMS개 결정
+   - 모든 연도에서 동일한 selected/overflow → 부모 충돌 방지
+
+---
+
+## BS Overflow 검증 체크리스트 (★필수★)
+
+### 개요
+
+BS 각 섹션(유동자산/비유동자산/유동부채/비유동부채/자본)에서 항목이 MAX_ITEMS=6개를 초과하면 나머지가 "기타{섹션명}" 컨테이너로 합산됩니다. 이 과정에서 다양한 엣지케이스가 존재합니다.
+
+### 검증 항목
+
+| # | 검증 항목 | 설명 | 확인 방법 |
+|---|----------|------|----------|
+| 1 | **섹션별 합계 일치** | 각 섹션 헤더값 = 직접 하위항목 합계 | vcm에서 부모=섹션인 항목 합 vs 섹션 헤더 |
+| 2 | **이름 중복 없음** | vcm 전체에서 동일 항목명이 2개 이상 없어야 함 | Counter(항목명) 중 v > 1 확인 |
+| 3 | **기타 컨테이너 정합성** | 기타{섹션} 컨테이너의 값 = 하위항목 합계 + (세부) 잔여분 | 기타{섹션} 하위 합계 검증 |
+| 4 | **이름 충돌 방지** | (개별)/(합산) 접미사가 올바르게 적용 | DART 계정 "기타비유동자산" 등이 충돌 시 접미사 확인 |
+| 5 | **1개 항목 그룹 툴팁** | is_group=True이고 items=1인 그룹도 하위항목 생성 | Frontdata에서 해당 그룹의 하위 존재 확인 |
+| 6 | **Financials 필터링** | overflow 하위항목은 Financials 시트에서 제외, Frontdata에만 존재 | vcm_display에 기타 하위 미포함 확인 |
+| 7 | **자산총계 = 유동+비유동** | 자산총계가 유동자산 + 비유동자산과 일치 | ±2 오차 허용 |
+| 8 | **부채와자본 = 부채+자본** | 대차 균형 | ±2 오차 허용 |
+
+### 이름 충돌 시나리오
+
+| 시나리오 | 조건 | 기대 결과 |
+|----------|------|----------|
+| **A: overflow 자식-컨테이너 충돌** | DART 계정 "기타비유동자산"이 overflow에 포함 | 자식 → "기타비유동자산(개별)", 컨테이너 유지 |
+| **B: selected-컨테이너 충돌** | DART 계정 "기타비유동자산"이 selected(상위6)에 포함 | 컨테이너 → "기타비유동자산(합산)" |
+| **C: selected 자식-부모 충돌** | 그룹 내 항목명이 그룹명과 동일 | 자식 → "{이름}(개별)" |
+| **D: master_order 중복** | 같은 이름이 bs_items에 2회 등장 | 첫 번째만 master_order에 유지 |
+
+### 알려진 미해결 이슈
+
+| 이슈 | 심각도 | 설명 | 상태 |
+|------|--------|------|------|
+| **다중 연도 overflow 불일치** | 높음 | FY2024에 7개(overflow), FY2023에 5개(no overflow) → 같은 항목 부모 불일치 | ✅ 수정완료 (2-pass global selection, 방안 D) |
+| **양/음 상쇄 시 overflow 소실** | 중간 | overflow 합계=0이면 컨테이너 미생성 → 항목 소실 | 미수정 |
+| **다른 섹션 동명 항목** | 중간 | "보증금"이 유동+비유동 양쪽에 있으면 값 덮어쓰기 | 미수정 |
+
+### 검증 스크립트 (수동)
+
+```python
+# VCM v2 결과에서 overflow 검증
+import requests
+from collections import Counter
+
+r = requests.post('http://localhost:8002/api/vcm-v2/{task_id}')
+vcm = r.json()['vcm']
+
+# 1. 섹션별 합계
+for section in ['유동자산', '비유동자산', '유동부채', '비유동부채']:
+    header = next((r for r in vcm if r.get('항목', '').strip() == section), None)
+    if not header: continue
+    fy = sorted([k for k in header if k.startswith('FY')], reverse=True)[0]
+    hv = header.get(fy) or 0
+    cs = sum((r.get(fy) or 0) for r in vcm if r.get('부모', '').strip() == section)
+    print(f'{section}: 헤더={hv/1e6:.0f}M 하위={cs/1e6:.0f}M 차={abs(hv-cs)/1e6:.0f}M {"✓" if abs(hv-cs)<1e6 else "✗"}')
+
+# 2. 이름 중복
+names = [r.get('항목', '') for r in vcm]
+dupes = {k: v for k, v in Counter(names).items() if v > 1}
+print(f'이름 중복: {dupes if dupes else "없음 ✓"}')
+
+# 3. 충돌 방지 접미사
+special = [n for n in names if '(개별)' in n or '(합산)' in n]
+print(f'충돌방지: {special if special else "없음"}')
+```
