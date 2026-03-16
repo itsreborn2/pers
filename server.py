@@ -33,6 +33,7 @@ import json
 
 import dart_fss as dart
 import pandas as pd
+import re
 
 
 # ============================================================
@@ -46,7 +47,7 @@ TASKS_LOCK = threading.Lock()
 # 메모리 정리 설정
 TASK_IDLE_TIMEOUT = 120  # 진행 중 작업: 2분간 status 조회 없으면 취소
 TASK_COMPLETED_TTL = 1800  # 완료된 작업: 30분 후 전체 삭제 (파일은 유지) — 브라우저 절전모드 대응
-PREVIEW_DATA_TTL = 300   # preview_data: AI분석 미시작 시 5분 후 정리 (VCM 생성에 60초+ 소요되므로 여유 확보)
+PREVIEW_DATA_TTL = 900   # preview_data: AI분석 미시작 시 15분 후 정리 (배치 테스트 시 VCM v2에 300초+ 소요)
 
 # 만료된 작업의 파일 경로 보존 (task 삭제 후에도 다운로드 가능)
 COMPLETED_FILES: Dict[str, Dict[str, str]] = {}  # task_id → {file_path, filename}
@@ -5843,6 +5844,830 @@ def create_vcm_format(fs_data, excel_filepath=None):
     return vcm_df, display_df, reporting_currency
 
 
+# ============================================================
+# VCM v2: LLM 기반 계정 분류 파이프라인
+# ============================================================
+
+async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unknown', industry=None):
+    """
+    LLM 기반 VCM 포맷 생성 — 하드코딩 키워드 매칭을 LLM 매핑 테이블로 대체.
+
+    핵심 원칙:
+    1. LLM은 매핑만 수행 — 계정과목명만 전달, 숫자 절대 불가
+    2. BS + IS + CF 전체 계정을 LLM에 거침
+    3. 숫자 조립은 코드가 수행
+
+    Args:
+        fs_data: 재무제표 데이터 딕셔너리 {bs, is, cis, cf, notes}
+        excel_filepath: 엑셀 파일 경로
+        company_code: 회사 고유번호 (캐시 키)
+        industry: 업종 정보
+
+    Returns:
+        (vcm_df, display_df, reporting_currency) — create_vcm_format()과 동일한 반환 형식
+    """
+    import re
+    from account_classifier import classify_accounts, _normalize_account_name
+
+    # ========== 1. 데이터 로드 (기존 v1과 동일) ==========
+    bs_df = None
+    is_df = None
+
+    if excel_filepath and os.path.exists(excel_filepath):
+        try:
+            bs_df = pd.read_excel(excel_filepath, sheet_name='재무상태표', engine='openpyxl')
+            try:
+                is_df = pd.read_excel(excel_filepath, sheet_name='손익계산서', engine='openpyxl')
+                has_revenue = False
+                if '계정과목' in is_df.columns:
+                    accounts_str = is_df['계정과목'].astype(str).str.cat(sep=' ')
+                    has_revenue = '매출' in accounts_str or '영업수익' in accounts_str
+                if not has_revenue:
+                    try:
+                        cis_df = pd.read_excel(excel_filepath, sheet_name='포괄손익계산서', engine='openpyxl')
+                        cis_str = cis_df['계정과목'].astype(str).str.cat(sep=' ') if '계정과목' in cis_df.columns else ''
+                        if '매출' in cis_str or '영업수익' in cis_str:
+                            is_df = cis_df
+                    except:
+                        pass
+            except:
+                is_df = pd.read_excel(excel_filepath, sheet_name='포괄손익계산서', engine='openpyxl')
+        except Exception as e:
+            print(f"[VCM-v2] 엑셀 로드 실패: {e}")
+            bs_df = fs_data.get('bs')
+            is_df = fs_data.get('is')
+            if is_df is None or (isinstance(is_df, pd.DataFrame) and is_df.empty):
+                is_df = fs_data.get('cis')
+    else:
+        bs_df = fs_data.get('bs')
+        is_df = fs_data.get('is')
+        if is_df is None or (isinstance(is_df, pd.DataFrame) and is_df.empty):
+            is_df = fs_data.get('cis')
+
+    # IS에 핵심 항목(매출/영업수익)이 없으면 CIS로 대체
+    if is_df is not None and isinstance(is_df, pd.DataFrame) and not is_df.empty:
+        _acc_col = None
+        for _c in ['계정과목', '항목', 'label_ko']:
+            if _c in is_df.columns:
+                _acc_col = _c
+                break
+        if _acc_col:
+            _acc_list = is_df[_acc_col].astype(str).tolist()
+            _has_revenue = any(a.strip() in ('매출액', '매출', '영업수익', '수익(매출액)') or a.strip().endswith('매출액') for a in _acc_list)
+            if not _has_revenue:
+                _cis_df = fs_data.get('cis') if isinstance(fs_data, dict) else None
+                if _cis_df is not None and isinstance(_cis_df, pd.DataFrame) and not _cis_df.empty:
+                    _cis_acc = None
+                    for _c in ['계정과목', '항목', 'label_ko']:
+                        if _c in _cis_df.columns:
+                            _cis_acc = _c
+                            break
+                    if _cis_acc:
+                        _cis_str = _cis_df[_cis_acc].astype(str).str.cat(sep=' ')
+                        if '매출' in _cis_str or '영업수익' in _cis_str:
+                            is_df = _cis_df
+                            print(f"[VCM-v2] IS에 매출/영업수익 항목 없음 → CIS로 대체 ({len(_cis_df)}행)")
+
+    if bs_df is None or is_df is None:
+        print(f"[VCM-v2] 필수 데이터 누락: bs={bs_df is not None}, is={is_df is not None}")
+        return None
+
+    # ★ XBRL 정규화 전에 통화 단위 감지 (튜플 컬럼명에서 Unit: XXX 추출)
+    reporting_currency = 'KRW'
+    exchange_rate = 1.0
+    for df_check in [bs_df, is_df]:
+        if reporting_currency != 'KRW':
+            break
+        for col in df_check.columns:
+            col_str = str(col)
+            unit_match = re.search(r'Unit:\s*(\w+)', col_str)
+            if unit_match:
+                detected_unit = unit_match.group(1).upper()
+                if detected_unit != 'KRW':
+                    reporting_currency = detected_unit
+                    print(f"[VCM-v2] ★ 외화 보고 기업 감지 (XBRL 컬럼): {reporting_currency}")
+                    break
+
+    # XBRL 컬럼 정규화
+    bs_df = normalize_xbrl_columns(bs_df)
+    is_df = normalize_xbrl_columns(is_df)
+
+    # 계정과목 컬럼 찾기
+    def find_acc_col(df):
+        for col in ['계정과목', '항목', 'label_ko', 'label']:
+            if col in df.columns:
+                return col
+        return df.columns[0] if len(df.columns) > 0 else None
+
+    bs_acc_col = find_acc_col(bs_df)
+    is_acc_col = find_acc_col(is_df)
+
+    if not bs_acc_col or not is_acc_col:
+        print(f"[VCM-v2] 계정과목 컬럼 찾기 실패")
+        return None
+
+    # FY 컬럼 찾기 — BS와 IS의 FY 컬럼 합집합 사용
+    bs_fy_set = set(c for c in bs_df.columns if str(c).startswith('FY'))
+    is_fy_set = set(c for c in is_df.columns if str(c).startswith('FY'))
+    all_fy_set = bs_fy_set | is_fy_set
+    fy_cols = sorted(all_fy_set, reverse=True)
+
+    if bs_fy_set != is_fy_set:
+        print(f"[VCM-v2] ★ BS/IS FY 컬럼 불일치! BS={sorted(bs_fy_set)}, IS={sorted(is_fy_set)}, 합집합={sorted(all_fy_set)}")
+
+    if not fy_cols:
+        print(f"[VCM-v2] FY 컬럼 없음: BS={list(bs_df.columns)}, IS={list(is_df.columns)}")
+        return None
+
+    year_cols = [str(c) for c in fy_cols]
+    print(f"[VCM-v2] FY 컬럼: {year_cols}")
+
+    # 외화 환율 감지 (계정과목 행에서 추가 감지)
+    if reporting_currency == 'KRW':
+        for _, row in bs_df.iterrows():
+            acc = str(row.get(bs_acc_col, '')).strip()
+            if '(USD)' in acc or '(CNY)' in acc or '(JPY)' in acc or '(EUR)' in acc:
+                match = re.search(r'\((USD|CNY|JPY|EUR)\)', acc)
+                if match:
+                    reporting_currency = match.group(1)
+                    print(f"[VCM-v2] ★ 외화 보고 기업 감지 (계정과목): {reporting_currency}")
+                rate_match = re.search(r'환율\s*:?\s*([\d,.]+)', acc)
+                if rate_match:
+                    exchange_rate = float(rate_match.group(1).replace(',', ''))
+                break
+
+    # 외화인 경우 환율 조회
+    if reporting_currency != 'KRW' and exchange_rate == 1.0:
+        # fy_col_map 구성 — _get_exchange_rate()는 values가 'FY2024' 형식 문자열 기대
+        fy_col_map = {col: str(col) for col in fy_cols}
+        exchange_rate = _get_exchange_rate(reporting_currency, fy_col_map)
+        print(f"[VCM-v2] 환율 적용: 1 {reporting_currency} = {exchange_rate:,.2f} KRW")
+
+    # ========== 2. 계정명 추출 (숫자 제외, 이름만) ==========
+    bs_accounts = [str(v).strip() for v in bs_df[bs_acc_col].dropna().unique() if str(v).strip()]
+
+    # IS: 주석(notes) 데이터 필터링 — 주석 항목이 IS 항목으로 오분류되는 것 방지
+    _is_notes_filtered = False
+    _full_is_accounts = [str(v).strip() for v in is_df[is_acc_col].dropna().unique() if str(v).strip()]
+    if '분류1' in is_df.columns:
+        # XBRL/DART 데이터: 분류1='포괄손익계산서 [개요]' 또는 '손익계산서'인 행만 사용
+        _main_mask = is_df['분류1'].astype(str).str.contains('손익계산서|포괄손익', na=False)
+        _main_df = is_df[_main_mask]
+        if len(_main_df) >= 5:
+            _main_accounts = [str(v).strip() for v in _main_df[is_acc_col].dropna().unique() if str(v).strip()]
+            if len(_main_accounts) >= 3:
+                is_accounts = _main_accounts
+                _is_notes_filtered = True
+                print(f"[VCM-v2] IS 주석 필터링 (분류1): {len(is_df)}행 → {len(_main_df)}행 (주석 {len(is_df) - len(_main_df)}행 제외)")
+            else:
+                is_accounts = _full_is_accounts
+                print(f"[VCM-v2] IS 주석 필터링 스킵: 분류1 매칭 {len(_main_df)}행이지만 유효 계정 {len(_main_accounts)}개뿐")
+        else:
+            is_accounts = _full_is_accounts
+    elif len(is_df) > 50:
+        # 분류1 없지만 행이 많은 경우: 주당이익 이후 행 제외
+        _cutoff = None
+        for _idx_pos in range(len(is_df)):
+            _acc = str(is_df.iloc[_idx_pos].get(is_acc_col, '')).strip()
+            _norm = re.sub(r'\s', '', _acc)
+            if '주당이익' in _norm or '주당순이익' in _norm or '주당손실' in _norm:
+                _cutoff = _idx_pos
+        if _cutoff is not None and _cutoff < len(is_df) - 5:
+            _main_df = is_df.iloc[:_cutoff + 1]
+            _main_accounts = [str(v).strip() for v in _main_df[is_acc_col].dropna().unique() if str(v).strip()]
+            if len(_main_accounts) >= 3:
+                is_accounts = _main_accounts
+                _is_notes_filtered = True
+                print(f"[VCM-v2] IS 주석 필터링 (position): {len(is_df)}행 → {len(_main_df)}행")
+        else:
+            is_accounts = _full_is_accounts
+    else:
+        is_accounts = _full_is_accounts
+
+    print(f"[VCM-v2] BS 계정 {len(bs_accounts)}개, IS 계정 {len(is_accounts)}개")
+
+    # ========== 3. LLM 분류 (캐시 우선) ==========
+    bs_mapping = await classify_accounts(bs_accounts, 'BS', company_code, industry)
+    is_mapping = await classify_accounts(is_accounts, 'IS', company_code, industry)
+
+    # 매핑을 딕셔너리로 변환 (빠른 조회용)
+    bs_map = {item['raw_name']: item for item in bs_mapping}
+    is_map = {item['raw_name']: item for item in is_mapping}
+
+    # ========== 4. 값 추출 헬퍼 함수 ==========
+    def get_value(df, acc_col, account_name, year_col):
+        """DataFrame에서 특정 계정의 특정 연도 값 추출"""
+        rows = df[df[acc_col].astype(str).str.strip() == account_name]
+        if rows.empty:
+            return None
+        val = rows.iloc[0].get(year_col)
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        try:
+            if isinstance(val, str):
+                val = val.replace(',', '').replace(' ', '').strip()
+                if val.startswith('(') and val.endswith(')'):
+                    val = '-' + val[1:-1]
+                if not val or val == '-':
+                    return None
+                return float(val) * exchange_rate
+            return float(val) * exchange_rate
+        except (ValueError, TypeError):
+            return None
+
+    def normalize(s):
+        """계정명 정규화 (기존 v1 호환)"""
+        if not s:
+            return ''
+        s = re.sub(r'\s', '', str(s))
+        s = re.sub(r'^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+\.', '', s)
+        s = re.sub(r'^[IVX]+\.', '', s)
+        s = re.sub(r'\(주[석\d,\s]*\)', '', s)
+        return s
+
+    # ========== 5. BS 매핑 기반 숫자 조립 ==========
+    all_bs_items_by_year = {}
+
+    for year_col in fy_cols:
+        year_str = str(year_col)
+
+        # 카테고리별 & 그룹별 값 수집
+        category_items = {}  # {category: [{'name': ..., 'value': ...}]}
+        group_totals = {}    # {group: total_value}
+        group_items = {}     # {group: [{'name': ..., 'value': ...}]}
+        totals = {}          # {'자산총계': val, ...}
+
+        for acc_name in bs_accounts:
+            cls = bs_map.get(acc_name)
+            if not cls:
+                continue
+
+            cat = cls.get('standard_category')
+            if not cat:
+                continue
+
+            val = get_value(bs_df, bs_acc_col, acc_name, year_col)
+            if val is None:
+                val = 0
+
+            # 부호 적용
+            if cls.get('sign') == '-' and val > 0:
+                val = -val
+
+            display = cls.get('display_name', normalize(acc_name) or acc_name)
+            group = cls.get('group')
+
+            # total/subtotal 처리
+            if cat == 'total':
+                norm = normalize(acc_name)
+                totals[norm] = val
+                continue
+            elif cat in ('subtotal', 'section_header', 'skip'):
+                # 소계에서 유동자산/비유동자산 등 총계 추출
+                norm = normalize(acc_name)
+                if '유동자산' in norm and '비유동' not in norm:
+                    totals.setdefault('유동자산', val)
+                elif '비유동자산' in norm:
+                    totals.setdefault('비유동자산', val)
+                elif '유동부채' in norm and '비유동' not in norm:
+                    totals.setdefault('유동부채', val)
+                elif '비유동부채' in norm:
+                    totals.setdefault('비유동부채', val)
+                continue
+
+            # 카테고리별 항목 수집
+            if cat not in category_items:
+                category_items[cat] = []
+            category_items[cat].append({'name': display, 'raw_name': acc_name, 'value': val})
+
+            # 그룹 합산
+            if group:
+                if group not in group_totals:
+                    group_totals[group] = 0
+                    group_items[group] = []
+                group_totals[group] += val
+                group_items[group].append({'name': display, 'value': val})
+
+        # ========== BS 구조 조립 ==========
+        bs_items = []
+
+        # 카테고리 → VCM 섹션 매핑
+        section_cat_map = {
+            'current_asset': '유동자산',
+            'non_current_asset': '비유동자산',
+            'current_liability': '유동부채',
+            'non_current_liability': '비유동부채',
+            'equity': '자본',
+        }
+
+        MAX_ITEMS = 6
+
+        for cat_key, section_name in section_cat_map.items():
+            items = category_items.get(cat_key, [])
+            if not items:
+                continue
+
+            # 섹션 총계 결정
+            section_total = totals.get(section_name, sum(i['value'] for i in items))
+
+            bs_items.append((section_name, '', section_total))
+
+            # 그룹별로 항목 정리
+            grouped = {}      # {group_name: {'total': val, 'items': [...]}}
+            ungrouped = []     # group=None인 항목
+
+            for item in items:
+                cls = bs_map.get(item['raw_name'])
+                grp = cls.get('group') if cls else None
+                if grp:
+                    if grp not in grouped:
+                        grouped[grp] = {'total': 0, 'items': []}
+                    grouped[grp]['total'] += item['value']
+                    grouped[grp]['items'].append(item)
+                else:
+                    ungrouped.append(item)
+
+            # 표시할 항목 결정: 그룹 + 개별 합쳐서 금액 큰 순
+            display_candidates = []
+            for grp_name, grp_data in grouped.items():
+                display_candidates.append({
+                    'name': grp_name,
+                    'total': grp_data['total'],
+                    'items': grp_data['items'],
+                    'is_group': True,
+                })
+            for item in ungrouped:
+                display_candidates.append({
+                    'name': item['name'],
+                    'total': item['value'],
+                    'items': [item],
+                    'is_group': False,
+                })
+
+            # 금액 절대값 기준 정렬
+            display_candidates.sort(key=lambda x: abs(x['total']), reverse=True)
+
+            # 상위 MAX_ITEMS개 선택, 나머지는 기타
+            selected = display_candidates[:MAX_ITEMS]
+            overflow = display_candidates[MAX_ITEMS:]
+
+            for cand in selected:
+                cand_name = cand['name']
+                # 비유동 구분이 필요한 경우 표시명 조정
+                if section_name in ('비유동부채',) and cand_name in ('매입채무및기타채무', '기타금융부채', '기타비금융부채'):
+                    cand_name = f"{cand_name}[비유동]"
+                elif section_name == '비유동자산' and cand_name == '매출채권및기타채권':
+                    cand_name = f"{cand_name}[비유동]"
+
+                bs_items.append((cand_name, section_name, cand['total']))
+
+                # 그룹 하위항목 (툴팁용)
+                if cand['is_group'] and len(cand['items']) >= 1:
+                    shown_sum = 0
+                    for sub in sorted(cand['items'], key=lambda x: abs(x['value']), reverse=True)[:5]:
+                        sub_name = sub['name']
+                        if sub_name == cand_name:
+                            sub_name = f"{sub_name}(개별)"
+                        bs_items.append((sub_name, cand_name, sub['value']))
+                        shown_sum += sub['value']
+                    remainder = cand['total'] - shown_sum
+                    if abs(remainder) > 0:
+                        bs_items.append((f"{cand_name}(세부)", cand_name, remainder))
+
+            # 기타 항목 합산
+            if overflow:
+                기타_name = f"기타{section_name}"
+                # 이름 충돌 방지: 이미 같은 이름이 bs_items에 있으면 접미사 추가
+                existing_names = {item[0] for item in bs_items}
+                if 기타_name in existing_names:
+                    기타_name = f"기타{section_name}(합산)"
+                기타_total = sum(c['total'] for c in overflow)
+                if 기타_total and abs(기타_total) > 0:
+                    bs_items.append((기타_name, section_name, 기타_total))
+                    all_overflow_items = []
+                    for c in overflow:
+                        all_overflow_items.extend(c['items'])
+                    sorted_overflow = sorted(all_overflow_items, key=lambda x: abs(x['value']), reverse=True)
+                    shown_sum = 0
+                    for item in sorted_overflow[:5]:
+                        child_name = item['name']
+                        if child_name == 기타_name:
+                            child_name = f"{child_name}(개별)"
+                        bs_items.append((child_name, 기타_name, item['value']))
+                        shown_sum += item['value']
+                    remainder = 기타_total - shown_sum
+                    if abs(remainder) > 0:
+                        bs_items.append((f"{기타_name}(세부)", 기타_name, remainder))
+
+        # 자산총계, 부채총계, 자본총계
+        자산총계 = totals.get('자산총계', 0)
+        부채총계 = totals.get('부채총계', 0)
+        자본총계 = totals.get('자본총계', 0)
+        부채와자본총계 = 부채총계 + 자본총계 if 부채총계 and 자본총계 else totals.get('부채와자본총계', totals.get('부채및자본총계', 0))
+
+        bs_items.append(('자산총계', '', 자산총계))
+        bs_items.append(('부채총계', '', 부채총계))
+        bs_items.append(('자본총계', '', 자본총계))
+        bs_items.append(('부채와자본총계', '', 부채와자본총계))
+
+        # NWC / Net Debt 계산
+        유동자산_total = totals.get('유동자산', 0)
+        유동부채_total = totals.get('유동부채', 0)
+        nwc = 유동자산_total - 유동부채_total
+
+        유동차입 = group_totals.get('유동차입부채', 0)
+        비유동차입 = group_totals.get('비유동차입부채', 0)
+        현금 = 0
+        단기투자 = 0
+        for item in category_items.get('current_asset', []):
+            cls = bs_map.get(item['raw_name'])
+            if cls:
+                grp = cls.get('group')
+                norm = normalize(item['raw_name'])
+                if '현금' in norm and '현금성' in norm:
+                    현금 += item['value']
+                elif grp == '단기투자자산':
+                    단기투자 += item['value']
+
+        net_debt = 유동차입 + 비유동차입 - 현금 - 단기투자
+
+        bs_items.append(('NWC', '', nwc))
+        bs_items.append(('유동자산 [NWC]', 'NWC', 유동자산_total))
+        bs_items.append(('유동부채 [NWC]', 'NWC', 유동부채_total))
+
+        bs_items.append(('Net Debt', '', net_debt))
+        bs_items.append(('유동차입부채 [NetDebt]', 'Net Debt', 유동차입))
+        bs_items.append(('비유동차입부채 [NetDebt]', 'Net Debt', 비유동차입))
+        bs_items.append(('현금및현금성자산 [NetDebt]', 'Net Debt', -현금))
+        bs_items.append(('단기투자자산 [NetDebt]', 'Net Debt', -단기투자))
+
+        all_bs_items_by_year[year_str] = bs_items
+
+    # ========== 6. IS 매핑 기반 숫자 조립 ==========
+    # IS는 기존 v1 방식과 동일한 rows 구조 생성
+    is_rows = []
+
+    for year_col in fy_cols:
+        year_str = str(year_col)
+
+        # IS 항목별 값 추출
+        is_values = {}  # {category: [{'name': ..., 'value': ..., 'group': ...}]}
+
+        for acc_name in is_accounts:
+            cls = is_map.get(acc_name)
+            if not cls:
+                continue
+
+            cat = cls.get('standard_category')
+            if not cat or cat in ('section_header', 'skip'):
+                continue
+
+            val = get_value(is_df, is_acc_col, acc_name, year_col)
+            if val is None:
+                val = 0
+
+            # 부호 적용 — 집계/합계 행에만 적용 (당기순손실, 영업손실 등)
+            # 개별 비용/수익 항목(other_expense, other_income 등)은 부호 무시
+            sign_applicable_cats = ('net_income', 'operating_income', 'ebt', 'gross_profit')
+            if cls.get('sign') == '-' and val > 0 and cat in sign_applicable_cats:
+                val = -val
+
+            display = cls.get('display_name', normalize(acc_name) or acc_name)
+            group = cls.get('group')
+
+            if cat not in is_values:
+                is_values[cat] = []
+            is_values[cat].append({
+                'name': display,
+                'raw_name': acc_name,
+                'value': val,
+                'group': group,
+            })
+
+        # 주요 IS 항목 추출
+        def get_cat_total(cat_name):
+            items = is_values.get(cat_name, [])
+            # subtotal/total 행이 있으면 그 값 사용
+            for item in items:
+                cls = is_map.get(item['raw_name'])
+                if cls and cls.get('standard_category') in ('subtotal', 'total'):
+                    return item['value']
+            # 없으면 합산
+            return sum(i['value'] for i in items) if items else 0
+
+        def get_cat_first(cat_name):
+            items = is_values.get(cat_name, [])
+            if not items:
+                return 0
+            # 여러 항목이 있으면 sign '+'인 항목 우선 (당기순이익(손실) vs 당기순손실 구분)
+            if len(items) > 1:
+                for item in items:
+                    cls = is_map.get(item['raw_name'])
+                    if cls and cls.get('sign') == '+' and item['value'] != 0:
+                        return item['value']
+            # 0이 아닌 첫 번째 값 반환
+            for item in items:
+                if item['value'] != 0:
+                    return item['value']
+            return items[0]['value']
+
+        매출 = get_cat_first('revenue') or 0
+        원가 = get_cat_first('cogs') or 0
+        매출총이익_direct = get_cat_first('gross_profit')
+        매출총이익 = 매출총이익_direct if 매출총이익_direct else (매출 - 원가)
+
+        # 판관비: sga 카테고리에서 합계행과 상세항목 분리
+        sga_items = is_values.get('sga', [])
+        판관비 = 0
+        sga_details = []
+        for item in sga_items:
+            cls = is_map.get(item['raw_name'])
+            grp = cls.get('group') if cls else None
+            if grp == 'sga_detail':
+                sga_details.append(item)
+            elif grp is None:
+                # 합계행
+                판관비 = item['value']
+
+        if not 판관비 and sga_details:
+            판관비 = sum(i['value'] for i in sga_details)
+
+        영업이익_direct = get_cat_first('operating_income')
+        영업이익 = 영업이익_direct if 영업이익_direct else (매출총이익 - 판관비)
+
+        금융수익 = get_cat_total('interest_income') or 0
+        금융비용 = get_cat_total('interest_expense') or 0
+        기타수익 = get_cat_total('other_income') or 0
+        기타비용 = get_cat_total('other_expense') or 0
+
+        영업외수익 = 금융수익 + 기타수익
+        영업외비용 = 금융비용 + 기타비용
+
+        세전이익_direct = get_cat_first('ebt')
+        세전이익 = 세전이익_direct if 세전이익_direct else (영업이익 + 영업외수익 - 영업외비용)
+
+        법인세 = get_cat_first('tax') or 0
+
+        당기순이익_direct = get_cat_first('net_income')
+        당기순이익 = 당기순이익_direct if 당기순이익_direct else (세전이익 - 법인세)
+
+        # 주석 필터링된 경우, 당기순이익이 0이면 전체 IS에서 당기순이익/당기순손실 검색
+        if _is_notes_filtered and 당기순이익 == 0:
+            for _acc in _full_is_accounts:
+                _norm = re.sub(r'\s', '', _acc)
+                if '당기순이익' in _norm or '당기순손실' in _norm or '당기순손익' in _norm:
+                    _val = get_value(is_df, is_acc_col, _acc, year_col)
+                    if _val is not None and _val != 0:
+                        if '손실' in _norm and _val > 0:
+                            _val = -_val
+                        당기순이익 = _val
+                        print(f"[VCM-v2] 당기순이익 주석에서 복구: {_acc} = {_val:,.0f} ({year_str})")
+                        break
+
+        # % of Sales 계산
+        매출총이익_pct = 매출총이익 / 매출 if 매출 else None
+        영업이익_pct = 영업이익 / 매출 if 매출 else None
+        당기순이익_pct = 당기순이익 / 매출 if 매출 else None
+
+        # 감가상각비 (EBITDA용) — SGA에서 추출
+        감가상각비 = 0
+        무형자산상각비 = 0
+        for item in sga_details:
+            norm = normalize(item['name'])
+            if '감가상각' in norm and '무형' not in norm:
+                감가상각비 += item['value']
+            elif '무형자산상각' in norm or '상각비' in norm:
+                무형자산상각비 += item['value']
+
+        EBITDA = 영업이익 + 감가상각비 + 무형자산상각비
+
+        # IS rows 빌드
+        values = {
+            '매출': 매출,
+            '매출원가': 원가,
+            '매출총이익': 매출총이익,
+            '% of Sales': 매출총이익_pct,
+            '판매비와관리비': 판관비,
+            '영업이익': 영업이익,
+            '% of Sales (영업이익)': 영업이익_pct,
+            '영업외수익': 영업외수익,
+            '영업외비용': 영업외비용,
+            '법인세비용차감전이익': 세전이익,
+            '법인세비용': 법인세 if 법인세 else None,
+            '당기순이익': 당기순이익,
+            '% of Sales (순이익)': 당기순이익_pct,
+            'EBITDA': EBITDA,
+        }
+
+        # 판관비 상세항목 추가 (상위 6개)
+        sga_sorted = sorted(sga_details, key=lambda x: abs(x['value']), reverse=True)
+
+        # 인건비 그룹 합산
+        인건비_items = [i for i in sga_details if is_map.get(i['raw_name'], {}).get('group') == '인건비'
+                       or '인건비' in i['name']]
+        인건비_total = sum(i['value'] for i in 인건비_items)
+        non_인건비 = [i for i in sga_sorted if i not in 인건비_items]
+
+        sga_display = []
+        if 인건비_total:
+            sga_display.append(('  인건비', 인건비_total))
+        for item in non_인건비[:5]:
+            sga_display.append((f"  {item['name']}", item['value']))
+
+        # 기타판관비
+        shown_sga = 인건비_total + sum(i['value'] for i in non_인건비[:5])
+        기타판관비 = 판관비 - shown_sga if 판관비 and shown_sga else 0
+        if 기타판관비 and abs(기타판관비) > 0:
+            sga_display.append(('  기타판매비와관리비', 기타판관비))
+
+        for name, val in sga_display:
+            values[name] = val
+
+        # 영업외 상세
+        for cat_key, parent_name in [('interest_income', '영업외수익'), ('other_income', '영업외수익'),
+                                      ('interest_expense', '영업외비용'), ('other_expense', '영업외비용')]:
+            for item in is_values.get(cat_key, []):
+                values[f"  {item['name']}"] = item['value']
+
+        # 첫 연도에 행 구조 생성
+        if not is_rows:
+            # 기본 IS 구조
+            is_row_order = ['매출', '매출원가', '매출총이익', '% of Sales', '판매비와관리비']
+            for name, val in sga_display:
+                is_row_order.append(name)
+            is_row_order.extend([
+                '영업이익', '% of Sales (영업이익)',
+                '영업외수익',
+            ])
+            for item in is_values.get('interest_income', []) + is_values.get('other_income', []):
+                is_row_order.append(f"  {item['name']}")
+            is_row_order.append('영업외비용')
+            for item in is_values.get('interest_expense', []) + is_values.get('other_expense', []):
+                is_row_order.append(f"  {item['name']}")
+            is_row_order.extend([
+                '법인세비용차감전이익', '법인세비용', '당기순이익',
+                '% of Sales (순이익)', 'EBITDA',
+            ])
+
+            for name in is_row_order:
+                parent = ''
+                if name.startswith('  '):
+                    # 부모 결정
+                    clean = name.strip()
+                    if any(clean in str(i.get('name', '')) for i in is_values.get('interest_income', []) + is_values.get('other_income', [])):
+                        parent = '영업외수익'
+                    elif any(clean in str(i.get('name', '')) for i in is_values.get('interest_expense', []) + is_values.get('other_expense', [])):
+                        parent = '영업외비용'
+                    elif '인건비' in clean or any(clean in str(i.get('name', '')) for i in sga_details):
+                        parent = '판매비와관리비'
+                is_rows.append({'항목': name, '부모': parent})
+
+        # 값 채우기
+        for row in is_rows:
+            name = row['항목']
+            if name in values:
+                val = values[name]
+                if val is not None and val != 0:
+                    if '% of Sales' in name:
+                        row[year_str] = val
+                    else:
+                        row[year_str] = round(val)
+                else:
+                    row[year_str] = None
+
+    # ========== 7. BS 마스터 순서 결정 및 값 병합 ==========
+    master_order = []
+    master_order_set = set()
+
+    for year_str in sorted(all_bs_items_by_year.keys(), reverse=True):
+        bs_items = all_bs_items_by_year[year_str]
+        if not master_order:
+            for item_name, parent, val in bs_items:
+                if item_name not in master_order_set:
+                    master_order.append((item_name, parent))
+                    master_order_set.add(item_name)
+        else:
+            insert_idx = 0
+            for item_name, parent, val in bs_items:
+                if item_name not in master_order_set:
+                    master_order.insert(insert_idx, (item_name, parent))
+                    master_order_set.add(item_name)
+                else:
+                    for i, (name, _) in enumerate(master_order):
+                        if name == item_name:
+                            insert_idx = i
+                            break
+                insert_idx += 1
+
+    bs_rows = []
+    item_to_row = {}
+    for item_name, parent in master_order:
+        row = {'항목': item_name, '부모': parent}
+        bs_rows.append(row)
+        item_to_row[item_name] = row
+
+    for year_str, bs_items in all_bs_items_by_year.items():
+        for item_name, parent, val in bs_items:
+            if item_name in item_to_row:
+                item_to_row[item_name][year_str] = round(val) if val is not None and val != 0 else None
+
+    # 빈 행 필터링
+    filtered_bs_rows = [r for r in bs_rows
+                        if any(r.get(y) is not None and r.get(y) != 0 for y in year_cols)]
+    filtered_is_rows = [r for r in is_rows
+                        if any(r.get(y) is not None and r.get(y) != 0 for y in year_cols)]
+
+    all_rows = filtered_bs_rows + filtered_is_rows
+
+    # ========== 8. 타입 컬럼 추가 ==========
+    sections_with_subitems = [
+        '유동자산', '비유동자산', '유동부채', '비유동부채', '자본',
+        '매출', '매출원가', '판매비와관리비', '영업외수익', '영업외비용'
+    ]
+
+    for row in all_rows:
+        name = row.get('항목', '').strip()
+        parent = (row.get('부모') or '').strip()
+
+        highlight_items = ['영업이익', '당기순이익', 'EBITDA']
+        total_items = ['매출총이익', '자산총계', '부채총계', '자본총계', '부채와자본총계',
+                       '법인세비용차감전이익', 'NWC', 'Net Debt']
+        category_items_list = ['유동자산', '비유동자산', '유동부채', '비유동부채', '자본',
+                          '매출', '매출원가', '판매비와관리비', '영업외수익', '영업외비용',
+                          '유동자산 [NWC]', '유동부채 [NWC]',
+                          '유동차입부채 [NetDebt]', '비유동차입부채 [NetDebt]',
+                          '현금및현금성자산 [NetDebt]', '단기투자자산 [NetDebt]']
+
+        if name in highlight_items:
+            row['타입'] = 'highlight'
+        elif name in total_items:
+            row['타입'] = 'total'
+        elif name == '% of Sales' or name.startswith('%'):
+            row['타입'] = 'percent'
+        elif name in category_items_list:
+            row['타입'] = 'category'
+        elif parent in sections_with_subitems or name.startswith('  '):
+            row['타입'] = 'subitem'
+        else:
+            row['타입'] = 'item'
+
+    # ========== 9. Financials 시트 생성 (백만원 변환) ==========
+    display_rows = []
+    unit_divisor = 1000000
+
+    for row in all_rows:
+        item_name = row.get('항목', '')
+        item_type = row.get('타입', 'item')
+        item_parent = row.get('부모', '')
+
+        if '[NWC]' in item_name or '[NetDebt]' in item_name:
+            continue
+
+        if not item_parent or not str(item_parent).strip():
+            pass
+        elif str(item_parent).strip() in sections_with_subitems:
+            pass
+        else:
+            continue
+
+        has_any_value = any(row.get(col) is not None and row.get(col) != 0 for col in year_cols)
+        if not has_any_value:
+            continue
+
+        display_row = {'항목': item_name}
+        for col in year_cols:
+            val = row.get(col)
+            if val is not None and val != 0:
+                if item_type == 'percent':
+                    if isinstance(val, (int, float)):
+                        if abs(val) <= 10:
+                            display_row[col] = f"{val * 100:.1f}%"
+                        else:
+                            display_row[col] = f"{val:.1f}%"
+                    else:
+                        display_row[col] = val
+                else:
+                    converted = val / unit_divisor
+                    rounded = round(converted)
+                    display_row[col] = f"{rounded:,}" if rounded != 0 else ''
+            else:
+                display_row[col] = ''
+
+        has_display = any(display_row.get(col) not in (None, '', 0) for col in year_cols)
+        if has_display:
+            display_rows.append(display_row)
+
+    # DataFrame 생성
+    vcm_df = pd.DataFrame(all_rows)
+    cols_order = ['항목', '타입', '부모'] + [c for c in vcm_df.columns if c not in ['항목', '타입', '부모']]
+    vcm_df = vcm_df[[c for c in cols_order if c in vcm_df.columns]]
+
+    display_df = pd.DataFrame(display_rows)
+
+    print(f"[VCM-v2] 완료: Frontdata {len(vcm_df)}행, Financials {len(display_df)}행")
+    return vcm_df, display_df, reporting_currency
+
+
 def normalize_xbrl_columns(df):
     """XBRL 형식의 복잡한 튜플 컬럼을 간단한 문자열로 변환"""
     if df is None or df.empty:
@@ -6815,7 +7640,7 @@ async def run_financial_analysis(task_id: str):
                 user_id=task.get('user_id'),
                 corp_code=task.get('corp_code', ''),
                 corp_name=task.get('corp_name', ''),
-                model_name=token_info.get('model', 'gemini-2.5-pro'),
+                model_name=token_info.get('model', 'gemini-3.1-pro-preview'),
                 input_tokens=token_info.get('input_tokens', 0),
                 output_tokens=token_info.get('output_tokens', 0),
                 cost=token_info.get('cost', 0),
@@ -6840,7 +7665,7 @@ async def run_financial_analysis(task_id: str):
                     user_id=task.get('user_id'),
                     corp_code=task.get('corp_code', ''),
                     corp_name=task.get('corp_name', ''),
-                    model_name=token_info.get('model', 'gemini-2.5-pro'),
+                    model_name=token_info.get('model', 'gemini-3.1-pro-preview'),
                     input_tokens=token_info.get('input_tokens', 0),
                     output_tokens=token_info.get('output_tokens', 0),
                     cost=token_info.get('cost', 0),
@@ -8023,6 +8848,172 @@ async def delete_task(task_id: str):
         del TASKS[task_id]
 
     return {"success": True}
+
+
+# ============================================================
+# VCM v2: LLM 기반 분류 비교 API
+# ============================================================
+
+@app.post("/api/vcm-v2/{task_id}")
+async def run_vcm_v2(task_id: str):
+    """VCM v2(LLM 분류) 실행 — 기존 v1 결과와 비교용"""
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    fs_data = task.get('fs_data')
+    if not fs_data:
+        raise HTTPException(status_code=400, detail="No financial data")
+
+    company_code = task.get('corp_code', 'unknown')
+    industry = task.get('industry')
+    excel_filepath = task.get('file_path')
+
+    try:
+        result = await create_vcm_format_v2(
+            fs_data, excel_filepath, company_code, industry
+        )
+
+        if result is None:
+            return {"success": False, "error": "VCM v2 생성 실패"}
+
+        vcm_df, display_df, currency = result
+
+        # JSON 변환
+        vcm_v2 = safe_dataframe_to_json(vcm_df) if vcm_df is not None else []
+        display_v2 = safe_dataframe_to_json(display_df) if display_df is not None else []
+
+        return {
+            "success": True,
+            "vcm_v2": vcm_v2,
+            "display_v2": display_v2,
+            "currency": currency,
+            "stats": {
+                "frontdata_rows": len(vcm_v2),
+                "financials_rows": len(display_v2),
+            }
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
+@app.post("/api/vcm-compare/{task_id}")
+async def compare_vcm_v1_v2(task_id: str):
+    """VCM v1(하드코딩) vs v2(LLM) 비교 API"""
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # v1 결과 (이미 생성된 것)
+    v1_data = task.get('preview_data', {}).get('vcm_display', [])
+
+    # v2 실행
+    fs_data = task.get('fs_data')
+    if not fs_data:
+        raise HTTPException(status_code=400, detail="No financial data")
+
+    company_code = task.get('corp_code', 'unknown')
+    industry = task.get('industry')
+    excel_filepath = task.get('file_path')
+
+    try:
+        result = await create_vcm_format_v2(
+            fs_data, excel_filepath, company_code, industry
+        )
+
+        if result is None:
+            return {"success": False, "error": "VCM v2 생성 실패"}
+
+        vcm_df, display_df, currency = result
+        v2_data = safe_dataframe_to_json(display_df) if display_df is not None else []
+
+        # 비교: 공통 항목의 값 차이
+        v1_by_name = {r.get('항목', ''): r for r in v1_data}
+        v2_by_name = {r.get('항목', ''): r for r in v2_data}
+
+        all_names = set(v1_by_name.keys()) | set(v2_by_name.keys())
+        diffs = []
+        matches = 0
+        total = 0
+
+        def to_numeric(val):
+            """값을 숫자로 변환 (백만원 기준)"""
+            if val is None:
+                return None
+            if isinstance(val, (int, float)):
+                if pd.isna(val):
+                    return None
+                return round(val)
+            s = str(val).strip()
+            if not s or s == '':
+                return None
+            try:
+                return int(float(s.replace(',', '').replace(' ', '')))
+            except (ValueError, TypeError):
+                return None
+
+        for name in sorted(all_names):
+            if not name or name.startswith('%'):
+                continue
+
+            v1_row = v1_by_name.get(name, {})
+            v2_row = v2_by_name.get(name, {})
+
+            # FY 컬럼을 v1과 v2 모두에서 수집
+            fy_keys = set()
+            for key in v1_row:
+                if key.startswith('FY'):
+                    fy_keys.add(key)
+            for key in v2_row:
+                if key.startswith('FY'):
+                    fy_keys.add(key)
+
+            for key in sorted(fy_keys):
+                v1_raw = v1_row.get(key, '')
+                v2_raw = v2_row.get(key, '')
+
+                v1_num = to_numeric(v1_raw)
+                v2_num = to_numeric(v2_raw)
+
+                total += 1
+                # 둘 다 None이면 일치, 둘 다 숫자면 값 비교 (±1 허용)
+                if v1_num is None and v2_num is None:
+                    matches += 1
+                elif v1_num is not None and v2_num is not None and abs(v1_num - v2_num) <= 1:
+                    matches += 1
+                else:
+                    diffs.append({
+                        'item': name,
+                        'year': key,
+                        'v1': v1_num,
+                        'v2': v2_num,
+                    })
+
+        match_rate = matches / total * 100 if total else 0
+
+        return {
+            "success": True,
+            "total_cells": total,
+            "matches": matches,
+            "match_rate": f"{match_rate:.1f}%",
+            "diffs": diffs[:50],  # 상위 50개만
+            "v1_items": len(v1_data),
+            "v2_items": len(v2_data),
+            "only_in_v1": [n for n in v1_by_name if n not in v2_by_name and n],
+            "only_in_v2": [n for n in v2_by_name if n not in v1_by_name and n],
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 
 # ============================================================
