@@ -411,15 +411,54 @@ class DartFinancialExtractor:
             soup = BeautifulSoup(html, 'html.parser')
             tables = soup.find_all('table')
 
-            # 가장 큰 테이블 찾기 (메인 재무제표 테이블)
+            # 재무제표 유형별 키워드 (테이블 내용 검증용)
+            fs_keywords = {
+                'is': ['매출액', '매출', '영업이익', '영업손실', '당기순이익', '당기순손실', '매출원가', '판매비', '법인세'],
+                'bs': ['자산총계', '부채총계', '자본총계', '유동자산', '비유동자산', '현금및현금성자산'],
+                'cf': ['영업활동', '투자활동', '재무활동', '현금의증가', '기초현금'],
+            }
+            # 주석/비재무 테이블 감지 키워드
+            notes_keywords = ['지분율', '소유율', '연결범위', '보고주체', '종속기업', '관계기업', '지배기업']
+
+            keywords = fs_keywords.get(fs_type, [])
+
+            # 1차: 키워드 매칭으로 재무제표 테이블 찾기
+            # 2차 폴백: 가장 큰 테이블 (기존 로직)
             main_table = None
             max_rows = 0
+            best_keyword_table = None
+            best_keyword_rows = 0
 
             for table in tables:
                 dfs = pd.read_html(StringIO(str(table)))
-                if dfs and len(dfs[0]) > max_rows:
-                    max_rows = len(dfs[0])
-                    main_table = dfs[0]
+                if not dfs or dfs[0].empty:
+                    continue
+                df_candidate = dfs[0]
+                row_count = len(df_candidate)
+
+                # 가장 큰 테이블 추적 (폴백용)
+                if row_count > max_rows:
+                    max_rows = row_count
+                    main_table = df_candidate
+
+                # 키워드 기반 테이블 검증
+                if keywords:
+                    first_col_text = ' '.join(df_candidate.iloc[:, 0].dropna().astype(str).tolist())
+                    keyword_hits = sum(1 for kw in keywords if kw in first_col_text)
+                    notes_hits = sum(1 for kw in notes_keywords if kw in first_col_text)
+
+                    # 주석 테이블이면 스킵
+                    if notes_hits >= 2:
+                        continue
+
+                    # 키워드 2개 이상 매칭 + 가장 큰 테이블
+                    if keyword_hits >= 2 and row_count > best_keyword_rows:
+                        best_keyword_rows = row_count
+                        best_keyword_table = df_candidate
+
+            # 키워드 매칭 테이블 우선, 없으면 가장 큰 테이블 폴백
+            if best_keyword_table is not None:
+                main_table = best_keyword_table
 
             if main_table is None or main_table.empty:
                 return None

@@ -47,7 +47,7 @@ TASKS_LOCK = threading.Lock()
 # 메모리 정리 설정
 TASK_IDLE_TIMEOUT = 120  # 진행 중 작업: 2분간 status 조회 없으면 취소
 TASK_COMPLETED_TTL = 1800  # 완료된 작업: 30분 후 전체 삭제 (파일은 유지) — 브라우저 절전모드 대응
-PREVIEW_DATA_TTL = 900   # preview_data: AI분석 미시작 시 15분 후 정리 (배치 테스트 시 VCM v2에 300초+ 소요)
+PREVIEW_DATA_TTL = 900   # preview_data: AI분석 미시작 시 900초 후 정리
 
 # 만료된 작업의 파일 경로 보존 (task 삭제 후에도 다운로드 가능)
 COMPLETED_FILES: Dict[str, Dict[str, str]] = {}  # task_id → {file_path, filename}
@@ -1233,8 +1233,11 @@ async def extract_financial_data(
         cis_valid = cis_df is not None and hasattr(cis_df, 'empty') and not cis_df.empty
         print(f"[EXTRACT] is_empty={is_empty}, cis_valid={cis_valid}")
 
-        # IS와 CIS 병합 로직
-        if is_empty and cis_valid:
+        # IS와 CIS 병합 로직 (HTML IS 폴백 사용 시 병합 안함 — 단위 불일치 방지)
+        _html_is_used = fs_data.pop('_html_is_used', False)
+        if _html_is_used:
+            print(f"[EXTRACT] HTML IS 폴백 사용 → IS/CIS 병합 건너뜀 (단위 불일치 방지)")
+        elif is_empty and cis_valid:
             # IS가 완전히 비어있으면 CIS로 시작
             fs_data['is'] = fs_data['cis']
             print(f"[EXTRACT] IS 데이터 없음, CIS를 IS로 사용")
@@ -1326,13 +1329,36 @@ async def extract_financial_data(
                     import pandas as pd
                     base_df = fs_data[target_key]
 
+                    # 원본 IS 행 수 기준 (주석 필터링용)
+                    base_row_count = len(base_df)
+                    # 자회사/관계기업 목록 감지 키워드
+                    subsidiary_keywords = ['지분율', '소유율', '연결범위', '종속기업', '관계기업', '지배기업', '피투자', '공동기업', '지분법']
+
                     for note in is_notes:
                         try:
                             note_df = note['df']
                             if note_df is not None and not note_df.empty:
                                 print(f"[EXTRACT] IS 주석 병합: shape={note_df.shape}")
+
+                                # ★ 자회사 목록 등 비재무 주석 필터링
+                                if len(note_df) > max(base_row_count * 3, 50):
+                                    note_name = note.get('name', '')
+                                    print(f"[EXTRACT] IS 주석 스킵 (대규모 테이블): {len(note_df)}행 > 원본 {base_row_count}행*3, name={note_name[:60]}")
+                                    continue
+
+                                col_text = ' '.join(str(c) for c in note_df.columns)
+                                if any(kw in col_text for kw in subsidiary_keywords):
+                                    print(f"[EXTRACT] IS 주석 스킵 (자회사 테이블)")
+                                    continue
+
                                 # 계정과목 컬럼이 있는지 확인
                                 if '계정과목' in note_df.columns:
+                                    account_text = ' '.join(note_df['계정과목'].dropna().astype(str).tolist())
+                                    sub_hits = sum(1 for kw in subsidiary_keywords if kw in account_text)
+                                    if sub_hits >= 2:
+                                        print(f"[EXTRACT] IS 주석 스킵 (자회사 계정과목): {sub_hits}개 키워드 매칭")
+                                        continue
+
                                     # 기존 계정과목 목록
                                     existing_accounts = set(base_df['계정과목'].values) if '계정과목' in base_df.columns else set()
                                     # 새로운 계정과목만 추가
@@ -1352,10 +1378,17 @@ async def extract_financial_data(
                 if not task['preview_data'].get('is'):
                     task['preview_data']['is'] = []
                 merged_is_data = list(task['preview_data']['is'])
+                preview_base_count = len(merged_is_data)
                 for note in is_notes:
                     try:
                         note_df = note['df']
                         if note_df is not None and not note_df.empty:
+                            # 대규모 주석 스킵 (자회사 목록 등)
+                            if len(note_df) > max(preview_base_count * 3, 50):
+                                continue
+                            col_text = ' '.join(str(c) for c in note_df.columns)
+                            if any(kw in col_text for kw in subsidiary_keywords):
+                                continue
                             note_json = safe_dataframe_to_json(note_df)
                             existing_accounts = {row.get('계정과목', '') for row in merged_is_data}
                             for row in note_json:
@@ -1555,10 +1588,10 @@ async def extract_financial_data(
             except Exception as e:
                 print(f"[EXTRACT] Excel preview_data 재생성 실패: {e}")
         else:
-            print(f"[EXTRACT] Excel 파일 없음 - VCM 데이터 직접 생성 시도...")
-            # Excel 파일이 없을 때 fs_data에서 직접 VCM 데이터 생성
+            print(f"[EXTRACT] Excel 파일 없음 - VCM V2 데이터 직접 생성 시도...")
+            # Excel 파일이 없을 때 fs_data에서 직접 VCM 데이터 생성 (V2 LLM 분류)
             try:
-                vcm_result = create_vcm_format(fs_data, None)
+                vcm_result = await create_vcm_format_v2(fs_data, None, corp_code, task.get('industry'))
                 if isinstance(vcm_result, tuple) and len(vcm_result) == 3:
                     vcm_df, display_df, vcm_currency = vcm_result
                 elif isinstance(vcm_result, tuple):
@@ -1847,6 +1880,117 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                             print(f"[FS] 사업보고서 [{rpt_idx}] 처리: {rpt.report_nm} → 보고서연도={rpt_year}")
 
                             html_notes = extract_fs_from_pages(rpt, rpt_year)
+
+                            # ★ 사업보고서 HTML IS/CIS 폴백: XBRL IS에 매출이 없을 때 사용
+                            # 모든 사업보고서에서 HTML IS 수집 (이전 연도 커버)
+                            if html_notes:
+                                if rpt_idx == 0:
+                                    print(f"[FS] HTML IS 폴백 체크: html_notes keys={list(html_notes.keys())}")
+                                for _fst in ['is', 'cis']:
+                                    _html_df = html_notes.get(_fst)
+                                    if rpt_idx == 0:
+                                        print(f"[FS] HTML {_fst}: {'있음 '+str(len(_html_df))+'행' if _html_df is not None and hasattr(_html_df, '__len__') else 'None'}")
+                                    if _html_df is not None and not _html_df.empty and len(_html_df) >= 5:
+                                        # 첫 번째 보고서에서만 폴백 필요 여부 확인
+                                        if rpt_idx == 0:
+                                            _current_is = fs_data.get('is')
+                                            _need_fallback = False
+                                            if _current_is is not None and not _current_is.empty:
+                                                _acc_col = None
+                                                for _c in ['계정과목', '항목', 'label_ko']:
+                                                    if _c in _current_is.columns:
+                                                        _acc_col = _c
+                                                        break
+                                                if _acc_col:
+                                                    _acc_text = ' '.join(_current_is[_acc_col].dropna().astype(str).tolist())
+                                                    _has_revenue = '매출' in _acc_text or '영업수익' in _acc_text or '영업이익' in _acc_text
+                                                    print(f"[FS] IS 핵심계정 체크: acc_col={_acc_col}, has_revenue={_has_revenue}, IS행수={len(_current_is)}, 샘플={_acc_text[:100]}")
+                                                    if not _has_revenue:
+                                                        _need_fallback = True
+                                                else:
+                                                    print(f"[FS] IS 계정과목 컬럼 없음: columns={list(_current_is.columns)[:5]}")
+                                                    _need_fallback = True
+                                            elif _current_is is None or _current_is.empty:
+                                                _need_fallback = True
+
+                                            if _need_fallback:
+                                                fs_data['_html_is_need_fallback'] = True
+                                            else:
+                                                break  # 폴백 불필요하면 IS 체크 스킵
+
+                                        # 폴백 필요 확인된 경우 (첫 보고서에서 결정됨), 모든 보고서에서 HTML IS 수집
+                                        if fs_data.get('_html_is_need_fallback'):
+                                            _html_acc_col = None
+                                            for _c in _html_df.columns:
+                                                if 'label' in str(_c).lower() or '계정' in str(_c) or '항목' in str(_c):
+                                                    _html_acc_col = _c
+                                                    break
+                                            if _html_acc_col is None and len(_html_df.columns) > 0:
+                                                _html_acc_col = _html_df.columns[0]
+                                            if _html_acc_col:
+                                                _html_text = ' '.join(_html_df[_html_acc_col].dropna().astype(str).tolist())
+                                                if '매출' in _html_text or '영업수익' in _html_text:
+                                                    if '_html_is_backups' not in fs_data:
+                                                        fs_data['_html_is_backups'] = []
+                                                        fs_data['_html_is_type'] = _fst
+                                                    fs_data['_html_is_backups'].append({
+                                                        'df': _html_df,
+                                                        'report_year': rpt_year,
+                                                        'type': _fst
+                                                    })
+                                                    print(f"[FS] ★ 사업보고서[{rpt_idx}] HTML {_fst} 백업 저장 ({len(_html_df)}행, 매출 포함, 보고서연도={rpt_year})")
+                                                    break  # is/cis 중 하나만
+
+                            # ★ 사업보고서 HTML BS 폴백: XBRL BS에 최신 FY 데이터가 없을 때 사용
+                            if html_notes:
+                                _html_bs_df = html_notes.get('bs')
+                                _bs_len = len(_html_bs_df) if _html_bs_df is not None and hasattr(_html_bs_df, '__len__') else 0
+                                if rpt_idx == 0:
+                                    print(f"[FS] HTML BS 체크: {'있음 '+str(_bs_len)+'행' if _html_bs_df is not None else 'None'}")
+                                if _html_bs_df is not None and not _html_bs_df.empty and _bs_len >= 3:
+                                    # 첫 보고서에서 BS 폴백 필요 여부 판정
+                                    if rpt_idx == 0:
+                                        _current_bs = fs_data.get('bs')
+                                        _bs_need_fallback = False
+                                        _rpt_yr = int(end_date[:4]) - 1
+                                        _latest_bs_fy = f'FY{_rpt_yr}'
+                                        if _current_bs is not None and not _current_bs.empty:
+                                            _bs_norm_chk = normalize_xbrl_columns(_current_bs.copy())
+                                            _bs_acc = None
+                                            for _c in ['계정과목', '항목', 'label_ko']:
+                                                if _c in _bs_norm_chk.columns:
+                                                    _bs_acc = _c
+                                                    break
+                                            if _bs_acc and _latest_bs_fy in _bs_norm_chk.columns:
+                                                _asset_mask = _bs_norm_chk[_bs_acc].astype(str).str.contains('자산총계', na=False)
+                                                _asset_rows = _bs_norm_chk[_asset_mask]
+                                                if not _asset_rows.empty:
+                                                    _av = _asset_rows.iloc[0].get(_latest_bs_fy)
+                                                    if _av is None or (hasattr(_av, '__float__') and pd.isna(_av)):
+                                                        _bs_need_fallback = True
+                                                        print(f"[FS] ★ BS 자산총계 {_latest_bs_fy}=None → HTML BS 폴백 필요")
+                                                else:
+                                                    _bs_need_fallback = True
+                                                    print(f"[FS] ★ BS에 자산총계 행 없음 → HTML BS 폴백 필요")
+                                            elif _bs_acc and _latest_bs_fy not in _bs_norm_chk.columns:
+                                                _bs_need_fallback = True
+                                                print(f"[FS] ★ BS에 {_latest_bs_fy} 컬럼 없음 → HTML BS 폴백 필요")
+                                        elif _current_bs is None or _current_bs.empty:
+                                            _bs_need_fallback = True
+                                            print(f"[FS] ★ XBRL BS 비어있음 → HTML BS 폴백 필요")
+
+                                        if _bs_need_fallback:
+                                            fs_data['_html_bs_need_fallback'] = True
+
+                                    if fs_data.get('_html_bs_need_fallback'):
+                                        if '_html_bs_backups' not in fs_data:
+                                            fs_data['_html_bs_backups'] = []
+                                        fs_data['_html_bs_backups'].append({
+                                            'df': _html_bs_df,
+                                            'report_year': rpt_year
+                                        })
+                                        print(f"[FS] ★ 사업보고서[{rpt_idx}] HTML BS 백업 저장 ({len(_html_bs_df)}행, 보고서연도={rpt_year})")
+
                             if html_notes and html_notes.get('notes'):
                                 # 모든 주석 테이블을 추가 (VCM 스코어링에서 우선순위 결정)
                                 for note_type in ['is_notes', 'bs_notes', 'cf_notes']:
@@ -1910,13 +2054,39 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                                 # ★ 핵심 수정: base_df를 먼저 정규화하여 컬럼 구조 통일
                                 base_df_normalized = normalize_xbrl_columns(base_df)
 
+                                # 원본 IS 행 수 기준 (주석 필터링용)
+                                base_row_count = len(base_df_normalized)
+                                # 자회사/관계기업 목록 감지 키워드
+                                subsidiary_keywords = ['지분율', '소유율', '연결범위', '종속기업', '관계기업', '지배기업', '피투자', '공동기업', '지분법']
+
                                 for note in is_notes:
                                     try:
                                         note_df = note['df']
                                         if note_df is not None and not note_df.empty:
                                             print(f"[FS] IS 주석 병합: shape={note_df.shape}")
+
+                                            # ★ 자회사 목록 등 비재무 주석 필터링
+                                            # 1) 주석 행 수가 원본 IS의 3배 이상이면 스킵 (자회사 목록 등)
+                                            if len(note_df) > max(base_row_count * 3, 50):
+                                                note_name = note.get('name', '')
+                                                print(f"[FS] IS 주석 스킵 (대규모 테이블): {len(note_df)}행 > 원본 {base_row_count}행*3, name={note_name[:60]}")
+                                                continue
+
+                                            # 2) 컬럼에 자회사 관련 키워드가 있으면 스킵
+                                            col_text = ' '.join(str(c) for c in note_df.columns)
+                                            if any(kw in col_text for kw in subsidiary_keywords):
+                                                print(f"[FS] IS 주석 스킵 (자회사 테이블): columns contain subsidiary keywords")
+                                                continue
+
                                             # 계정과목 컬럼이 있는지 확인
                                             if '계정과목' in note_df.columns:
+                                                # 3) 계정과목 내용에 자회사 관련 키워드가 많으면 스킵
+                                                account_text = ' '.join(note_df['계정과목'].dropna().astype(str).tolist())
+                                                sub_hits = sum(1 for kw in subsidiary_keywords if kw in account_text)
+                                                if sub_hits >= 2:
+                                                    print(f"[FS] IS 주석 스킵 (자회사 계정과목): {sub_hits}개 키워드 매칭")
+                                                    continue
+
                                                 # 기존 계정과목 목록
                                                 existing_accounts = set(base_df_normalized['계정과목'].values) if '계정과목' in base_df_normalized.columns else set()
                                                 # 새로운 계정과목만 추가
@@ -1975,6 +2145,356 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
 
                             fs_data['bs'] = base_df_normalized
                             print(f"[FS] BS 병합 완료: {len(base_df_normalized)}개 행")
+
+                # ★ BS 핵심 계정 폴백: XBRL BS에 최신 FY 데이터가 없으면 HTML BS로 보충
+                fs_data.pop('_html_bs_need_fallback', None)
+                _html_bs_backups = fs_data.pop('_html_bs_backups', None)
+                if _html_bs_backups:
+                    import re as _re_bs
+                    print(f"[FS] ★ HTML BS 폴백 적용: {len(_html_bs_backups)}개 사업보고서")
+
+                    # 각 HTML BS를 정규화
+                    _bs_normalized = []
+                    for _bk in _html_bs_backups:
+                        _bk_df = _bk['df'].copy()
+                        _bk_year = _bk['report_year']
+                        _fy_years = [f'FY{_bk_year - i}' for i in range(5)]
+
+                        _col_rename = {}
+                        _fy_idx = 0
+                        for _c in _bk_df.columns:
+                            _cs = str(_c)
+                            if _cs in ('label_ko', 'label') or _cs.startswith('Unnamed') or _cs in ('과목', '과 목', '구분', '구 분', '항목'):
+                                _col_rename[_c] = '계정과목'
+                            elif _cs.startswith('FY'):
+                                continue
+                            elif _cs.startswith('col_') and _fy_idx < len(_fy_years):
+                                _col_rename[_c] = _fy_years[_fy_idx]
+                                _fy_idx += 1
+                            elif _re_bs.search(r'제\s*\d+\s*기|당기|전기|전전기', _cs) and _fy_idx < len(_fy_years):
+                                _col_rename[_c] = _fy_years[_fy_idx]
+                                _fy_idx += 1
+                            elif _re_bs.search(r'20\d{2}', _cs) and _fy_idx < len(_fy_years):
+                                _year_match = _re_bs.search(r'(20\d{2})', _cs)
+                                if _year_match:
+                                    _col_rename[_c] = f'FY{_year_match.group(1)}'
+                                    _fy_idx += 1
+
+                        if _col_rename:
+                            _bk_df = _bk_df.rename(columns=_col_rename)
+                        _bs_normalized.append(_bk_df)
+                        _bk_fy_cols = [c for c in _bk_df.columns if str(c).startswith('FY')]
+                        print(f"[FS] ★ HTML BS[{_bk_year}] 정규화: FY컬럼={_bk_fy_cols}")
+
+                    # HTML BS 병합 (최신 기준, 이전 보고서에서 새 FY 컬럼 추가)
+                    _merged_bs = _bs_normalized[0]
+                    if len(_bs_normalized) > 1 and '계정과목' in _merged_bs.columns:
+                        _existing_fy = set(c for c in _merged_bs.columns if str(c).startswith('FY'))
+                        for _older_df in _bs_normalized[1:]:
+                            if '계정과목' not in _older_df.columns:
+                                continue
+                            _new_fy_cols = [c for c in _older_df.columns if str(c).startswith('FY') and c not in _existing_fy]
+                            if not _new_fy_cols:
+                                continue
+                            _m_clean = _merged_bs['계정과목'].astype(str).str.replace(r'\s*[\(\[](주|주석)[\d,\s]*[\)\]]', '', regex=True).str.strip()
+                            _o_clean = _older_df['계정과목'].astype(str).str.replace(r'\s*[\(\[](주|주석)[\d,\s]*[\)\]]', '', regex=True).str.strip()
+                            for _nfy in _new_fy_cols:
+                                _merged_bs[_nfy] = None
+                                for _mi, _mc in _m_clean.items():
+                                    _match = _older_df[_o_clean == _mc]
+                                    if not _match.empty:
+                                        _merged_bs.at[_mi, _nfy] = _match.iloc[0].get(_nfy)
+                            _existing_fy.update(_new_fy_cols)
+                            print(f"[FS] ★ HTML BS 이전 보고서 병합: +{_new_fy_cols} 추가")
+
+                    # 기존 XBRL BS에 누락된 FY 컬럼 보충
+                    _current_bs = fs_data.get('bs')
+                    if _current_bs is not None and not _current_bs.empty and '계정과목' in _merged_bs.columns:
+                        _bs_norm = normalize_xbrl_columns(_current_bs.copy())
+                        if '계정과목' in _bs_norm.columns:
+                            _html_fy_cols = [c for c in _merged_bs.columns if str(c).startswith('FY')]
+                            _xbrl_fy_cols = set(c for c in _bs_norm.columns if str(c).startswith('FY'))
+                            _missing_fy = [c for c in _html_fy_cols if c not in _xbrl_fy_cols]
+
+                            if _missing_fy:
+                                # XBRL BS에 없는 FY 컬럼을 HTML BS에서 가져와 추가
+                                _x_clean = _bs_norm['계정과목'].astype(str).str.replace(r'\s*[\(\[](주|주석)[\d,\s]*[\)\]]', '', regex=True).str.strip()
+                                _h_clean = _merged_bs['계정과목'].astype(str).str.replace(r'\s*[\(\[](주|주석)[\d,\s]*[\)\]]', '', regex=True).str.strip()
+
+                                for _mfy in _missing_fy:
+                                    _current_bs[_mfy] = None
+                                    for _xi, _xc in _x_clean.items():
+                                        _match = _merged_bs[_h_clean == _xc]
+                                        if not _match.empty:
+                                            _val = _match.iloc[0].get(_mfy)
+                                            if _val is not None:
+                                                try:
+                                                    _current_bs.at[_xi, _mfy] = float(str(_val).replace(',', ''))
+                                                except (ValueError, TypeError):
+                                                    _current_bs.at[_xi, _mfy] = _val
+
+                                fs_data['bs'] = _current_bs
+                                print(f"[FS] ★ XBRL BS에 HTML BS FY 보충: {_missing_fy}")
+                            else:
+                                # XBRL BS에 FY 컬럼은 있지만 값이 None인 경우 보충
+                                _x_clean = _bs_norm['계정과목'].astype(str).str.replace(r'\s*[\(\[](주|주석)[\d,\s]*[\)\]]', '', regex=True).str.strip()
+                                _h_clean = _merged_bs['계정과목'].astype(str).str.replace(r'\s*[\(\[](주|주석)[\d,\s]*[\)\]]', '', regex=True).str.strip()
+                                _filled_count = 0
+                                for _fy in _html_fy_cols:
+                                    if _fy not in _current_bs.columns:
+                                        continue
+                                    for _xi, _xc in _x_clean.items():
+                                        _xv = _current_bs.at[_xi, _fy] if _fy in _current_bs.columns else None
+                                        if _xv is None or (hasattr(_xv, '__float__') and pd.isna(_xv)):
+                                            _match = _merged_bs[_h_clean == _xc]
+                                            if not _match.empty:
+                                                _hv = _match.iloc[0].get(_fy)
+                                                if _hv is not None:
+                                                    try:
+                                                        _current_bs.at[_xi, _fy] = float(str(_hv).replace(',', ''))
+                                                        _filled_count += 1
+                                                    except (ValueError, TypeError):
+                                                        pass
+                                if _filled_count > 0:
+                                    fs_data['bs'] = _current_bs
+                                    print(f"[FS] ★ XBRL BS None 값 HTML BS로 보충: {_filled_count}개 셀")
+                    elif (_current_bs is None or _current_bs.empty) and '계정과목' in _merged_bs.columns:
+                        # XBRL BS 완전 비어있음 → HTML BS로 대체
+                        fs_data['bs'] = _merged_bs
+                        print(f"[FS] ★ XBRL BS 비어있음 → HTML BS로 대체 ({len(_merged_bs)}행)")
+
+                    # HTML BS 단위 보정 (IS와 동일 기준 — XBRL BS가 원 단위이면 HTML도 원으로 맞춤)
+                    # HTML BS는 보통 백만원/천원 단위이므로 XBRL BS와 비교하여 보정
+                    _bs_after = fs_data.get('bs')
+                    if _bs_after is not None:
+                        _bs_n = normalize_xbrl_columns(_bs_after.copy()) if hasattr(_bs_after, 'columns') else None
+                        if _bs_n is not None and '계정과목' in _bs_n.columns:
+                            _asset_m = _bs_n[_bs_n['계정과목'].astype(str).str.contains('자산총계', na=False)]
+                            if not _asset_m.empty:
+                                _fy_sorted = sorted([c for c in _bs_n.columns if str(c).startswith('FY')], reverse=True)
+                                # 기존 XBRL 값과 새로 채운 HTML 값 비교
+                                _xbrl_val = None
+                                _html_val = None
+                                for _fy in _fy_sorted:
+                                    _v = _asset_m.iloc[0].get(_fy)
+                                    if _v is not None and not pd.isna(_v) and float(_v) > 0:
+                                        if _xbrl_val is None:
+                                            _xbrl_val = float(_v)
+                                        elif _html_val is None and abs(float(_v)) < abs(_xbrl_val) * 0.001:
+                                            _html_val = float(_v)
+                                            _html_fy_start = _fy
+                                            break
+                                # HTML 값이 XBRL보다 크게 작으면 단위 보정 필요
+                                if _xbrl_val and _html_val and _html_val > 0:
+                                    _ratio = _html_val / _xbrl_val
+                                    if _ratio < 0.00001:
+                                        _mult = 1_000_000
+                                    elif _ratio < 0.001:
+                                        _mult = 1_000
+                                    else:
+                                        _mult = None
+                                    if _mult:
+                                        # HTML에서 채운 FY 컬럼만 보정
+                                        _html_fys = [c for c in _merged_bs.columns if str(c).startswith('FY')]
+                                        for _hfy in _html_fys:
+                                            if _hfy in _bs_after.columns:
+                                                # 이 FY가 HTML에서 온 것인지 확인 (원래 XBRL에 없었던 컬럼)
+                                                pass  # 컬럼 단위는 혼합될 수 있으므로 개별 보정은 복잡
+                                        print(f"[FS] ★ HTML BS 단위 보정: 비율={_ratio:.8f} (보정은 값 기반으로 개별 적용)")
+
+                    _all_bs_fy = sorted([c for c in fs_data.get('bs', pd.DataFrame()).columns if str(c).startswith('FY')]) if hasattr(fs_data.get('bs'), 'columns') else []
+                    print(f"[FS] ★ BS 최종 FY 컬럼: {_all_bs_fy}")
+
+                # ★ IS 핵심 계정 폴백: IS가 비어있거나 매출이 없으면 HTML IS 우선
+                # 폴백 필요 여부는 루프에서 이미 판정됨 (_html_is_need_fallback)
+                fs_data.pop('_html_is_need_fallback', None)
+                _html_is_backups = fs_data.pop('_html_is_backups', None)
+                if _html_is_backups:
+                    _xbrl_is = fs_data.get('is')
+                    _xbrl_is_empty = _xbrl_is is None or (isinstance(_xbrl_is, pd.DataFrame) and _xbrl_is.empty)
+
+                    # 추가 검증: XBRL IS에 매출+값이 있으면 폴백 불필요
+                    _need_html_fallback = True
+                    if not _xbrl_is_empty:
+                        _revenue_excludes = ('채권', '증가', '감소', '원가율')
+                        _report_yr = int(end_date[:4]) - 1
+                        _latest_fy = f'FY{_report_yr}'
+
+                        def _check_is_revenue(df, acct_col, fy_col):
+                            """IS에 매출 계정이 있고 최신 FY에 값이 있는지 확인"""
+                            if acct_col not in df.columns:
+                                return False
+                            for idx, row in df.iterrows():
+                                _acct = str(row.get(acct_col, ''))
+                                if not _acct or _acct == 'nan':
+                                    continue
+                                is_revenue = False
+                                if _acct.strip() in ('매출', '매출액', '영업수익', '수익(매출액)'):
+                                    is_revenue = True
+                                elif '매출' in _acct and not any(ex in _acct for ex in _revenue_excludes):
+                                    if any(kw in _acct for kw in ['매출총', '매출원가', '매출이익']):
+                                        is_revenue = True
+                                elif '영업수익' in _acct:
+                                    is_revenue = True
+                                if is_revenue:
+                                    _val = row.get(fy_col)
+                                    if _val is not None and str(_val) != 'nan':
+                                        return True
+                            return False
+
+                        _check_is = normalize_xbrl_columns(_xbrl_is.copy())
+                        for _c in ['계정과목', '항목', 'label_ko']:
+                            if _c in _check_is.columns:
+                                if _check_is_revenue(_check_is, _c, _latest_fy):
+                                    _need_html_fallback = False
+                                    print(f"[FS] ★ IS에 매출+{_latest_fy} 값 확인 → XBRL IS 사용")
+                                break
+                        if _need_html_fallback:
+                            for col in (_xbrl_is.columns if not _xbrl_is_empty else []):
+                                if isinstance(col, tuple) and len(col) > 1 and 'label_ko' in str(col[1]):
+                                    _tmp_df = normalize_xbrl_columns(_xbrl_is.copy())
+                                    for _c2 in ['계정과목', '항목', 'label_ko']:
+                                        if _c2 in _tmp_df.columns:
+                                            if _check_is_revenue(_tmp_df, _c2, _latest_fy):
+                                                _need_html_fallback = False
+                                                print(f"[FS] ★ IS(tuple)에 매출+{_latest_fy} 값 확인 → XBRL IS 사용")
+                                            break
+                                    break
+                    else:
+                        print(f"[FS] ★ XBRL IS 비어있음 → HTML IS 폴백 사용")
+
+                    print(f"[FS] ★ HTML IS 폴백 결과: need={_need_html_fallback}, xbrl_is_empty={_xbrl_is_empty}, 백업수={len(_html_is_backups)}")
+
+                    if _need_html_fallback:
+                        import re as _re
+                        _html_type = fs_data.pop('_html_is_type', 'is')
+
+                        # ★ 각 사업보고서 HTML IS를 정규화하고 병합
+                        _normalized_dfs = []
+                        for _bk in _html_is_backups:
+                            _bk_df = _bk['df'].copy()
+                            _bk_year = _bk['report_year']
+                            _fy_years = [f'FY{_bk_year - i}' for i in range(5)]
+
+                            _col_rename = {}
+                            _fy_idx = 0
+                            for _c in _bk_df.columns:
+                                _cs = str(_c)
+                                if _cs in ('label_ko', 'label') or _cs.startswith('Unnamed') or _cs in ('과목', '과 목', '구분', '구 분', '항목'):
+                                    _col_rename[_c] = '계정과목'
+                                elif _cs.startswith('FY'):
+                                    continue
+                                elif _cs.startswith('col_') and _fy_idx < len(_fy_years):
+                                    _col_rename[_c] = _fy_years[_fy_idx]
+                                    _fy_idx += 1
+                                elif _re.search(r'제\s*\d+\s*기|당기|전기|전전기', _cs) and _fy_idx < len(_fy_years):
+                                    _col_rename[_c] = _fy_years[_fy_idx]
+                                    _fy_idx += 1
+                                elif _re.search(r'20\d{2}', _cs) and _fy_idx < len(_fy_years):
+                                    _year_match = _re.search(r'(20\d{2})', _cs)
+                                    if _year_match:
+                                        _col_rename[_c] = f'FY{_year_match.group(1)}'
+                                        _fy_idx += 1
+
+                            if _col_rename:
+                                _bk_df = _bk_df.rename(columns=_col_rename)
+
+                            _bk_fy_cols = [c for c in _bk_df.columns if str(c).startswith('FY')]
+                            print(f"[FS] ★ HTML IS[{_bk_year}] 정규화: {_col_rename} → FY컬럼={_bk_fy_cols}")
+                            _normalized_dfs.append(_bk_df)
+
+                        # 첫 번째(최신) 보고서를 기준으로 이전 보고서의 FY 컬럼 병합
+                        _merged = _normalized_dfs[0]
+                        if len(_normalized_dfs) > 1 and '계정과목' in _merged.columns:
+                            _existing_fy = set(c for c in _merged.columns if str(c).startswith('FY'))
+                            for _older_df in _normalized_dfs[1:]:
+                                if '계정과목' not in _older_df.columns:
+                                    continue
+                                # 이전 보고서에서 새로운 FY 컬럼만 추가
+                                _new_fy_cols = [c for c in _older_df.columns if str(c).startswith('FY') and c not in _existing_fy]
+                                if not _new_fy_cols:
+                                    continue
+                                # 계정과목 기준으로 병합 (주석 참조 제거 후 매칭)
+                                _merged_clean = _merged['계정과목'].astype(str).str.replace(r'\s*[\(\[](주|주석)[\d,\s]*[\)\]]', '', regex=True).str.strip()
+                                _older_clean = _older_df['계정과목'].astype(str).str.replace(r'\s*[\(\[](주|주석)[\d,\s]*[\)\]]', '', regex=True).str.strip()
+
+                                for _nfy in _new_fy_cols:
+                                    _merged[_nfy] = None
+                                    for _mi, _mc in _merged_clean.items():
+                                        _match_rows = _older_df[_older_clean == _mc]
+                                        if not _match_rows.empty:
+                                            _merged.at[_mi, _nfy] = _match_rows.iloc[0].get(_nfy)
+                                _existing_fy.update(_new_fy_cols)
+                                print(f"[FS] ★ HTML IS 이전 보고서 병합: +{_new_fy_cols} 추가")
+
+                        _html_backup = _merged
+                        _all_fy = sorted([c for c in _html_backup.columns if str(c).startswith('FY')])
+                        print(f"[FS] ★ HTML IS 최종: {len(_html_backup)}행, FY컬럼={_all_fy}")
+
+                        fs_data['is'] = _html_backup
+                        fs_data['_html_is_used'] = True
+                        print(f"[FS] ★ IS에 매출 없음 → 사업보고서 HTML {_html_type}로 대체 ({len(_html_backup)}행, 컬럼: {list(_html_backup.columns)[:5]})")
+
+                        # ★ HTML IS 단위 보정: XBRL BS(원) vs HTML IS(백만원/천원) 단위 불일치 감지
+                        _bs_for_unit = fs_data.get('bs')
+                        if _bs_for_unit is not None and hasattr(_bs_for_unit, 'columns'):
+                            try:
+                                _bs_norm = normalize_xbrl_columns(_bs_for_unit.copy())
+                                _bs_total_val = None
+                                _bs_acc_col = None
+                                for _bac in ['계정과목', '항목', 'label_ko']:
+                                    if _bac in _bs_norm.columns:
+                                        _bs_acc_col = _bac
+                                        break
+                                if _bs_acc_col:
+                                    _asset_mask = _bs_norm[_bs_acc_col].astype(str).str.contains('자산총계', na=False)
+                                    _asset_rows = _bs_norm[_asset_mask]
+                                    if not _asset_rows.empty:
+                                        for _bfy in sorted([c for c in _bs_norm.columns if str(c).startswith('FY')], reverse=True):
+                                            _bv = _asset_rows.iloc[0].get(_bfy)
+                                            if _bv is not None and not pd.isna(_bv) and float(_bv) > 0:
+                                                _bs_total_val = float(_bv)
+                                                break
+
+                                if _bs_total_val and _bs_total_val > 0:
+                                    _is_val = None
+                                    _is_acc_col = '계정과목' if '계정과목' in _html_backup.columns else None
+                                    if _is_acc_col:
+                                        for _rk in ['매출액', '매출', '영업수익', '수익(매출액)']:
+                                            _stripped = _html_backup[_is_acc_col].astype(str).str.strip()
+                                            import re as _re2
+                                            _cleaned = _stripped.str.replace(r'\s*[\(\[](주|주석)[\d,\s]*[\)\]]', '', regex=True).str.strip()
+                                            _rv = _html_backup[_cleaned == _rk]
+                                            if not _rv.empty:
+                                                for _ify in sorted([c for c in _html_backup.columns if str(c).startswith('FY')], reverse=True):
+                                                    _iv = _rv.iloc[0].get(_ify)
+                                                    if _iv is not None:
+                                                        try:
+                                                            _is_val = abs(float(str(_iv).replace(',', '')))
+                                                        except (ValueError, TypeError):
+                                                            pass
+                                                        if _is_val and _is_val > 0:
+                                                            break
+                                                break
+
+                                    if _is_val and _is_val > 0:
+                                        _ratio = _is_val / _bs_total_val
+                                        if _ratio < 0.00001:
+                                            _mult = 1_000_000
+                                            for _fc in [c for c in fs_data['is'].columns if str(c).startswith('FY')]:
+                                                fs_data['is'][_fc] = pd.to_numeric(fs_data['is'][_fc], errors='coerce') * _mult
+                                            print(f"[FS] ★ HTML IS 단위 보정: ×{_mult:,} (IS매출={_is_val:,.0f}, BS자산={_bs_total_val:,.0f}, 비율={_ratio:.10f})")
+                                        elif _ratio < 0.001:
+                                            _mult = 1_000
+                                            for _fc in [c for c in fs_data['is'].columns if str(c).startswith('FY')]:
+                                                fs_data['is'][_fc] = pd.to_numeric(fs_data['is'][_fc], errors='coerce') * _mult
+                                            print(f"[FS] ★ HTML IS 단위 보정: ×{_mult:,} (IS매출={_is_val:,.0f}, BS자산={_bs_total_val:,.0f}, 비율={_ratio:.10f})")
+                                        else:
+                                            print(f"[FS] ★ HTML IS 단위 보정 불필요 (IS매출={_is_val:,.0f}, BS자산={_bs_total_val:,.0f}, 비율={_ratio:.6f})")
+                            except Exception as _ue:
+                                print(f"[FS] ★ HTML IS 단위 보정 실패: {_ue}")
+                    else:
+                        fs_data.pop('_html_is_type', None)
 
                 # 당해년도 사업보고서가 있으면 바로 반환
                 if has_current_year_annual:
@@ -2170,6 +2690,34 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                 first_period = list(yearly_data[key].keys())[0]
                 xbrl_data[key] = yearly_data[key][first_period]
                 print(f"[FS] {key}: XBRL 데이터 없음, 분기 데이터({first_period})를 기본으로 사용")
+
+            # ★ IS 핵심 계정 검증: XBRL IS에 매출/영업수익이 없으면 yearly_data(사업보고서 HTML)로 대체
+            if key == 'is' and yearly_data.get('is') and xbrl_data.get('is') is not None:
+                import pandas as pd
+                _xbrl_is = xbrl_data['is']
+                _has_core_accounts = False
+                for _c in ['계정과목', '항목', 'label_ko']:
+                    if _c in _xbrl_is.columns:
+                        _acc_text = ' '.join(_xbrl_is[_c].dropna().astype(str).tolist())
+                        if '매출' in _acc_text or '영업수익' in _acc_text or '영업이익' in _acc_text:
+                            _has_core_accounts = True
+                        break
+                if not _has_core_accounts:
+                    # yearly_data에서 매출 있는 IS 찾기
+                    for _period, _yearly_df in yearly_data['is'].items():
+                        if _yearly_df is not None and not _yearly_df.empty:
+                            for _c2 in ['계정과목', '항목', 'label_ko']:
+                                if _c2 in _yearly_df.columns:
+                                    _yearly_text = ' '.join(_yearly_df[_c2].dropna().astype(str).tolist())
+                                    if '매출' in _yearly_text or '영업수익' in _yearly_text:
+                                        xbrl_data['is'] = _yearly_df
+                                        print(f"[FS] ★ XBRL IS에 매출 없음 → 사업보고서 HTML IS({_period})로 대체 ({len(_yearly_df)}행)")
+                                        _has_core_accounts = True
+                                    break
+                        if _has_core_accounts:
+                            break
+                    if not _has_core_accounts:
+                        print(f"[FS] ★ 경고: IS에 매출/영업수익 없음 (XBRL + yearly_data 모두)")
             
             if yearly_data[key] and xbrl_data.get(key) is not None:
                 xbrl_df = xbrl_data[key]
@@ -5695,7 +6243,7 @@ def create_vcm_format(fs_data, excel_filepath=None):
     filtered_is_rows = []
     for row in rows:
         has_value = any(row.get(y) is not None and row.get(y) != 0 for y in year_cols)
-        if has_value:
+        if has_value or '[EBITDA]' in row.get('항목', ''):
             filtered_is_rows.append(row)
         else:
             print(f"[VCM] IS 빈 행 제거: {row.get('항목')}")
@@ -5786,6 +6334,9 @@ def create_vcm_format(fs_data, excel_filepath=None):
         # BS/IS 섹션의 하위항목 → 표시
         elif str(item_parent).strip() in sections_with_subitems:
             pass  # 표시
+        # EBITDA 툴팁 하위항목 → Frontdata에만 존재, Financials에는 미표시
+        elif '[EBITDA]' in item_name:
+            continue
         # 그 외 (기타XXX 하위 등) → 제외
         else:
             continue
@@ -5948,6 +6499,37 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                     print(f"[VCM-v2] ★ 외화 보고 기업 감지 (XBRL 컬럼): {reporting_currency}")
                     break
 
+    # ========== 1-B. 주석(notes) 데이터 로드 — SGA 하위항목, 감가상각비 추출용 ==========
+    notes_dfs = []
+    if excel_filepath and os.path.exists(excel_filepath):
+        try:
+            xl = pd.ExcelFile(excel_filepath, engine='openpyxl')
+            for sheet in xl.sheet_names:
+                if any(kw in sheet for kw in ['손익주석', '포괄손익주석', 'IS주석', '비용']):
+                    note_df = pd.read_excel(excel_filepath, sheet_name=sheet, engine='openpyxl')
+                    if not note_df.empty and '계정과목' in note_df.columns:
+                        notes_dfs.append(note_df)
+                        print(f"[VCM-v2] 주석 시트 로드: {sheet}, {len(note_df)}개 행")
+        except Exception as e:
+            print(f"[VCM-v2] 주석 시트 로드 실패: {e}")
+
+    if fs_data and 'notes' in fs_data and fs_data['notes'] is not None:
+        is_notes = fs_data['notes'].get('is_notes', [])
+        for note in is_notes:
+            if isinstance(note, dict) and 'df' in note:
+                note_df = note['df']
+                if note_df is not None and not note_df.empty:
+                    has_tuple_cols = any(isinstance(c, tuple) for c in note_df.columns)
+                    if has_tuple_cols:
+                        note_df = normalize_xbrl_columns(note_df)
+                    if '계정과목' not in note_df.columns:
+                        first_col = note_df.columns[0]
+                        note_df = note_df.rename(columns={first_col: '계정과목'})
+                    notes_dfs.append(note_df)
+                    print(f"[VCM-v2] XBRL 주석 추가: {note.get('name', 'unknown')}, {len(note_df)}개 행")
+
+    print(f"[VCM-v2] 주석 테이블 {len(notes_dfs)}개 로드 완료")
+
     # XBRL 컬럼 정규화
     bs_df = normalize_xbrl_columns(bs_df)
     is_df = normalize_xbrl_columns(is_df)
@@ -6010,15 +6592,27 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
     _is_notes_filtered = False
     _full_is_accounts = [str(v).strip() for v in is_df[is_acc_col].dropna().unique() if str(v).strip()]
     if '분류1' in is_df.columns:
-        # XBRL/DART 데이터: 분류1='포괄손익계산서 [개요]' 또는 '손익계산서'인 행만 사용
-        _main_mask = is_df['분류1'].astype(str).str.contains('손익계산서|포괄손익', na=False)
+        # XBRL/DART 데이터: 분류1='포괄손익계산서 [개요]' 또는 '손익계산서' 또는 영문 URI인 행만 사용
+        _main_mask = is_df['분류1'].astype(str).str.contains(
+            '손익계산서|포괄손익|StatementOfComprehensiveIncome|IncomeStatement|ProfitOrLoss',
+            na=False, case=False
+        )
         _main_df = is_df[_main_mask]
         if len(_main_df) >= 5:
             _main_accounts = [str(v).strip() for v in _main_df[is_acc_col].dropna().unique() if str(v).strip()]
-            if len(_main_accounts) >= 3:
+            # 필수 IS 항목(매출, 영업이익 등)이 필터 결과에 포함되는지 확인
+            _essential_keywords = ['매출', '영업이익', '영업수익', 'revenue', 'operating']
+            _has_essential = any(
+                any(kw in re.sub(r'\s', '', acc).lower() for kw in _essential_keywords)
+                for acc in _main_accounts
+            )
+            if len(_main_accounts) >= 3 and _has_essential:
                 is_accounts = _main_accounts
                 _is_notes_filtered = True
                 print(f"[VCM-v2] IS 주석 필터링 (분류1): {len(is_df)}행 → {len(_main_df)}행 (주석 {len(is_df) - len(_main_df)}행 제외)")
+            elif len(_main_accounts) >= 3 and not _has_essential:
+                is_accounts = _full_is_accounts
+                print(f"[VCM-v2] IS 주석 필터링 스킵: 분류1 매칭 {len(_main_df)}행이지만 매출/영업이익 미포함 → 전체 사용")
             else:
                 is_accounts = _full_is_accounts
                 print(f"[VCM-v2] IS 주석 필터링 스킵: 분류1 매칭 {len(_main_df)}행이지만 유효 계정 {len(_main_accounts)}개뿐")
@@ -6189,6 +6783,13 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             if cat == 'total':
                 norm = normalize(acc_name)
                 totals[norm] = val
+                # 금융업자산/부채가 total로 분류된 경우에도 비유동에 합산
+                if '금융업자산' in norm or '보험업자산' in norm:
+                    totals['비유동자산'] = totals.get('비유동자산', 0) + val
+                    print(f"[VCM-v2] 금융업자산(total) → 비유동자산 합산: {val:,.0f}")
+                elif '금융업부채' in norm or '보험업부채' in norm:
+                    totals['비유동부채'] = totals.get('비유동부채', 0) + val
+                    print(f"[VCM-v2] 금융업부채(total) → 비유동부채 합산: {val:,.0f}")
                 continue
             elif cat in ('subtotal', 'section_header', 'skip'):
                 # 소계에서 유동자산/비유동자산 등 총계 추출
@@ -6201,6 +6802,14 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                     totals.setdefault('유동부채', val)
                 elif '비유동부채' in norm:
                     totals.setdefault('비유동부채', val)
+                elif '금융업자산' in norm or '보험업자산' in norm:
+                    # 금융회사 3-section BS: 금융업자산을 비유동자산에 합산
+                    totals['비유동자산'] = totals.get('비유동자산', 0) + val
+                    print(f"[VCM-v2] 금융업자산 → 비유동자산 합산: {val:,.0f}")
+                elif '금융업부채' in norm or '보험업부채' in norm:
+                    # 금융회사: 금융업부채를 비유동부채에 합산
+                    totals['비유동부채'] = totals.get('비유동부채', 0) + val
+                    print(f"[VCM-v2] 금융업부채 → 비유동부채 합산: {val:,.0f}")
                 continue
 
             # 카테고리별 항목 수집
@@ -6328,17 +6937,20 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 if abs(remainder) > 0:
                     bs_items.append((f"{기타_name}(세부)", 기타_name, remainder))
 
-        # 자산총계, 부채총계, 자본총계
-        자산총계 = totals.get('자산총계', 0)
-        부채총계 = totals.get('부채총계', 0)
-        자본총계 = totals.get('자본총계', 0)
-        # H4 fix: truthiness 대신 is not None 사용 (자본총계=0인 자본잠식 기업 대응)
-        부채와자본총계 = (부채총계 + 자본총계) if (부채총계 is not None and 자본총계 is not None) else totals.get('부채와자본총계', totals.get('부채및자본총계', 0))
-
-        bs_items.append(('자산총계', '', 자산총계))
-        bs_items.append(('부채총계', '', 부채총계))
-        bs_items.append(('자본총계', '', 자본총계))
-        bs_items.append(('부채와자본총계', '', 부채와자본총계))
+            # 섹션별 총계 삽입 (V1과 동일 순서: 비유동자산 뒤→자산총계, 비유동부채 뒤→부채총계, 자본 뒤→자본총계+부채와자본총계)
+            if section_name == '비유동자산':
+                자산총계 = totals.get('자산총계', 0)
+                bs_items.append(('자산총계', '', 자산총계))
+            elif section_name == '비유동부채':
+                부채총계 = totals.get('부채총계', 0)
+                bs_items.append(('부채총계', '', 부채총계))
+            elif section_name == '자본':
+                자본총계 = totals.get('자본총계', 0)
+                부채총계 = totals.get('부채총계', 0)
+                # H4 fix: truthiness 대신 is not None 사용 (자본총계=0인 자본잠식 기업 대응)
+                부채와자본총계 = (부채총계 + 자본총계) if (부채총계 is not None and 자본총계 is not None) else totals.get('부채와자본총계', totals.get('부채및자본총계', 0))
+                bs_items.append(('자본총계', '', 자본총계))
+                bs_items.append(('부채와자본총계', '', 부채와자본총계))
 
         # NWC / Net Debt 계산
         유동자산_total = totals.get('유동자산', 0)
@@ -6450,17 +7062,85 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         sga_items = is_values.get('sga', [])
         판관비 = 0
         sga_details = []
+        _sga_no_group_items = []  # group이 None인 항목들 (합계행 후보)
         for item in sga_items:
             cls = is_map.get(item['raw_name'])
             grp = cls.get('group') if cls else None
-            if grp == 'sga_detail':
+            if grp and grp != 'sga_detail':
+                # 인건비 등 다른 그룹 → sga_details에 포함
                 sga_details.append(item)
-            elif grp is None:
-                # 합계행
-                판관비 = item['value']
+            elif grp == 'sga_detail':
+                sga_details.append(item)
+            else:
+                # group=None → 합계행 후보
+                _sga_no_group_items.append(item)
+
+        # group=None 항목 중 합계행 판별: display_name에 '판매비' 포함하는 것 우선, 없으면 금액이 가장 큰 것
+        _sga_summary = None
+        for item in _sga_no_group_items:
+            cls = is_map.get(item['raw_name'], {})
+            disp = cls.get('display_name', '')
+            if '판매비' in disp or '판관비' in disp:
+                _sga_summary = item
+                break
+        if not _sga_summary and _sga_no_group_items:
+            _sga_summary = max(_sga_no_group_items, key=lambda x: abs(x['value']))
+
+        if _sga_summary:
+            판관비 = _sga_summary['value']
+            # 나머지 no-group 항목은 sga_details에 추가
+            for item in _sga_no_group_items:
+                if item is not _sga_summary:
+                    sga_details.append(item)
 
         if not 판관비 and sga_details:
             판관비 = sum(i['value'] for i in sga_details)
+
+        # ★ 주석(notes)에서 감가상각비 추출 — EBITDA 계산용 (비용의 성격별 분류 = 전체 비용)
+        # 주의: 주석은 전체 비용(매출원가+판관비)이므로 SGA 하위항목으로 넣으면 안 됨
+        _notes_감가상각비 = 0
+        _notes_무형자산상각비 = 0
+        _notes_사용권자산상각비 = 0
+        if notes_dfs:
+            _da_keywords = {
+                '감가상각비': (['감가상각비'], ['무형', '사용권']),
+                '무형자산상각비': (['무형자산상각비'], []),
+                '사용권자산상각비': (['사용권자산상각비'], []),
+            }
+            for note_df in notes_dfs:
+                if '계정과목' not in note_df.columns:
+                    continue
+                _note_year_col = None
+                for _c in note_df.columns:
+                    if str(_c) == year_str or str(_c).startswith(year_str):
+                        _note_year_col = _c
+                        break
+                if not _note_year_col:
+                    continue
+                for _, _row in note_df.iterrows():
+                    _acc = normalize(str(_row.get('계정과목', '')))
+                    for _da_name, (_kws, _excludes) in _da_keywords.items():
+                        for _kw in _kws:
+                            if normalize(_kw) in _acc:
+                                if any(ex in _acc for ex in _excludes):
+                                    continue
+                                _val = _row.get(_note_year_col)
+                                if isinstance(_val, pd.Series):
+                                    _val = _val.iloc[0]
+                                if pd.notna(_val):
+                                    try:
+                                        _val_f = abs(float(str(_val).replace(',', '').strip())) * 1000  # 천원→원, 절대값
+                                        if _da_name == '감가상각비' and _val_f > _notes_감가상각비:
+                                            _notes_감가상각비 = _val_f
+                                        elif _da_name == '무형자산상각비' and _val_f > _notes_무형자산상각비:
+                                            _notes_무형자산상각비 = _val_f
+                                        elif _da_name == '사용권자산상각비' and _val_f > _notes_사용권자산상각비:
+                                            _notes_사용권자산상각비 = _val_f
+                                    except:
+                                        pass
+                                break
+            if _notes_감가상각비 or _notes_무형자산상각비 or _notes_사용권자산상각비:
+                print(f"[VCM-v2] 주석 감가상각비: {_notes_감가상각비:,.0f}, 무형: {_notes_무형자산상각비:,.0f}, 사용권: {_notes_사용권자산상각비:,.0f} ({year_str})")
 
         영업이익_direct = get_cat_first('operating_income')
         영업이익 = 영업이익_direct if 영업이익_direct else (매출총이익 - 판관비)
@@ -6499,25 +7179,64 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         영업이익_pct = 영업이익 / 매출 if 매출 else None
         당기순이익_pct = 당기순이익 / 매출 if 매출 else None
 
-        # 감가상각비 (EBITDA용) — SGA에서 추출
-        감가상각비 = 0
-        무형자산상각비 = 0
+        # 감가상각비 (EBITDA용) — SGA에서 추출 + 주석(notes) 보완
+        _sga_감가상각비 = 0
+        _sga_무형자산상각비 = 0
         for item in sga_details:
             norm = normalize(item['name'])
-            if '감가상각' in norm and '무형' not in norm:
-                감가상각비 += item['value']
-            elif '무형자산상각' in norm or '상각비' in norm:
-                무형자산상각비 += item['value']
+            if '감가상각' in norm and '무형' not in norm and '사용권' not in norm:
+                _sga_감가상각비 += item['value']
+            elif '무형자산상각' in norm:
+                _sga_무형자산상각비 += item['value']
+
+        # 주석 감가상각비가 있으면 사용 (비용의 성격별 분류 = 전체 비용 기준, EBITDA에 더 정확)
+        # SGA에만 있는 감가상각비는 매출원가 감가상각비를 누락하므로
+        if _notes_감가상각비 or _notes_사용권자산상각비:
+            감가상각비 = _notes_감가상각비 + _notes_사용권자산상각비
+        else:
+            감가상각비 = _sga_감가상각비
+        무형자산상각비 = _notes_무형자산상각비 if _notes_무형자산상각비 else _sga_무형자산상각비
 
         EBITDA = 영업이익 + 감가상각비 + 무형자산상각비
+        if 감가상각비 or 무형자산상각비:
+            print(f"[VCM-v2] EBITDA={EBITDA:,.0f} = 영업이익({영업이익:,.0f}) + 감가상각비({감가상각비:,.0f}) + 무형자산상각비({무형자산상각비:,.0f}) [source: {'notes' if (_notes_감가상각비 or _notes_사용권자산상각비) else 'sga'}]")
+
+        EBITDA_pct = (EBITDA / 매출) if 매출 and 매출 != 0 else None
+
+        # 매출/매출원가 하위항목 추출 (V1과 동일)
+        revenue_sub = []  # [(display_name, value)]
+        revenue_items = is_values.get('revenue', [])
+        if len(revenue_items) > 1:
+            # 여러 매출 항목 → 합계행 제외 나머지가 하위항목
+            for item in revenue_items:
+                if item['value'] != 매출:
+                    revenue_sub.append((item['name'], item['value']))
+
+        cogs_sub = []
+        cogs_items = is_values.get('cogs', [])
+        if len(cogs_items) > 1:
+            for item in cogs_items:
+                if item['value'] != 원가:
+                    cogs_sub.append((item['name'], item['value']))
 
         # IS rows 빌드
         values = {
             '매출': 매출,
-            '매출원가': 원가,
+        }
+        # 매출 하위항목
+        for name, val in revenue_sub:
+            values[f'  {name}'] = val if val else None
+        values['매출원가'] = 원가
+        # 매출원가 하위항목
+        for name, val in cogs_sub:
+            values[f'  {name}'] = val if val else None
+        values.update({
             '매출총이익': 매출총이익,
             '% of Sales': 매출총이익_pct,
             '판매비와관리비': 판관비,
+        })
+        # (판관비 하위는 아래에서 별도 추가)
+        _values_after_sga = {
             '영업이익': 영업이익,
             '% of Sales (영업이익)': 영업이익_pct,
             '영업외수익': 영업외수익,
@@ -6527,6 +7246,10 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             '당기순이익': 당기순이익,
             '% of Sales (순이익)': 당기순이익_pct,
             'EBITDA': EBITDA,
+            '  [EBITDA]영업이익': 영업이익,
+            '  [EBITDA]감가상각비': 감가상각비,
+            '  [EBITDA]무형자산상각비': 무형자산상각비,
+            '% of Sales (EBITDA)': EBITDA_pct,
         }
 
         # 판관비 상세항목 추가 (상위 6개)
@@ -6553,6 +7276,9 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         for name, val in sga_display:
             values[name] = val
 
+        # 영업이익~EBITDA 추가 (판관비 하위 다음에 위치하도록)
+        values.update(_values_after_sga)
+
         # 영업외 상세
         for cat_key, parent_name in [('interest_income', '영업외수익'), ('other_income', '영업외수익'),
                                       ('interest_expense', '영업외비용'), ('other_expense', '영업외비용')]:
@@ -6561,8 +7287,16 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
 
         # 행 구조 생성/병합
         if not is_rows:
-            # 첫 연도: 기본 IS 구조 생성
-            is_row_order = ['매출', '매출원가', '매출총이익', '% of Sales', '판매비와관리비']
+            # 첫 연도: 기본 IS 구조 생성 (V1과 동일 순서)
+            is_row_order = ['매출']
+            # 매출 하위항목
+            for name, val in revenue_sub:
+                is_row_order.append(f'  {name}')
+            is_row_order.append('매출원가')
+            # 매출원가 하위항목
+            for name, val in cogs_sub:
+                is_row_order.append(f'  {name}')
+            is_row_order.extend(['매출총이익', '% of Sales', '판매비와관리비'])
             for name, val in sga_display:
                 is_row_order.append(name)
             is_row_order.extend([
@@ -6577,13 +7311,25 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             is_row_order.extend([
                 '법인세비용차감전이익', '법인세비용', '당기순이익',
                 '% of Sales (순이익)', 'EBITDA',
+                '  [EBITDA]영업이익', '  [EBITDA]감가상각비', '  [EBITDA]무형자산상각비',
+                '% of Sales (EBITDA)',
             ])
+
+            # 매출/매출원가 하위항목 이름 set (parent 판별용)
+            _revenue_sub_names = {name for name, _ in revenue_sub}
+            _cogs_sub_names = {name for name, _ in cogs_sub}
 
             for name in is_row_order:
                 parent = ''
                 if name.startswith('  '):
                     clean = name.strip()
-                    if any(clean in str(i.get('name', '')) for i in is_values.get('interest_income', []) + is_values.get('other_income', [])):
+                    if clean.startswith('[EBITDA]'):
+                        parent = 'EBITDA'
+                    elif clean in _revenue_sub_names:
+                        parent = '매출'
+                    elif clean in _cogs_sub_names:
+                        parent = '매출원가'
+                    elif any(clean in str(i.get('name', '')) for i in is_values.get('interest_income', []) + is_values.get('other_income', [])):
                         parent = '영업외수익'
                     elif any(clean in str(i.get('name', '')) for i in is_values.get('interest_expense', []) + is_values.get('other_expense', [])):
                         parent = '영업외비용'
@@ -6676,7 +7422,8 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
     filtered_bs_rows = [r for r in bs_rows
                         if any(r.get(y) is not None and r.get(y) != 0 for y in year_cols)]
     filtered_is_rows = [r for r in is_rows
-                        if any(r.get(y) is not None and r.get(y) != 0 for y in year_cols)]
+                        if any(r.get(y) is not None and r.get(y) != 0 for y in year_cols)
+                        or '[EBITDA]' in r.get('항목', '')]
 
     all_rows = filtered_bs_rows + filtered_is_rows
 
@@ -6728,6 +7475,8 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             pass
         elif str(item_parent).strip() in sections_with_subitems:
             pass
+        elif '[EBITDA]' in item_name:
+            continue  # EBITDA 툴팁 하위항목 → Frontdata에만 존재, Financials에는 미표시
         else:
             continue
 
@@ -6896,7 +7645,7 @@ def cleanup_old_excel_files(output_dir='output', days=7):
         print(f"[Cleanup] 파일 정리 실패: {e}")
 
 
-def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]] = None, start_year: int = None, end_year: int = None):
+def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]] = None, start_year: int = None, end_year: int = None, company_code: str = 'unknown', industry: str = None):
     """재무제표를 엑셀 파일로 저장 (주석 테이블 포함)"""
     # 엑셀 저장 전 오래된 파일 삭제
     cleanup_old_excel_files()
@@ -7073,8 +7822,9 @@ def save_to_excel(fs_data, filepath: str, company_info: Optional[Dict[str, Any]]
         
         # VCM 전용 포맷 시트 추가
         try:
-            print(f"[VCM] create_vcm_format 호출 시작...")
-            vcm_result = create_vcm_format(fs_data, filepath)
+            print(f"[VCM] create_vcm_format_v2 호출 시작...")
+            import asyncio as _aio
+            vcm_result = _aio.run(create_vcm_format_v2(fs_data, filepath, company_code, industry))
 
             # 튜플 반환 (vcm_df, display_df, reporting_currency) 처리
             if isinstance(vcm_result, tuple) and len(vcm_result) == 3:
@@ -7638,9 +8388,11 @@ async def run_financial_analysis(task_id: str):
                 # 2차: Excel 파일 없음 - 추출 데이터에서 재생성 시도
                 fs_data = task.get('fs_data')
                 if fs_data:
-                    print(f"[ANALYSIS] Excel 없음, fs_data에서 VCM 재생성 시도...")
+                    print(f"[ANALYSIS] Excel 없음, fs_data에서 VCM V2 재생성 시도...")
                     try:
-                        vcm_result = create_vcm_format(fs_data, None)
+                        _company_code = task.get('corp_code', 'unknown')
+                        _industry = task.get('industry')
+                        vcm_result = await create_vcm_format_v2(fs_data, None, _company_code, _industry)
                         if isinstance(vcm_result, tuple) and len(vcm_result) == 3:
                             vcm_df, display_df, _vcm_currency = vcm_result
                         elif isinstance(vcm_result, tuple):
@@ -8824,7 +9576,7 @@ async def add_insight_to_excel(task_id: str, request: Request):
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
-                lambda: save_to_excel(fs_data, filepath, company_info, start_year=req_start, end_year=req_end)
+                lambda: save_to_excel(fs_data, filepath, company_info, start_year=req_start, end_year=req_end, company_code=task.get('corp_code', 'unknown'), industry=task.get('industry'))
             )
 
             # task에 파일 경로 저장
