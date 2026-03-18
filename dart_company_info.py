@@ -393,40 +393,127 @@ class DartCompanyInfo:
             # 대표자 패턴 검색
             # 제외할 단어 (이름이 아닌 일반 단어)
             excluded_words = {'등의', '등이', '외의', '기타', '성명', '이름', '직위', '직책', '대표', '이사', '사내', '사외', '상무', '전무', '부사장', '회장', '부회장', '확인', '사장'}
+            # 조사/어미로 끝나는 단어는 이름이 아님 (예: "선임은", "변경을", "사임한")
+            excluded_suffixes = ('은', '는', '이', '가', '을', '를', '의', '에', '와', '과', '로', '된', '한', '할', '하', '임을', '으로', '에서', '까지', '부터', '에게', '께서')
+
+            # 직함/직위 접미사 (이름 뒤에 붙을 수 있는 단어)
+            title_suffixes = ['사외이사', '사내이사', '상무이사', '전무이사', '상근이사', '비상근이사',
+                            '부사장', '전무', '상무', '이사', '회장', '부회장', '사장', '대표']
+
+            def _strip_title_suffix(name: str) -> str:
+                """이름 뒤에 붙은 직함 접미사 제거"""
+                for suffix in title_suffixes:
+                    if name.endswith(suffix) and len(name) > len(suffix):
+                        stripped = name[:-len(suffix)]
+                        if 2 <= len(stripped) <= 4 and all('가' <= c <= '힣' for c in stripped):
+                            return stripped
+                return name
+
+            def _is_valid_ceo_name(name: str) -> bool:
+                """이름인지 일반 단어인지 판별"""
+                if name in excluded_words:
+                    return False
+                if len(name) < 2 or len(name) > 4:
+                    return False
+                # 2글자인 경우 조사/어미 끝 체크
+                if len(name) <= 3 and name.endswith(excluded_suffixes):
+                    return False
+                # 일반적인 비이름 패턴 (선임은, 변경을, 해임된, 사임한 등)
+                non_name_patterns = ['선임', '해임', '변경', '사임', '취임', '퇴임', '겸임', '임명', '연임']
+                for p in non_name_patterns:
+                    if name.startswith(p):
+                        return False
+                return True
 
             # 1단계: 표지 패턴 우선 검색 (띄어쓰기 포함된 표지 형식)
+            # 1-1: 같은 줄에 이름이 있는 경우
             cover_patterns = [
-                r'대\s*표\s*이\s*사\s*[:：]\s*([가-힣]{2,10})',  # "대 표 이 사 : 김진국"
-                r'대\s*표\s*자\s*[:：]\s*([가-힣]{2,10})',       # "대 표 자 : 김진국"
+                r'대\s*표\s*이\s*사\s*[:：]\s*([가-힣]{2,4})',  # "대 표 이 사 : 김진국"
+                r'대\s*표\s*자\s*[:：]\s*([가-힣]{2,4})',       # "대 표 자 : 김진국"
             ]
             for pattern in cover_patterns:
                 match = re.search(pattern, text)
                 if match:
                     ceo = match.group(1).strip()
-                    if 2 <= len(ceo) <= 10 and ceo not in excluded_words:
+                    if _is_valid_ceo_name(ceo):
                         print(f"사업보고서 표지 대표자 추출 성공: {ceo}")
                         result['ceo'] = ceo
                         break
 
-            # 2단계: 표지에서 못 찾은 경우 기존 패턴으로 폴백
+            # 1-2: "대 표 이 사 :" 와 이름이 다음 줄에 있는 경우
             if not result['ceo']:
+                lines = text.split('\n')
+                for i, line in enumerate(lines):
+                    if i >= 50:  # 표지는 보통 처음 50줄 이내
+                        break
+                    if re.search(r'대\s*표\s*이?\s*사\s*[:：]?\s*$', line.strip()) or \
+                       re.search(r'대\s*표\s*자\s*[:：]?\s*$', line.strip()):
+                        # 다음 줄에서 이름 찾기 (띄어쓰기 있을 수 있음)
+                        if i + 1 < len(lines):
+                            next_line = lines[i + 1].strip()
+                            # 공백 제거 후 한글 이름 확인
+                            name_candidate = re.sub(r'\s+', '', next_line)
+                            # 직함 접미사 제거 시도
+                            name_candidate = _strip_title_suffix(name_candidate)
+                            if re.match(r'^[가-힣]{2,4}$', name_candidate) and _is_valid_ceo_name(name_candidate):
+                                print(f"사업보고서 표지 대표자 추출 성공 (다음 줄): {name_candidate}")
+                                result['ceo'] = name_candidate
+                                break
+
+            # 2단계: 표지에서 못 찾은 경우 줄 단위 패턴으로 폴백
+            # 감사법인/회계법인 대표이사를 오인식하지 않도록 줄 단위 필터링
+            if not result['ceo']:
+                # 감사법인/회계법인 관련 키워드 (같은 줄에 있으면 스킵)
+                auditor_keywords = ['회계법인', '감사법인', '삼정', '삼일', '한영', '안진', '딜로이트', 'EY한영', 'KPMG', 'PwC', '감사인', '감사보고서']
+
+                # 일반 패턴 (first match 사용)
                 ceo_patterns = [
-                    r'대표이사\s+([가-힣]{2,10})\s*$',  # "대표이사 신학철" (줄 끝)
-                    r'대표이사\s+([가-힣]{2,10})\n',    # "대표이사 신학철\n"
-                    r'대표이사[:\s]+([가-힣]{2,10})',
-                    r'대표이사\s*성\s*명[:\s]+([가-힣]{2,10})',
-                    r'대표이사\([^)]*\)[:\s]+([가-힣]{2,10})',
+                    r'대표이사\s+([가-힣]{2,4})\s*$',  # "대표이사 신학철" (줄 끝)
+                    r'대표이사\s+([가-힣]{2,4})\n',    # "대표이사 신학철\n"
+                    r'대표이사[:\s]+([가-힣]{2,4})',
+                    r'대표이사\s*성\s*명[:\s]+([가-힣]{2,4})',
+                    r'대표이사\([^)]*\)[:\s]+([가-힣]{2,4})',
                 ]
+                lines = text.split('\n')
                 for pattern in ceo_patterns:
-                    matches = re.findall(pattern, text, re.MULTILINE)
-                    for ceo in matches:
-                        ceo = ceo.strip()
-                        if 2 <= len(ceo) <= 10 and ceo not in excluded_words:
-                            print(f"사업보고서 대표자 추출 성공: {ceo}")
-                            result['ceo'] = ceo
-                            break
+                    for line in lines:
+                        # 감사법인/회계법인 줄은 스킵
+                        if any(kw in line for kw in auditor_keywords):
+                            continue
+                        match = re.search(pattern, line)
+                        if match:
+                            ceo = match.group(1).strip()
+                            ceo = _strip_title_suffix(ceo)
+                            if _is_valid_ceo_name(ceo):
+                                print(f"사업보고서 대표자 추출 성공: {ceo}")
+                                result['ceo'] = ceo
+                                break
                     if result['ceo']:
                         break
+
+            # 3단계: 주총 선임 테이블 패턴 (last match = 가장 최근 선임)
+            # "대표이사 및 사내이사- 정신아사내이사-..." 형식
+            # 주의: (*)가 붙은 줄은 임기만료/해임 행이므로 스킵
+            if not result['ceo']:
+                table_pattern = r'대표이사\s*(?:및\s*사내이사)?\s*[-–—]\s*([가-힣]{2,4})(?=사[내외]이사|기타|감사|$|\s|\(|\)|,)'
+                last_ceo = None
+                for line in lines:
+                    if any(kw in line for kw in auditor_keywords):
+                        continue
+                    # (*)가 포함된 줄은 임기만료/해임 행 → 스킵
+                    if '(*)' in line:
+                        continue
+                    # "임기만료" 또는 "해임" 관련 줄 스킵
+                    if any(kw in line for kw in ['임기만료', '해임', '사임']):
+                        continue
+                    match = re.search(table_pattern, line)
+                    if match:
+                        ceo = match.group(1).strip()
+                        if _is_valid_ceo_name(ceo):
+                            last_ceo = ceo  # 마지막(가장 최근) 매치를 저장
+                if last_ceo:
+                    print(f"사업보고서 대표자 추출 성공 (주총 선임 테이블): {last_ceo}")
+                    result['ceo'] = last_ceo
 
             # 본점소재지 패턴 검색 (더 정교한 패턴)
             # 시/도 목록 (약어 + 전체 이름)
@@ -448,6 +535,10 @@ class DartCompanyInfo:
                     address = match.group(1).strip()
                     address = re.sub(r'입니다.*$', '', address).strip()
                     address = re.sub(r'이며.*$', '', address).strip()
+                    # ○/● 등 기호 이후 부가정보 제거 (예: "○ 변경 : 해당사항 없음")
+                    address = re.sub(r'\s*[○●◎◇◆■□▶►].*$', '', address).strip()
+                    # "변경" 이후 정보 제거
+                    address = re.sub(r'\s*변경\s*[:：].*$', '', address).strip()
                     # 전화번호/홈페이지/팩스 등 주소 이후 정보 제거
                     address = re.sub(r'\s*(?:전화|TEL|tel|Tel|팩스|FAX|fax|Fax|홈페이지|http|www\.).*$', '', address, flags=re.IGNORECASE).strip()
                     # 끝에 남은 하이픈/특수문자 정리
