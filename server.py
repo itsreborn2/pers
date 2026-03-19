@@ -2169,10 +2169,12 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                                 _col_rename[_c] = '계정과목'
                             elif _cs.startswith('FY'):
                                 continue
+                            elif _cs in ('주석', '주 석', '비고', '비 고') or '주석' in _cs.replace(' ', ''):
+                                continue  # 주석 참조 컬럼 → 스킵
                             elif _cs.startswith('col_') and _fy_idx < len(_fy_years):
                                 _col_rename[_c] = _fy_years[_fy_idx]
                                 _fy_idx += 1
-                            elif _re_bs.search(r'제\s*\d+\s*기|당기|전기|전전기', _cs) and _fy_idx < len(_fy_years):
+                            elif _re_bs.search(r'제\s*\d+\s*기|당\s*기|전\s*전\s*기|전\s*기', _cs) and _fy_idx < len(_fy_years):
                                 _col_rename[_c] = _fy_years[_fy_idx]
                                 _fy_idx += 1
                             elif _re_bs.search(r'20\d{2}', _cs) and _fy_idx < len(_fy_years):
@@ -2383,10 +2385,12 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                                     _col_rename[_c] = '계정과목'
                                 elif _cs.startswith('FY'):
                                     continue
+                                elif _cs in ('주석', '주 석', '비고', '비 고') or '주석' in _cs.replace(' ', ''):
+                                    continue  # 주석 참조 컬럼 → 스킵
                                 elif _cs.startswith('col_') and _fy_idx < len(_fy_years):
                                     _col_rename[_c] = _fy_years[_fy_idx]
                                     _fy_idx += 1
-                                elif _re.search(r'제\s*\d+\s*기|당기|전기|전전기', _cs) and _fy_idx < len(_fy_years):
+                                elif _re.search(r'제\s*\d+\s*기|당\s*기|전\s*전\s*기|전\s*기', _cs) and _fy_idx < len(_fy_years):
                                     _col_rename[_c] = _fy_years[_fy_idx]
                                     _fy_idx += 1
                                 elif _re.search(r'20\d{2}', _cs) and _fy_idx < len(_fy_years):
