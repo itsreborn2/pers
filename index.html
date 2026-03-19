@@ -48,6 +48,8 @@
             padding: 110px 20px 0 20px;
             overflow-x: hidden;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
         }
 
         .container {
@@ -4284,8 +4286,9 @@
         .site-footer {
             background: #131313;
             color: rgba(255,255,255,0.7);
-            margin: 80px -20px 0;
-            padding: 48px 0 0;
+            margin: 0 -20px 0;
+            padding: 80px 0 0;
+            margin-top: auto;
         }
 
         .footer-inner {
@@ -5086,7 +5089,7 @@
                 </div>
                 <div class="contact-right">
                     <div class="contact-email" onclick="copyEmail()">
-                        finance@moatai.io
+                        valuelens@moatai.app
                         <span class="copy-icon">&#x1F4CB;</span>
                     </div>
                 </div>
@@ -5586,7 +5589,7 @@
         }
 
         function copyEmail() {
-            navigator.clipboard.writeText('finance@moatai.io').then(() => {
+            navigator.clipboard.writeText('valuelens@moatai.app').then(() => {
                 const toast = document.getElementById('copyToast');
                 toast.classList.add('show');
                 setTimeout(() => toast.classList.remove('show'), 2000);
@@ -7862,15 +7865,21 @@
                 // ========== 재무상태표 렌더링 ==========
                 // 재무상태표: 유동자산 ~ 부채와자본총계 + NWC + Net Debt
                 const bsEndItems = ['NWC', 'Net Debt'];  // 재무상태표 마지막에 포함될 항목
-                const isStartNames = ['매출'];
+                const isStartNames = ['매출', '매출원가', '매출총이익', '영업수익'];
                 let bsTableHtml = '<table class="vcm-table"><thead>' + headerHtml + '</thead><tbody>';
+                let passedNetDebt = false;
 
                 for (const row of vcmDisplay) {
                     const itemName = row['항목'];
                     if (!itemName) continue;
+                    const trimmed = itemName.trim();
 
-                    // 손익계산서 시작 지점 (매출)에서 BS 종료
-                    if (itemName.trim() === '매출') break;
+                    // 손익계산서 시작 지점에서 BS 종료
+                    // 1) '매출' 등 IS 시작 항목을 만나면 즉시 종료
+                    if (isStartNames.includes(trimmed)) break;
+                    // 2) Net Debt 이후 NWC/NetDebt 하위가 아닌 첫 항목 = IS 시작
+                    if (passedNetDebt && !trimmed.includes('[NWC]') && !trimmed.includes('[NetDebt]')) break;
+                    if (trimmed === 'Net Debt') passedNetDebt = true;
 
                     // NWC/Net Debt 하위항목은 제외 (툴팁에서만 표시)
                     if (itemName.includes('[NWC]') || itemName.includes('[NetDebt]')) continue;
@@ -7958,13 +7967,22 @@
                 // ========== 손익계산서 렌더링 ==========
                 let isTableHtml = '<table class="vcm-table"><thead>' + headerHtml + '</thead><tbody>';
                 let foundIsStart = false;
+                let isPassedNetDebt = false;
 
                 for (const row of vcmDisplay) {
                     const itemName = row['항목'];
                     if (!itemName) continue;
+                    const trimmedIs = itemName.trim();
 
-                    // IS 시작 지점 (매출부터)
-                    if (itemName.trim() === '매출') foundIsStart = true;
+                    // IS 시작 지점 감지:
+                    // 1) '매출' 등 IS 시작 항목
+                    if (isStartNames.includes(trimmedIs)) foundIsStart = true;
+                    // 2) Net Debt 이후 NWC/NetDebt 하위가 아닌 첫 항목 = IS 시작
+                    if (trimmedIs === 'Net Debt') isPassedNetDebt = true;
+                    if (isPassedNetDebt && !foundIsStart && trimmedIs !== 'Net Debt'
+                        && !trimmedIs.includes('[NWC]') && !trimmedIs.includes('[NetDebt]')) {
+                        foundIsStart = true;
+                    }
                     if (!foundIsStart) continue;
 
                     // NWC, Net Debt 관련 항목은 재무상태표에 표시되므로 제외
@@ -10778,7 +10796,7 @@
                 <div class="footer-col">
                     <h4>Contact</h4>
                     <div class="footer-contact-item"><strong>담당자</strong> 천영록</div>
-                    <div class="footer-contact-item"><strong>이메일</strong> <span style="cursor:pointer; text-decoration:underline;" onclick="copyEmail()">finance@moatai.io</span></div>
+                    <div class="footer-contact-item"><strong>이메일</strong> <span style="cursor:pointer; text-decoration:underline;" onclick="copyEmail()">valuelens@moatai.app</span></div>
                     <div class="footer-contact-item"><strong>주소</strong> 서울특별시 강남구 삼성동 코엑스 스파크플러스</div>
                 </div>
             </div>

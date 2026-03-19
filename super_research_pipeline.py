@@ -281,6 +281,20 @@ class SuperResearchPipeline:
         'leeko.com', 'kimchang.com', 'yulchon.com', 'bkl.co.kr', 'shinkim.com',
         # 정적/CDN + 스팸
         'pstatic.net',
+        # 앱스토어/소프트웨어
+        'apps.apple.com', 'play.google.com', 'github.com',
+        'huggingface.co', 'pypi.org', 'npmjs.com',
+        # 지도/계정/로그인
+        'map.kakao.com', 'map.naver.com', 'accounts.kakao.com',
+        # 투자 분석/블로그
+        'judal.co.kr', 'stockalarm.co.kr',
+    }
+
+    # 비뉴스 URL 경로 패턴 (홈페이지, 채용, 계정 등)
+    _JUNK_URL_PATTERNS = {
+        '/recruit', '/career', '/jobs', '/apply',
+        '/account', '/login', '/signup', '/register',
+        '/store/', '/shop/', '/product/',
     }
 
     @staticmethod
@@ -353,21 +367,30 @@ class SuperResearchPipeline:
             if not url or not title:
                 continue
 
-            # URL 중복 제거
-            if url in seen_urls:
+            # URL 중복 제거 (정규화: www/http/trailing slash 통일)
+            norm_url = url.lower().replace('https://', '').replace('http://', '').replace('www.', '').rstrip('/')
+            if norm_url in seen_urls:
                 continue
-            seen_urls.add(url)
+            seen_urls.add(norm_url)
 
-            # 제목 중복 제거 (동일 기사 다른 URL)
-            title_key = title.strip()[:60]
-            if title_key in seen_titles:
+            # 제목 중복 제거 (정규화: 공백/특수문자 제거 후 비교)
+            title_normalized = re.sub(r'[\s·\-|:]+', '', title.strip())[:50]
+            if title_normalized in seen_titles:
                 continue
-            seen_titles.add(title_key)
+            seen_titles.add(title_normalized)
 
             # 불필요 도메인 필터링 (정확한 도메인 suffix 매칭)
             try:
-                domain = urlparse(url).netloc.lower()
+                parsed = urlparse(url)
+                domain = parsed.netloc.lower()
+                path_lower = parsed.path.lower()
                 if any(domain == junk or domain.endswith('.' + junk) for junk in self._JUNK_DOMAINS):
+                    continue
+                # 비뉴스 URL 경로 패턴 필터 (채용/계정/쇼핑 등)
+                if any(pat in path_lower for pat in self._JUNK_URL_PATTERNS):
+                    continue
+                # 홈페이지 루트 URL 필터 (path가 / 또는 비어있으면 = 홈페이지)
+                if path_lower.rstrip('/') in ('', '/page', '/index', '/home'):
                     continue
             except Exception:
                 pass
@@ -376,8 +399,11 @@ class SuperResearchPipeline:
             if company_name:
                 clean = company_name.replace('(주)', '').replace('㈜', '').strip()
                 combined = (title or '') + ' ' + (desc or '')
-                # 정확한 이름 매칭 또는 접미사 제거 후 매칭
-                matched = clean in combined
+                # 짧은 회사명(≤2자)은 단어경계 매칭 (E1 → E1 Electric Boat 방지)
+                if len(clean) <= 2:
+                    matched = bool(re.search(r'(?<![A-Za-z])' + re.escape(clean) + r'(?![A-Za-z0-9])', combined))
+                else:
+                    matched = clean in combined
                 if not matched and len(clean) >= 4:
                     # 흔한 접미사 제거 후 재매칭 (삼성전자→삼성, 포스코홀딩스→포스코)
                     for suffix in ['홀딩스', '그룹', '전자', '화학', '건설', '산업', '물산', '상사',
@@ -758,22 +784,105 @@ class SuperResearchPipeline:
             print(f"  → 공시 검색 실패: {e}")
             return DisclosureResult()
 
-    async def _search_major_news(self, company: CompanyInput) -> MajorNewsResult:
-        """Firecrawl 뉴스 검색 → 중복/불필요 필터링 → 본문 크롤링 → Gemini 분석 (최근 5년)"""
-        try:
-            all_items = []  # Firecrawl 검색 결과 원본
+    def _search_naver_news(self, company_name: str, display: int = 20) -> list:
+        """Naver News Search API로 뉴스 검색 (동기)"""
+        import requests
+        from types import SimpleNamespace
 
-            # 5년 전 날짜 계산
+        client_id = os.getenv('NAVER_CLIENT_ID')
+        client_secret = os.getenv('NAVER_CLIENT_SECRET')
+        if not client_id or not client_secret:
+            print("  → Naver API 키 미설정, 스킵")
+            return []
+
+        clean_name = company_name.replace('(주)', '').replace('㈜', '').strip()
+
+        try:
+            resp = requests.get(
+                'https://openapi.naver.com/v1/search/news.json',
+                params={'query': clean_name, 'display': display, 'sort': 'date'},
+                headers={
+                    'X-Naver-Client-Id': client_id,
+                    'X-Naver-Client-Secret': client_secret
+                },
+                timeout=10
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            items = []
+            for item in data.get('items', []):
+                title = re.sub(r'<[^>]+>', '', item.get('title', ''))
+                desc = re.sub(r'<[^>]+>', '', item.get('description', ''))
+                url = item.get('originallink') or item.get('link', '')
+                pub_date = item.get('pubDate', '')
+
+                items.append(SimpleNamespace(
+                    url=url, title=title, description=desc,
+                    date=pub_date, metadata=None
+                ))
+
+            print(f"  → Naver 뉴스: {len(items)}건")
+            return items
+        except Exception as e:
+            print(f"  → Naver 뉴스 검색 실패: {e}")
+            return []
+
+    def _search_google_via_gemini(self, company_name: str) -> list:
+        """Gemini Google Search (grounding)로 뉴스 검색 (동기)"""
+        from types import SimpleNamespace
+
+        clean_name = company_name.replace('(주)', '').replace('㈜', '').strip()
+
+        try:
+            prompt = f'"{clean_name}" 최근 주요 뉴스를 알려주세요. 인수합병, 경영진 변동, 실적 발표, 소송, 대규모 계약, 구조조정 등 기업 분석에 중요한 뉴스 위주로 최대한 많이 찾아주세요.'
+
+            response = generate_with_retry(
+                self.gemini, MODEL_FLASH, prompt,
+                config=types.GenerateContentConfig(
+                    tools=[types.Tool(google_search=types.GoogleSearch())]
+                )
+            )
+
+            items = []
+            # grounding 메타데이터에서 소스 URL/제목 추출
+            if hasattr(response, 'candidates') and response.candidates:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+                    metadata = candidate.grounding_metadata
+                    if hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
+                        for chunk in metadata.grounding_chunks:
+                            if hasattr(chunk, 'web') and hasattr(chunk.web, 'uri'):
+                                items.append(SimpleNamespace(
+                                    url=chunk.web.uri,
+                                    title=getattr(chunk.web, 'title', ''),
+                                    description='',
+                                    date='',
+                                    metadata=None
+                                ))
+
+            print(f"  → Google 검색 (Gemini grounding): {len(items)}건")
+            return items
+        except Exception as e:
+            print(f"  → Google 검색 실패: {e}")
+            return []
+
+    async def _search_major_news(self, company: CompanyInput) -> MajorNewsResult:
+        """3개 소스(Firecrawl+Naver+Google) 병렬 검색 → 중복 제거 → 크롤링 → Gemini 분석"""
+        try:
+            all_items = []
+
+            # 2년 전 날짜 계산 (Firecrawl용)
             from datetime import timedelta
-            five_years_ago = datetime.now() - timedelta(days=1825)
+            two_years_ago = datetime.now() - timedelta(days=730)
             today = datetime.now()
-            date_range = f"cdr:1,cd_min:{five_years_ago.strftime('%m/%d/%Y')},cd_max:{today.strftime('%m/%d/%Y')}"
+            date_range = f"cdr:1,cd_min:{two_years_ago.strftime('%m/%d/%Y')},cd_max:{today.strftime('%m/%d/%Y')}"
 
             # 회사명에서 (주), ㈜ 제거
             clean_name = company.corp_name.replace('(주)', '').replace('㈜', '').strip()
 
-            def _search_one(query, limit, use_news_source=False):
-                """단일 검색 실행 (동기)"""
+            # --- Firecrawl 검색 함수 ---
+            def _search_firecrawl(query, limit, use_news_source=False):
                 try:
                     kwargs = dict(query=query, limit=limit, tbs=date_range)
                     if use_news_source:
@@ -787,61 +896,29 @@ class SuperResearchPipeline:
                         items.extend(list(results.web))
                     return items
                 except Exception as e:
-                    print(f"  → 검색 실패 ({query[:40]}...): {e}")
+                    print(f"  → Firecrawl 검색 실패 ({query[:30]}): {e}")
                     return []
 
-            # PE Due Diligence 기준 검색 쿼리 (20개 카테고리 + 기본 1개)
-            # (query, limit, use_news_source) — 기본 검색은 web(넓은 커버리지), 카테고리별은 news 소스만
-            search_tasks = [
-                # 기본 검색 (web — 넓은 커버리지)
-                (clean_name, 20, False),
-                # A. Corporate Action & Governance
-                (f'"{clean_name}" 인수 합병 매각 M&A 분할', 5, True),
-                (f'"{clean_name}" 대표이사 경영진 이사회 사임 선임', 5, True),
-                (f'"{clean_name}" 최대주주 지분 매각 자사주 배당 주주', 5, True),
-                (f'"{clean_name}" 자회사 계열사 분할 합병 설립 편입', 5, True),
-                # B. Financial Events
-                (f'"{clean_name}" 실적 매출 영업이익 적자 흑자전환', 5, True),
-                (f'"{clean_name}" 유상증자 회사채 자금조달 차입 IPO', 5, True),
-                (f'"{clean_name}" 신용등급 워크아웃 기업회생 부도 자본잠식', 5, True),
-                (f'"{clean_name}" 감사의견 한정 거절 회계오류 재무제표 정정', 5, True),
-                # C. Legal & Regulatory
-                (f'"{clean_name}" 소송 과징금 공정위 제재 벌금 판결', 5, True),
-                (f'"{clean_name}" 세무조사 추징금 조세소송 국세청', 5, True),
-                (f'"{clean_name}" 인허가 면허 규제 허가취소 행정처분', 5, True),
-                (f'"{clean_name}" 관계사거래 특수관계자 내부거래 일감몰아주기', 5, True),
-                # D. Operational
-                (f'"{clean_name}" 대규모 계약 수주 납품 장기계약 해지', 5, True),
-                (f'"{clean_name}" 공장 증설 설비투자 부동산 매입 매각', 5, True),
-                (f'"{clean_name}" 구조조정 감원 파업 노조 핵심인력 이탈', 5, True),
-                (f'"{clean_name}" 주요거래처 고객 납품업체 공급망 거래중단', 5, True),
-                # E. External Risk
-                (f'"{clean_name}" 환경오염 산업재해 중대재해 제품리콜 안전', 5, True),
-                (f'"{clean_name}" 해외진출 수출 해외법인 글로벌 철수 관세', 5, True),
-                (f'"{clean_name}" 특허 기술이전 R&D 핵심기술 라이선스 침해', 5, True),
-                (f'"{clean_name}" 채무보증 우발채무 담보 연대보증 약정', 5, True),
-                # F. Growth & Strategy
-                (f'"{clean_name}" 최대실적 사상최대 매출성장 영업이익증가 실적개선', 5, True),
-                (f'"{clean_name}" 신사업 신시장 진출 해외확장 동남아 미국 유럽', 5, True),
-                (f'"{clean_name}" 업무협약 MOU 전략적제휴 합작 JV 파트너십', 5, True),
-                (f'"{clean_name}" 시장점유율 업계1위 경쟁력 수주잔고 수요증가', 5, True),
-            ]
-
-            # 전체 병렬 실행 (asyncio.to_thread로 동기 → 비동기 변환)
+            # --- 3개 소스 병렬 실행 (Firecrawl뉴스 + Naver + Google) ---
             loop = asyncio.get_running_loop()
-            tasks = [loop.run_in_executor(None, _search_one, q, lim, ns) for q, lim, ns in search_tasks]
+            tasks = [
+                loop.run_in_executor(None, _search_firecrawl, f'"{clean_name}"', 20, True),  # Firecrawl 뉴스
+                loop.run_in_executor(None, self._search_naver_news, company.corp_name, 20),  # Naver 뉴스
+                loop.run_in_executor(None, self._search_google_via_gemini, company.corp_name),  # Google (Gemini)
+            ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
+            source_names = ['Firecrawl뉴스', 'Naver', 'Google']
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
-                    print(f"  → 병렬 검색 #{i} 예외: {result}")
+                    print(f"  → {source_names[i]} 검색 예외: {result}")
                 elif isinstance(result, list):
                     all_items.extend(result)
 
-            # 1단계: 중복 제거 + 불필요 URL 필터링 (회사명 관련성 + 5년 이내)
-            filtered = self._filter_search_results(all_items, company_name=company.corp_name, max_age_years=5)
+            # 1단계: 중복 제거 + 불필요 URL 필터링 (회사명 관련성 + 2년 이내)
+            filtered = self._filter_search_results(all_items, company_name=company.corp_name, max_age_years=2)
 
-            print(f"  → Firecrawl 주요뉴스 병렬검색 완료: {len(search_tasks)}개 쿼리, {len(all_items)}건 → 필터 후 {len(filtered)}건")
+            print(f"  → 3소스 병렬검색 완료: {len(all_items)}건 → 중복제거/필터 후 {len(filtered)}건")
 
             if not filtered:
                 return MajorNewsResult(news_items=[], raw_news="관련 뉴스 없음")
@@ -856,21 +933,27 @@ class SuperResearchPipeline:
                 for i, item in enumerate(filtered[:60])
             ])
 
-            select_prompt = f"""다음은 {company.corp_name}에 대한 뉴스 검색 결과 snippet입니다.
-PE 실사 관점에서 가장 중요한 뉴스의 번호를 선택해주세요.
+            select_prompt = f"""다음은 {company.corp_name}에 대한 뉴스 검색 결과입니다.
+M&A 실사(Due Diligence) 관점에서 유의미한 뉴스를 최대한 많이 선택하세요.
 
-## 검색 결과 (snippet)
+## 검색 결과
 {snippet_context}
 
-## 선별 기준
-중요: 인수/합병/매각, 경영진 변동, 실적 발표, 소송/과징금, 대규모 계약, 구조조정
-제외: 채용공고, 홍보성 기사, 단순 주가뉴스, 프로모션/이벤트, 마케팅, CSR
-★ 반드시 제외: 법무법인/회계법인 프로필, 증권사 리포트 목록, 투자데이터/주식블로그,
-  다른 기업 뉴스에서 해당 기업이 단순 나열된 경우, 기업 홈페이지
+## 선택 대상 (하나라도 해당하면 선택)
+- 인수/합병/매각/분할, 지분 변동, 경영진 변동
+- 실적 발표, 매출/이익 변동, 사상 최대/최저
+- 유상증자, 회사채, 신용등급, 감사의견
+- 소송, 과징금, 세무조사, 규제, 인허가
+- 대규모 계약/수주, 설비투자, 구조조정
+- 신사업, 해외 진출, 전략적 제휴/MOU
+- 노사 이슈, 파업, 핵심인력 이탈
+- 환경/안전 사고, 제품 리콜, 우발채무
+
+## 반드시 제외
+- 채용공고, 광고/홍보, 단순 주가시황, 앱/서비스 리뷰
 
 ## 출력
-중요한 뉴스의 번호만 쉼표로 나열하세요 (예: 1,3,5,7,12).
-최대 20개:"""
+번호만 쉼표로 나열 (예: 1,3,5,7,12). 애매하면 포함하세요:"""
 
             select_response = generate_with_retry(self.gemini, MODEL_FLASH, select_prompt)
             selected_text = select_response.text.strip() if select_response and select_response.text else ""
@@ -881,10 +964,8 @@ PE 실사 관점에서 가장 중요한 뉴스의 번호를 선택해주세요.
                 idx = int(num) - 1
                 if 0 <= idx < len(filtered):
                     selected_indices.append(idx)
-            selected_indices = selected_indices[:20]
-
-            # 선택된 URL 목록
-            selected_items = [filtered[i] for i in selected_indices] if selected_indices else filtered[:20]
+            # 선택된 URL 목록 (제한 없음 — LLM이 선별한 만큼)
+            selected_items = [filtered[i] for i in selected_indices] if selected_indices else filtered
 
             print(f"  → 주요뉴스 선별 완료: {len(selected_items)}개")
 
@@ -945,7 +1026,7 @@ PE 실사 관점에서 가장 중요한 뉴스의 번호를 선택해주세요.
 - 제목은 간결하게 (15자 이내), "| 상세:" 뒤에 기사 본문에서 확인된 구체적 수치·인명·금액 포함
 - 날짜는 기사에서 추출하여 (YYYY.MM) 형식. 모르면 생략
 - URL 유지
-- 최대 20건 (카테고리별 균형있게)
+- PE 실사에 관련된 뉴스는 모두 포함 (카테고리별 균형있게)
 - ★ 반드시 최신 날짜순으로 정렬 (가장 최근 → 과거 순서)
 - 뉴스가 없으면 '해당 없음'"""
 

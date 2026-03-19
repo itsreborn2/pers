@@ -1883,6 +1883,34 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
 
                             # ★ 사업보고서 HTML IS/CIS 폴백: XBRL IS에 매출이 없을 때 사용
                             # 모든 사업보고서에서 HTML IS 수집 (이전 연도 커버)
+
+                            # 첫 번째 보고서에서 폴백 필요 여부 판정 (HTML IS 존재 여부와 무관하게)
+                            if rpt_idx == 0 and '_html_is_need_fallback' not in fs_data:
+                                _current_is = fs_data.get('is')
+                                _need_fallback = False
+                                if _current_is is not None and not _current_is.empty:
+                                    _acc_col = None
+                                    for _c in ['계정과목', '항목', 'label_ko']:
+                                        if _c in _current_is.columns:
+                                            _acc_col = _c
+                                            break
+                                    if _acc_col:
+                                        _acc_names = [a.strip() for a in _current_is[_acc_col].dropna().astype(str).tolist()]
+                                        _revenue_exact = {'매출', '매출액', '영업수익', '수익(매출액)'}
+                                        _has_revenue = any(a in _revenue_exact or a.endswith('매출액') for a in _acc_names)
+                                        print(f"[FS] IS 핵심계정 체크(exact): acc_col={_acc_col}, has_revenue={_has_revenue}, IS행수={len(_current_is)}, 샘플계정={_acc_names[:10]}")
+                                        if not _has_revenue:
+                                            _need_fallback = True
+                                    else:
+                                        print(f"[FS] IS 계정과목 컬럼 없음: columns={list(_current_is.columns)[:5]}")
+                                        _need_fallback = True
+                                elif _current_is is None or _current_is.empty:
+                                    _need_fallback = True
+
+                                if _need_fallback:
+                                    fs_data['_html_is_need_fallback'] = True
+                                    print(f"[FS] IS 폴백 필요 → HTML IS 수집 시작")
+
                             if html_notes:
                                 if rpt_idx == 0:
                                     print(f"[FS] HTML IS 폴백 체크: html_notes keys={list(html_notes.keys())}")
@@ -1891,34 +1919,7 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                                     if rpt_idx == 0:
                                         print(f"[FS] HTML {_fst}: {'있음 '+str(len(_html_df))+'행' if _html_df is not None and hasattr(_html_df, '__len__') else 'None'}")
                                     if _html_df is not None and not _html_df.empty and len(_html_df) >= 5:
-                                        # 첫 번째 보고서에서만 폴백 필요 여부 확인
-                                        if rpt_idx == 0:
-                                            _current_is = fs_data.get('is')
-                                            _need_fallback = False
-                                            if _current_is is not None and not _current_is.empty:
-                                                _acc_col = None
-                                                for _c in ['계정과목', '항목', 'label_ko']:
-                                                    if _c in _current_is.columns:
-                                                        _acc_col = _c
-                                                        break
-                                                if _acc_col:
-                                                    _acc_text = ' '.join(_current_is[_acc_col].dropna().astype(str).tolist())
-                                                    _has_revenue = '매출' in _acc_text or '영업수익' in _acc_text or '영업이익' in _acc_text
-                                                    print(f"[FS] IS 핵심계정 체크: acc_col={_acc_col}, has_revenue={_has_revenue}, IS행수={len(_current_is)}, 샘플={_acc_text[:100]}")
-                                                    if not _has_revenue:
-                                                        _need_fallback = True
-                                                else:
-                                                    print(f"[FS] IS 계정과목 컬럼 없음: columns={list(_current_is.columns)[:5]}")
-                                                    _need_fallback = True
-                                            elif _current_is is None or _current_is.empty:
-                                                _need_fallback = True
-
-                                            if _need_fallback:
-                                                fs_data['_html_is_need_fallback'] = True
-                                            else:
-                                                break  # 폴백 불필요하면 IS 체크 스킵
-
-                                        # 폴백 필요 확인된 경우 (첫 보고서에서 결정됨), 모든 보고서에서 HTML IS 수집
+                                        # 폴백 필요 확인된 경우, 모든 보고서에서 HTML IS 수집
                                         if fs_data.get('_html_is_need_fallback'):
                                             _html_acc_col = None
                                             for _c in _html_df.columns:
@@ -2307,35 +2308,33 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
 
                 # ★ IS 핵심 계정 폴백: IS가 비어있거나 매출이 없으면 HTML IS 우선
                 # 폴백 필요 여부는 루프에서 이미 판정됨 (_html_is_need_fallback)
-                fs_data.pop('_html_is_need_fallback', None)
+                _initial_fallback_needed = fs_data.pop('_html_is_need_fallback', None)
                 _html_is_backups = fs_data.pop('_html_is_backups', None)
+                print(f"[FS] ★ HTML IS 폴백 진입: initial_fallback={_initial_fallback_needed}, backups={len(_html_is_backups) if _html_is_backups else 0}, fs_data_keys={[k for k in fs_data if k.startswith('_')]}")
                 if _html_is_backups:
                     _xbrl_is = fs_data.get('is')
                     _xbrl_is_empty = _xbrl_is is None or (isinstance(_xbrl_is, pd.DataFrame) and _xbrl_is.empty)
 
                     # 추가 검증: XBRL IS에 매출+값이 있으면 폴백 불필요
+                    # 단, 초기 검증(주석 병합 전)에서 이미 폴백 필요로 판정된 경우 그 결정을 신뢰
                     _need_html_fallback = True
-                    if not _xbrl_is_empty:
+                    if _initial_fallback_needed:
+                        print(f"[FS] ★ 초기 검증에서 IS 매출 없음 판정됨 (주석 병합 전) → HTML IS 폴백 사용")
+                    elif not _xbrl_is_empty:
                         _revenue_excludes = ('채권', '증가', '감소', '원가율')
                         _report_yr = int(end_date[:4]) - 1
                         _latest_fy = f'FY{_report_yr}'
 
                         def _check_is_revenue(df, acct_col, fy_col):
-                            """IS에 매출 계정이 있고 최신 FY에 값이 있는지 확인"""
+                            """IS에 매출 계정이 있고 최신 FY에 값이 있는지 확인 (exact match)"""
                             if acct_col not in df.columns:
                                 return False
+                            _revenue_exact_names = {'매출', '매출액', '영업수익', '수익(매출액)'}
                             for idx, row in df.iterrows():
-                                _acct = str(row.get(acct_col, ''))
+                                _acct = str(row.get(acct_col, '')).strip()
                                 if not _acct or _acct == 'nan':
                                     continue
-                                is_revenue = False
-                                if _acct.strip() in ('매출', '매출액', '영업수익', '수익(매출액)'):
-                                    is_revenue = True
-                                elif '매출' in _acct and not any(ex in _acct for ex in _revenue_excludes):
-                                    if any(kw in _acct for kw in ['매출총', '매출원가', '매출이익']):
-                                        is_revenue = True
-                                elif '영업수익' in _acct:
-                                    is_revenue = True
+                                is_revenue = _acct in _revenue_exact_names or _acct.endswith('매출액')
                                 if is_revenue:
                                     _val = row.get(fy_col)
                                     if _val is not None and str(_val) != 'nan':
@@ -2433,6 +2432,10 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
 
                         fs_data['is'] = _html_backup
                         fs_data['_html_is_used'] = True
+                        # xbrl_data도 함께 업데이트 (line 2853에서 fs_data = xbrl_data로 덮어쓰기 방지)
+                        if xbrl_data is not None:
+                            xbrl_data['is'] = _html_backup
+                            xbrl_data['_html_is_used'] = True
                         print(f"[FS] ★ IS에 매출 없음 → 사업보고서 HTML {_html_type}로 대체 ({len(_html_backup)}행, 컬럼: {list(_html_backup.columns)[:5]})")
 
                         # ★ HTML IS 단위 보정: XBRL BS(원) vs HTML IS(백만원/천원) 단위 불일치 감지
@@ -2696,10 +2699,11 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                 import pandas as pd
                 _xbrl_is = xbrl_data['is']
                 _has_core_accounts = False
+                _revenue_exact_set = {'매출', '매출액', '영업수익', '수익(매출액)'}
                 for _c in ['계정과목', '항목', 'label_ko']:
                     if _c in _xbrl_is.columns:
-                        _acc_text = ' '.join(_xbrl_is[_c].dropna().astype(str).tolist())
-                        if '매출' in _acc_text or '영업수익' in _acc_text or '영업이익' in _acc_text:
+                        _acc_names = [a.strip() for a in _xbrl_is[_c].dropna().astype(str).tolist()]
+                        if any(a in _revenue_exact_set or a.endswith('매출액') for a in _acc_names):
                             _has_core_accounts = True
                         break
                 if not _has_core_accounts:
@@ -6474,10 +6478,13 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                             _cis_acc = _c
                             break
                     if _cis_acc:
-                        _cis_str = _cis_df[_cis_acc].astype(str).str.cat(sep=' ')
-                        if '매출' in _cis_str or '영업수익' in _cis_str:
+                        _cis_names = [a.strip() for a in _cis_df[_cis_acc].astype(str).tolist()]
+                        _cis_has_revenue = any(a in ('매출액', '매출', '영업수익', '수익(매출액)') or a.endswith('매출액') for a in _cis_names)
+                        if _cis_has_revenue:
                             is_df = _cis_df
-                            print(f"[VCM-v2] IS에 매출/영업수익 항목 없음 → CIS로 대체 ({len(_cis_df)}행)")
+                            print(f"[VCM-v2] IS에 매출/영업수익 항목 없음 → CIS로 대체(exact) ({len(_cis_df)}행)")
+                        else:
+                            print(f"[VCM-v2] CIS에도 매출 항목 없음(exact) — CIS 대체 안 함 ({len(_cis_df)}행, 샘플={_cis_names[:10]})")
 
     if bs_df is None or is_df is None:
         print(f"[VCM-v2] 필수 데이터 누락: bs={bs_df is not None}, is={is_df is not None}")
@@ -7421,9 +7428,12 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
     # 빈 행 필터링
     filtered_bs_rows = [r for r in bs_rows
                         if any(r.get(y) is not None and r.get(y) != 0 for y in year_cols)]
+    # IS 필터: 값이 있는 행만 유지하되, '매출' 행은 항상 포함 (프론트 BS/IS 분리 기준)
+    _is_always_keep = {'매출', '매출원가', '매출총이익', '영업이익', '당기순이익', 'EBITDA'}
     filtered_is_rows = [r for r in is_rows
                         if any(r.get(y) is not None and r.get(y) != 0 for y in year_cols)
-                        or '[EBITDA]' in r.get('항목', '')]
+                        or '[EBITDA]' in r.get('항목', '')
+                        or r.get('항목', '').strip() in _is_always_keep]
 
     all_rows = filtered_bs_rows + filtered_is_rows
 
@@ -7481,7 +7491,9 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             continue
 
         has_any_value = any(row.get(col) is not None and row.get(col) != 0 for col in year_cols)
-        if not has_any_value:
+        # IS 핵심 항목은 값이 0이어도 항상 포함 (프론트 BS/IS 분리 기준)
+        _is_force_keep = item_name.strip() in _is_always_keep
+        if not has_any_value and not _is_force_keep:
             continue
 
         display_row = {'항목': item_name}
@@ -7504,7 +7516,7 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 display_row[col] = ''
 
         has_display = any(display_row.get(col) not in (None, '', 0) for col in year_cols)
-        if has_display:
+        if has_display or _is_force_keep:
             display_rows.append(display_row)
 
     # DataFrame 생성
