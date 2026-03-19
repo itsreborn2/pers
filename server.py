@@ -7058,6 +7058,7 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 continue
 
             val = get_value(is_df, is_acc_col, acc_name, year_col)
+            _is_null = val is None  # ★ 원본 None 여부 기록 (None→0 변환 전)
             if val is None:
                 val = 0
 
@@ -7077,23 +7078,29 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 'raw_name': acc_name,
                 'value': val,
                 'group': group,
+                'is_null': _is_null,  # ★ XBRL 원본이 None이었는지 추적
             })
 
         # 주요 IS 항목 추출
         def get_cat_total(cat_name):
             items = is_values.get(cat_name, [])
+            if not items:
+                return 0
+            # ★ 전부 is_null이면 0 반환 (None→0 변환된 것이므로 실제 데이터 없음)
+            if all(item.get('is_null') for item in items):
+                return 0
             # subtotal/total 행이 있으면 그 값 사용
             for item in items:
                 cls = is_map.get(item['raw_name'])
                 if cls and cls.get('standard_category') in ('subtotal', 'total'):
                     return item['value']
             # 없으면 합산
-            return sum(i['value'] for i in items) if items else 0
+            return sum(i['value'] for i in items)
 
         def get_cat_first(cat_name):
             items = is_values.get(cat_name, [])
             if not items:
-                return 0
+                return None  # ★ 항목 자체가 없으면 None (0이 아님)
             # 여러 항목이 있으면 sign '+'인 항목 우선 (당기순이익(손실) vs 당기순손실 구분)
             if len(items) > 1:
                 for item in items:
@@ -7104,7 +7111,10 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             for item in items:
                 if item['value'] != 0:
                     return item['value']
-            return items[0]['value']
+            # ★ 모든 값이 0 → 원본이 전부 None이었으면 None 반환 (데이터 없음)
+            if all(item.get('is_null') for item in items):
+                return None
+            return items[0]['value']  # 실제로 0인 경우
 
         매출 = get_cat_first('revenue') or 0
         원가 = get_cat_first('cogs') or 0
@@ -7148,6 +7158,9 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
 
         if not 판관비 and sga_details:
             판관비 = sum(i['value'] for i in sga_details)
+
+        # ★ 판관비 데이터 실제 존재 여부: SGA 항목 중 원본값이 None이 아닌 것이 있는지
+        _sga_found = any(not item.get('is_null') for item in sga_items) if sga_items else False
 
         # ★ 주석(notes)에서 감가상각비 추출 — EBITDA 계산용 (비용의 성격별 분류 = 전체 비용)
         # 주의: 주석은 전체 비용(매출원가+판관비)이므로 SGA 하위항목으로 넣으면 안 됨
@@ -7196,7 +7209,13 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 print(f"[VCM-v2] 주석 감가상각비: {_notes_감가상각비:,.0f}, 무형: {_notes_무형자산상각비:,.0f}, 사용권: {_notes_사용권자산상각비:,.0f} ({year_str})")
 
         영업이익_direct = get_cat_first('operating_income')
-        영업이익 = 영업이익_direct if 영업이익_direct else (매출총이익 - abs(판관비))
+        # ★ 데이터 없음(None/0) → 잘못된 파생값 방지: direct 값 > SGA 있을 때 파생 > None
+        if 영업이익_direct is not None:
+            영업이익 = 영업이익_direct
+        elif _sga_found or 판관비:
+            영업이익 = 매출총이익 - abs(판관비)
+        else:
+            영업이익 = None  # 판관비 데이터 없으면 계산 불가 (매출총이익=영업이익 오류 방지)
 
         금융수익 = get_cat_total('interest_income') or 0
         금융비용 = get_cat_total('interest_expense') or 0
@@ -7207,15 +7226,25 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         영업외비용 = abs(금융비용) + abs(기타비용)
 
         세전이익_direct = get_cat_first('ebt')
-        세전이익 = 세전이익_direct if 세전이익_direct else (영업이익 + 영업외수익 - 영업외비용)
+        if 세전이익_direct is not None:
+            세전이익 = 세전이익_direct
+        elif 영업이익 is not None:
+            세전이익 = 영업이익 + 영업외수익 - 영업외비용
+        else:
+            세전이익 = None
 
         법인세 = get_cat_first('tax') or 0
 
         당기순이익_direct = get_cat_first('net_income')
-        당기순이익 = 당기순이익_direct if 당기순이익_direct else (세전이익 - abs(법인세))
+        if 당기순이익_direct is not None:
+            당기순이익 = 당기순이익_direct
+        elif 세전이익 is not None:
+            당기순이익 = 세전이익 - abs(법인세)
+        else:
+            당기순이익 = None
 
-        # 주석 필터링된 경우, 당기순이익이 0이면 전체 IS에서 당기순이익/당기순손실 검색
-        if _is_notes_filtered and 당기순이익 == 0:
+        # 주석 필터링된 경우, 당기순이익이 0 또는 None이면 전체 IS에서 당기순이익/당기순손실 검색
+        if _is_notes_filtered and (당기순이익 == 0 or 당기순이익 is None):
             for _acc in _full_is_accounts:
                 _norm = re.sub(r'\s', '', _acc)
                 if '당기순이익' in _norm or '당기순손실' in _norm or '당기순손익' in _norm:
@@ -7227,10 +7256,10 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                         print(f"[VCM-v2] 당기순이익 주석에서 복구: {_acc} = {_val:,.0f} ({year_str})")
                         break
 
-        # % of Sales 계산
+        # % of Sales 계산 (None 값 전파 방지)
         매출총이익_pct = 매출총이익 / 매출 if 매출 else None
-        영업이익_pct = 영업이익 / 매출 if 매출 else None
-        당기순이익_pct = 당기순이익 / 매출 if 매출 else None
+        영업이익_pct = (영업이익 / 매출) if (매출 and 영업이익 is not None) else None
+        당기순이익_pct = (당기순이익 / 매출) if (매출 and 당기순이익 is not None) else None
 
         # 감가상각비 (EBITDA용) — SGA에서 추출 + 주석(notes) 보완
         _sga_감가상각비 = 0
@@ -7250,11 +7279,11 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             감가상각비 = _sga_감가상각비
         무형자산상각비 = _notes_무형자산상각비 if _notes_무형자산상각비 else _sga_무형자산상각비
 
-        EBITDA = 영업이익 + 감가상각비 + 무형자산상각비
-        if 감가상각비 or 무형자산상각비:
+        EBITDA = (영업이익 + 감가상각비 + 무형자산상각비) if 영업이익 is not None else None
+        if EBITDA is not None and (감가상각비 or 무형자산상각비):
             print(f"[VCM-v2] EBITDA={EBITDA:,.0f} = 영업이익({영업이익:,.0f}) + 감가상각비({감가상각비:,.0f}) + 무형자산상각비({무형자산상각비:,.0f}) [source: {'notes' if (_notes_감가상각비 or _notes_사용권자산상각비) else 'sga'}]")
 
-        EBITDA_pct = (EBITDA / 매출) if 매출 and 매출 != 0 else None
+        EBITDA_pct = (EBITDA / 매출) if (매출 and 매출 != 0 and EBITDA is not None) else None
 
         # 매출/매출원가 하위항목 추출 (V1과 동일)
         revenue_sub = []  # [(display_name, value)]
@@ -7286,7 +7315,7 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         values.update({
             '매출총이익': 매출총이익,
             '% of Sales': 매출총이익_pct,
-            '판매비와관리비': -abs(판관비) if 판관비 else 0,
+            '판매비와관리비': -abs(판관비) if 판관비 else (0 if _sga_found else None),
         })
         # (판관비 하위는 아래에서 별도 추가)
         _values_after_sga = {
