@@ -6836,6 +6836,32 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 group_totals[group] += val
                 group_items[group].append({'name': display, 'value': val})
 
+        # ========== BS 이름 충돌 해결 (유동/비유동 동명 항목) ==========
+        # 같은 display_name이 다른 BS 섹션에 존재하면 (유동)/(비유동) 접미사 추가
+        _names_cross_section = {}
+        for _cat_key in ('current_asset', 'non_current_asset', 'current_liability', 'non_current_liability'):
+            for _item in category_items.get(_cat_key, []):
+                _dn = _item['name']
+                if _dn not in _names_cross_section:
+                    _names_cross_section[_dn] = set()
+                _names_cross_section[_dn].add(_cat_key)
+
+        for _dn, _cats in _names_cross_section.items():
+            if len(_cats) <= 1:
+                continue
+            # 유동/비유동 충돌 → 접미사 추가
+            _suffix_map = {
+                'current_asset': '(유동)', 'non_current_asset': '(비유동)',
+                'current_liability': '(유동)', 'non_current_liability': '(비유동)',
+            }
+            for _cat_key in _cats:
+                _suffix = _suffix_map.get(_cat_key, '')
+                if _suffix:
+                    for _item in category_items[_cat_key]:
+                        if _item['name'] == _dn:
+                            _item['name'] = f"{_dn}{_suffix}"
+            print(f"[VCM-v2] 이름충돌 해결: '{_dn}' → {', '.join(sorted(_cats))} ({year_str})")
+
         # ========== BS 구조 조립 ==========
         bs_items = []
 
@@ -6911,8 +6937,17 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
 
                 # 그룹 하위항목 (툴팁용)
                 if cand['is_group'] and len(cand['items']) >= 1:
+                    # ★ 동명 하위항목 병합 (같은 display_name 다른 raw_name → 값 합산)
+                    _merged_subs = {}
+                    for sub in cand['items']:
+                        if sub['name'] in _merged_subs:
+                            _merged_subs[sub['name']]['value'] += sub['value']
+                        else:
+                            _merged_subs[sub['name']] = {'name': sub['name'], 'value': sub['value']}
+                    _merged_list = list(_merged_subs.values())
+
                     shown_sum = 0
-                    for sub in sorted(cand['items'], key=lambda x: abs(x['value']), reverse=True)[:5]:
+                    for sub in sorted(_merged_list, key=lambda x: abs(x['value']), reverse=True)[:5]:
                         sub_name = sub['name']
                         # H3 fix: 원래 이름(orig_name)과 비교 — [비유동] 접미사 후에도 정상 동작
                         if sub_name == orig_name or sub_name == cand_name:
@@ -6936,7 +6971,14 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 all_overflow_items = []
                 for c in overflow:
                     all_overflow_items.extend(c['items'])
-                sorted_overflow = sorted(all_overflow_items, key=lambda x: abs(x['value']), reverse=True)
+                # ★ 동명 overflow 항목 병합
+                _merged_overflow = {}
+                for _oi in all_overflow_items:
+                    if _oi['name'] in _merged_overflow:
+                        _merged_overflow[_oi['name']]['value'] += _oi['value']
+                    else:
+                        _merged_overflow[_oi['name']] = {'name': _oi['name'], 'value': _oi['value']}
+                sorted_overflow = sorted(_merged_overflow.values(), key=lambda x: abs(x['value']), reverse=True)
                 shown_sum = 0
                 for item in sorted_overflow[:5]:
                     child_name = item['name']
@@ -7398,22 +7440,28 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                     row[year_str] = None
 
     # ========== 7. BS 마스터 순서 결정 및 값 병합 ==========
+    # ★ (item_name, parent) 복합키 사용 — 동명 항목의 값 덮어쓰기 방지
     master_order = []
-    master_order_set = set()
+    master_order_set = set()  # set of (item_name, parent)
+    master_order_name_set = set()  # set of item_name (위치 추적용)
 
     for year_str in sorted(all_bs_items_by_year.keys(), reverse=True):
         bs_items = all_bs_items_by_year[year_str]
         if not master_order:
             for item_name, parent, val in bs_items:
-                if item_name not in master_order_set:
+                key = (item_name, parent)
+                if key not in master_order_set:
                     master_order.append((item_name, parent))
-                    master_order_set.add(item_name)
+                    master_order_set.add(key)
+                    master_order_name_set.add(item_name)
         else:
             insert_idx = 0
             for item_name, parent, val in bs_items:
-                if item_name not in master_order_set:
+                key = (item_name, parent)
+                if key not in master_order_set:
                     master_order.insert(insert_idx, (item_name, parent))
-                    master_order_set.add(item_name)
+                    master_order_set.add(key)
+                    master_order_name_set.add(item_name)
                 else:
                     for i, (name, _) in enumerate(master_order):
                         if name == item_name:
@@ -7424,14 +7472,16 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
     bs_rows = []
     item_to_row = {}
     for item_name, parent in master_order:
+        key = (item_name, parent)
         row = {'항목': item_name, '부모': parent}
         bs_rows.append(row)
-        item_to_row[item_name] = row
+        item_to_row[key] = row
 
     for year_str, bs_items in all_bs_items_by_year.items():
         for item_name, parent, val in bs_items:
-            if item_name in item_to_row:
-                item_to_row[item_name][year_str] = round(val) if val is not None and val != 0 else None
+            key = (item_name, parent)
+            if key in item_to_row:
+                item_to_row[key][year_str] = round(val) if val is not None and val != 0 else None
 
     # 빈 행 필터링
     filtered_bs_rows = [r for r in bs_rows
