@@ -7067,7 +7067,7 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         매출 = get_cat_first('revenue') or 0
         원가 = get_cat_first('cogs') or 0
         매출총이익_direct = get_cat_first('gross_profit')
-        매출총이익 = 매출총이익_direct if 매출총이익_direct else (매출 - 원가)
+        매출총이익 = 매출총이익_direct if 매출총이익_direct else (매출 - abs(원가))
 
         # 판관비: sga 카테고리에서 합계행과 상세항목 분리
         sga_items = is_values.get('sga', [])
@@ -7154,15 +7154,15 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 print(f"[VCM-v2] 주석 감가상각비: {_notes_감가상각비:,.0f}, 무형: {_notes_무형자산상각비:,.0f}, 사용권: {_notes_사용권자산상각비:,.0f} ({year_str})")
 
         영업이익_direct = get_cat_first('operating_income')
-        영업이익 = 영업이익_direct if 영업이익_direct else (매출총이익 - 판관비)
+        영업이익 = 영업이익_direct if 영업이익_direct else (매출총이익 - abs(판관비))
 
         금융수익 = get_cat_total('interest_income') or 0
         금융비용 = get_cat_total('interest_expense') or 0
         기타수익 = get_cat_total('other_income') or 0
         기타비용 = get_cat_total('other_expense') or 0
 
-        영업외수익 = 금융수익 + 기타수익
-        영업외비용 = 금융비용 + 기타비용
+        영업외수익 = abs(금융수익) + abs(기타수익)
+        영업외비용 = abs(금융비용) + abs(기타비용)
 
         세전이익_direct = get_cat_first('ebt')
         세전이익 = 세전이익_direct if 세전이익_direct else (영업이익 + 영업외수익 - 영업외비용)
@@ -7170,7 +7170,7 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         법인세 = get_cat_first('tax') or 0
 
         당기순이익_direct = get_cat_first('net_income')
-        당기순이익 = 당기순이익_direct if 당기순이익_direct else (세전이익 - 법인세)
+        당기순이익 = 당기순이익_direct if 당기순이익_direct else (세전이익 - abs(법인세))
 
         # 주석 필터링된 경우, 당기순이익이 0이면 전체 IS에서 당기순이익/당기순손실 검색
         if _is_notes_filtered and 당기순이익 == 0:
@@ -7237,23 +7237,23 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         # 매출 하위항목
         for name, val in revenue_sub:
             values[f'  {name}'] = val if val else None
-        values['매출원가'] = 원가
-        # 매출원가 하위항목
+        values['매출원가'] = -abs(원가) if 원가 else 0
+        # 매출원가 하위항목 (비용이므로 항상 음수)
         for name, val in cogs_sub:
-            values[f'  {name}'] = val if val else None
+            values[f'  {name}'] = -abs(val) if val else None
         values.update({
             '매출총이익': 매출총이익,
             '% of Sales': 매출총이익_pct,
-            '판매비와관리비': 판관비,
+            '판매비와관리비': -abs(판관비) if 판관비 else 0,
         })
         # (판관비 하위는 아래에서 별도 추가)
         _values_after_sga = {
             '영업이익': 영업이익,
             '% of Sales (영업이익)': 영업이익_pct,
             '영업외수익': 영업외수익,
-            '영업외비용': 영업외비용,
+            '영업외비용': -영업외비용 if 영업외비용 else 0,
             '법인세비용차감전이익': 세전이익,
-            '법인세비용': 법인세 if 법인세 else None,
+            '법인세비용': -abs(법인세) if 법인세 else None,
             '당기순이익': 당기순이익,
             '% of Sales (순이익)': 당기순이익_pct,
             'EBITDA': EBITDA,
@@ -7274,15 +7274,15 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
 
         sga_display = []
         if 인건비_total:
-            sga_display.append(('  인건비', 인건비_total))
+            sga_display.append(('  인건비', -abs(인건비_total) if 인건비_total else 0))
         for item in non_인건비[:5]:
-            sga_display.append((f"  {item['name']}", item['value']))
+            sga_display.append((f"  {item['name']}", -abs(item['value']) if item['value'] else 0))
 
         # 기타판관비
-        shown_sga = 인건비_total + sum(i['value'] for i in non_인건비[:5])
-        기타판관비 = 판관비 - shown_sga if 판관비 and shown_sga else 0
+        shown_sga = abs(인건비_total) + sum(abs(i['value']) for i in non_인건비[:5])
+        기타판관비 = abs(판관비) - shown_sga if 판관비 and shown_sga else 0
         if 기타판관비 and abs(기타판관비) > 0:
-            sga_display.append(('  기타판매비와관리비', 기타판관비))
+            sga_display.append(('  기타판매비와관리비', -abs(기타판관비)))
 
         for name, val in sga_display:
             values[name] = val
@@ -7290,11 +7290,15 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         # 영업이익~EBITDA 추가 (판관비 하위 다음에 위치하도록)
         values.update(_values_after_sga)
 
-        # 영업외 상세
+        # 영업외 상세 (수익은 양수, 비용은 음수)
         for cat_key, parent_name in [('interest_income', '영업외수익'), ('other_income', '영업외수익'),
                                       ('interest_expense', '영업외비용'), ('other_expense', '영업외비용')]:
+            _is_expense = cat_key in ('interest_expense', 'other_expense')
             for item in is_values.get(cat_key, []):
-                values[f"  {item['name']}"] = item['value']
+                v = item['value']
+                if _is_expense and v and v > 0:
+                    v = -v
+                values[f"  {item['name']}"] = v
 
         # 행 구조 생성/병합
         if not is_rows:
