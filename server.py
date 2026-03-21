@@ -2320,28 +2320,57 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                     # 추가 검증: XBRL IS에 매출+값이 있으면 폴백 불필요
                     # 단, 초기 검증(주석 병합 전)에서 이미 폴백 필요로 판정된 경우 그 결정을 신뢰
                     _need_html_fallback = True
+
+                    def _check_is_revenue(df, acct_col, fy_col):
+                        """IS에 매출 계정이 있고 최신 FY에 값이 있는지 확인 (exact match)"""
+                        if acct_col not in df.columns:
+                            return False
+                        _revenue_exact_names = {'매출', '매출액', '영업수익', '수익(매출액)'}
+                        for idx, row in df.iterrows():
+                            _acct = str(row.get(acct_col, '')).strip()
+                            if not _acct or _acct == 'nan':
+                                continue
+                            is_revenue = _acct in _revenue_exact_names or _acct.endswith('매출액')
+                            if is_revenue:
+                                _val = row.get(fy_col)
+                                if _val is not None and str(_val) != 'nan':
+                                    return True
+                        return False
+
                     if _initial_fallback_needed:
                         print(f"[FS] ★ 초기 검증에서 IS 매출 없음 판정됨 (주석 병합 전) → HTML IS 폴백 사용")
+                        # ★ XBRL IS가 비어있으면 CIS에서 매출 확인
+                        # HTML IS는 사업보고서 수에 따라 FY 커버리지가 제한적 (보통 2~3년)
+                        # CIS(포괄손익계산서)는 XBRL이므로 전체 FY 커버리지 제공
+                        if _xbrl_is_empty:
+                            _xbrl_cis = fs_data.get('cis')
+                            _cis_has_revenue = False
+                            if _xbrl_cis is not None and not _xbrl_cis.empty:
+                                try:
+                                    _cis_norm = normalize_xbrl_columns(_xbrl_cis.copy())
+                                    for _c in ['계정과목', '항목', 'label_ko']:
+                                        if _c in _cis_norm.columns:
+                                            _cis_fy_cols = [c for c in _cis_norm.columns if str(c).startswith('FY')]
+                                            if _cis_fy_cols:
+                                                _cis_has_revenue = _check_is_revenue(_cis_norm, _c, sorted(_cis_fy_cols)[-1])
+                                            break
+                                except Exception as _e:
+                                    print(f"[FS] CIS 매출 확인 실패: {_e}")
+
+                            if _cis_has_revenue:
+                                fs_data['is'] = _xbrl_cis
+                                _need_html_fallback = False
+                                # xbrl_data도 함께 업데이트 (나중에 fs_data = xbrl_data 덮어쓰기 방지)
+                                if xbrl_data is not None:
+                                    xbrl_data['is'] = _xbrl_cis
+                                _cis_fy = [c for c in normalize_xbrl_columns(_xbrl_cis.copy()).columns if str(c).startswith('FY')]
+                                print(f"[FS] ★ XBRL IS 비어있지만 CIS에 매출 있음 → CIS를 IS로 사용 (FY={sorted(_cis_fy)})")
+                            else:
+                                print(f"[FS] ★ CIS에도 매출 없음 → HTML IS 폴백 진행")
                     elif not _xbrl_is_empty:
                         _revenue_excludes = ('채권', '증가', '감소', '원가율')
                         _report_yr = int(end_date[:4]) - 1
                         _latest_fy = f'FY{_report_yr}'
-
-                        def _check_is_revenue(df, acct_col, fy_col):
-                            """IS에 매출 계정이 있고 최신 FY에 값이 있는지 확인 (exact match)"""
-                            if acct_col not in df.columns:
-                                return False
-                            _revenue_exact_names = {'매출', '매출액', '영업수익', '수익(매출액)'}
-                            for idx, row in df.iterrows():
-                                _acct = str(row.get(acct_col, '')).strip()
-                                if not _acct or _acct == 'nan':
-                                    continue
-                                is_revenue = _acct in _revenue_exact_names or _acct.endswith('매출액')
-                                if is_revenue:
-                                    _val = row.get(fy_col)
-                                    if _val is not None and str(_val) != 'nan':
-                                        return True
-                            return False
 
                         _check_is = normalize_xbrl_columns(_xbrl_is.copy())
                         for _c in ['계정과목', '항목', 'label_ko']:
@@ -2362,7 +2391,29 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                                             break
                                     break
                     else:
-                        print(f"[FS] ★ XBRL IS 비어있음 → HTML IS 폴백 사용")
+                        # ★ XBRL IS 비어있지만 CIS에 매출 데이터가 있으면 CIS를 IS로 사용
+                        # CIS와 IS는 같은 XBRL 소스이므로 단위 불일치 문제 없음
+                        _xbrl_cis = fs_data.get('cis')
+                        _cis_has_revenue = False
+                        if _xbrl_cis is not None and not _xbrl_cis.empty:
+                            try:
+                                _cis_norm = normalize_xbrl_columns(_xbrl_cis.copy())
+                                for _c in ['계정과목', '항목', 'label_ko']:
+                                    if _c in _cis_norm.columns:
+                                        _cis_fy_cols = [c for c in _cis_norm.columns if str(c).startswith('FY')]
+                                        if _cis_fy_cols:
+                                            _cis_has_revenue = _check_is_revenue(_cis_norm, _c, sorted(_cis_fy_cols)[-1])
+                                        break
+                            except Exception as _e:
+                                print(f"[FS] CIS 매출 확인 실패: {_e}")
+
+                        if _cis_has_revenue:
+                            fs_data['is'] = _xbrl_cis
+                            _need_html_fallback = False
+                            _cis_fy = [c for c in normalize_xbrl_columns(_xbrl_cis.copy()).columns if str(c).startswith('FY')]
+                            print(f"[FS] ★ XBRL IS 비어있지만 CIS에 매출 있음 → CIS를 IS로 사용 (FY={sorted(_cis_fy)})")
+                        else:
+                            print(f"[FS] ★ XBRL IS 비어있음, CIS에도 매출 없음 → HTML IS 폴백 사용")
 
                     print(f"[FS] ★ HTML IS 폴백 결과: need={_need_html_fallback}, xbrl_is_empty={_xbrl_is_empty}, 백업수={len(_html_is_backups)}")
 
@@ -2530,9 +2581,12 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
     all_notes = {'is_notes': [], 'bs_notes': [], 'cf_notes': []}
     
     try:
-        # 1. 감사보고서 검색 (비상장사는 항상, 상장사는 XBRL이 없을 때만)
+        # 1. 감사보고서 검색 (비상장사는 항상, 상장사도 주석 데이터용으로 검색)
         # 비상장사는 주석 데이터가 감사보고서에만 있으므로 반드시 검색해야 함
+        # ★ 상장사도 EBITDA 감가상각비 등 주석 데이터가 XBRL fs.tables에 없을 수 있으므로
+        #    감사보고서를 검색하여 HTML 주석 추출 (BS/IS/CF는 기존 XBRL 데이터 유지)
         audit_filings = []
+        _audit_notes_only = False
         if not is_listed or not xbrl_data:
             filings = search_filings(
                 corp_code=corp_code,
@@ -2542,6 +2596,9 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
             )
             audit_filings = list(filings) if filings else []
             print(f"[FS] 검색된 감사보고서 수: {len(audit_filings)}")
+        # ★ 상장사+XBRL 있는 경우: 감사보고서 추가 검색 안 함
+        # 주석 데이터는 초기 사업보고서 HTML 추출에서 이미 수집됨 (line ~1997+)
+        # 사업보고서 XBRL 주석은 단위(원 vs 천원) 불일치 위험이 있으므로 별도 추가하지 않음
         
         # 2. 당해년도 분기/반기 보고서 검색 (가장 최신 것만 사용)
         latest_periodic = None
@@ -2627,17 +2684,19 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                         print(f"[FS] extracted 결과: {[(k, v is not None) for k, v in extracted.items()]}")
                         print(f"[FS] report_period={report_period}, current_year={current_year}")
                         if extracted:
-                            for key in ['bs', 'is', 'cis', 'cf']:
-                                if extracted.get(key) is not None:
-                                    print(f"[FS] {key} 데이터 있음, 분기 체크: {report_period}, {str(current_year) in str(report_period) if report_period else False}")
-                                    # 분기 데이터인 경우 yearly_data에 저장 (상장사 XBRL 병합용)
-                                    if report_period and str(current_year) in str(report_period):
-                                        yearly_data[key][report_period] = extracted[key]
-                                        print(f"[FS] 분기 XBRL 데이터 저장: {key} -> {report_period}")
-                                    elif fs_data[key] is None:
-                                        fs_data[key] = extracted[key]
-                                    else:
-                                        fs_data[key] = pd.concat([fs_data[key], extracted[key]], ignore_index=True).drop_duplicates()
+                            # ★ 상장사 notes_only 모드: BS/IS/CF 스킵, 주석만 추출
+                            if not _audit_notes_only:
+                                for key in ['bs', 'is', 'cis', 'cf']:
+                                    if extracted.get(key) is not None:
+                                        print(f"[FS] {key} 데이터 있음, 분기 체크: {report_period}, {str(current_year) in str(report_period) if report_period else False}")
+                                        # 분기 데이터인 경우 yearly_data에 저장 (상장사 XBRL 병합용)
+                                        if report_period and str(current_year) in str(report_period):
+                                            yearly_data[key][report_period] = extracted[key]
+                                            print(f"[FS] 분기 XBRL 데이터 저장: {key} -> {report_period}")
+                                        elif fs_data[key] is None:
+                                            fs_data[key] = extracted[key]
+                                        else:
+                                            fs_data[key] = pd.concat([fs_data[key], extracted[key]], ignore_index=True).drop_duplicates()
                             # 주석 테이블도 병합 (덮어쓰기가 아닌 병합)
                             if extracted.get('notes'):
                                 for note_type in ['is_notes', 'bs_notes', 'cf_notes']:
@@ -2651,18 +2710,19 @@ def extract_fs_from_corp(corp_code: str, start_date: str, end_date: str, progres
                         # 페이지에서 재무제표 테이블 추출 시도
                         extracted = extract_fs_from_pages(filing, report_period)
                         if extracted:
-                            for key in ['bs', 'is', 'cis', 'cf']:
-                                if extracted.get(key) is not None:
-                                    df = extracted[key]
-                                    if report_period and len(df.columns) >= 2:
-                                        # 연결감사보고서 데이터가 이미 있으면 별도감사보고서로 덮어쓰지 않음
-                                        if report_period in yearly_data[key] and not is_consolidated:
-                                            print(f"[FS] {key}: {report_period} 이미 연결 데이터 존재, 별도 스킵")
-                                            continue
-                                        # 기간별로 데이터 저장
-                                        yearly_data[key][report_period] = df
-                                        if is_consolidated:
-                                            print(f"[FS] {key}: {report_period} 연결감사보고서 데이터 저장")
+                            if not _audit_notes_only:
+                                for key in ['bs', 'is', 'cis', 'cf']:
+                                    if extracted.get(key) is not None:
+                                        df = extracted[key]
+                                        if report_period and len(df.columns) >= 2:
+                                            # 연결감사보고서 데이터가 이미 있으면 별도감사보고서로 덮어쓰지 않음
+                                            if report_period in yearly_data[key] and not is_consolidated:
+                                                print(f"[FS] {key}: {report_period} 이미 연결 데이터 존재, 별도 스킵")
+                                                continue
+                                            # 기간별로 데이터 저장
+                                            yearly_data[key][report_period] = df
+                                            if is_consolidated:
+                                                print(f"[FS] {key}: {report_period} 연결감사보고서 데이터 저장")
                             # 주석 테이블도 병합 (XBRL 없는 감사보고서에서도)
                             if extracted.get('notes'):
                                 for note_type in ['is_notes', 'bs_notes', 'cf_notes']:
@@ -6599,6 +6659,55 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
     # ========== 2. 계정명 추출 (숫자 제외, 이름만) ==========
     bs_accounts = [str(v).strip() for v in bs_df[bs_acc_col].dropna().unique() if str(v).strip()]
 
+    # ========== 2-A. 동일 계정명 유동/비유동 구분 (★Bug fix: CJ대한통운 비유동차입부채 2조원 누락★) ==========
+    # DART BS에서 '차입금', '리스부채' 등이 유동부채/비유동부채 양쪽에 동일 이름으로 존재할 수 있음.
+    # unique()로 중복 제거 시 비유동 버전이 소실되어 비유동차입부채=0이 됨.
+    # 해결: BS 데이터의 섹션 순서를 추적하여 비유동 섹션의 중복 항목을 '[비유동]' 접미사로 구분.
+    _bs_section_map = {}  # {row_idx: section_category}
+    _cur_section = None
+    _norm_func = lambda s: re.sub(r'\s', '', str(s)) if s else ''
+    for _idx in range(len(bs_df)):
+        _acc = str(bs_df.iloc[_idx].get(bs_acc_col, '')).strip()
+        _norm = _norm_func(_acc)
+        if _norm == '유동자산' or (_norm.startswith('유동자산') and '비유동' not in _norm):
+            _cur_section = 'current_asset'
+        elif _norm == '비유동자산' or _norm.startswith('비유동자산'):
+            _cur_section = 'non_current_asset'
+        elif _norm == '유동부채' or (_norm.startswith('유동부채') and '비유동' not in _norm):
+            _cur_section = 'current_liability'
+        elif _norm == '비유동부채' or _norm.startswith('비유동부채'):
+            _cur_section = 'non_current_liability'
+        elif _norm.startswith('자본') and '부채' not in _norm and '자본총계' != _norm:
+            _cur_section = 'equity'
+        _bs_section_map[_idx] = _cur_section
+
+    # 동일 계정명이 유동/비유동 양쪽에 존재하는 항목 탐지
+    _acc_by_section = {}  # {acc_name: {section: [row_indices]}}
+    for _idx in range(len(bs_df)):
+        _acc = str(bs_df.iloc[_idx].get(bs_acc_col, '')).strip()
+        _section = _bs_section_map.get(_idx)
+        if _acc and _section and _acc in bs_accounts:
+            if _acc not in _acc_by_section:
+                _acc_by_section[_acc] = {}
+            if _section not in _acc_by_section[_acc]:
+                _acc_by_section[_acc][_section] = []
+            _acc_by_section[_acc][_section].append(_idx)
+
+    _ncl_dup_accounts = {}  # {original_name: first_non_current_row_idx}
+    for _acc, _sections in _acc_by_section.items():
+        _has_current = any(s.startswith('current') for s in _sections)
+        _has_noncurrent = any(s.startswith('non_current') for s in _sections)
+        if _has_current and _has_noncurrent:
+            # 비유동 섹션의 첫 번째 row index 저장
+            for _s, _indices in _sections.items():
+                if _s.startswith('non_current'):
+                    _ncl_dup_accounts[_acc] = _indices[0]
+                    # bs_accounts에 접미사 버전 추가
+                    _suffixed = _acc + '[비유동]'
+                    bs_accounts.append(_suffixed)
+                    print(f"[VCM-v2] ★ 동일계정명 유동/비유동 양쪽 존재: '{_acc}' → '{_suffixed}' 추가 (비유동 row={_indices[0]})")
+                    break
+
     # IS: 주석(notes) 데이터 필터링 — 주석 항목이 IS 항목으로 오분류되는 것 방지
     _is_notes_filtered = False
     _full_is_accounts = [str(v).strip() for v in is_df[is_acc_col].dropna().unique() if str(v).strip()]
@@ -6659,9 +6768,60 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
     bs_map = {item['raw_name']: item for item in bs_mapping}
     is_map = {item['raw_name']: item for item in is_mapping}
 
+    # ========== 3-A. 동일계정명 비유동 오버라이드 적용 ==========
+    # LLM 분류는 계정명 기준이므로 유동/비유동 구분 불가 → 여기서 비유동 버전 추가
+    _group_override_map = {
+        '유동차입부채': '비유동차입부채',
+        '기타금융부채': '기타비유동금융부채',
+    }
+    for _orig_name, _ncl_row_idx in _ncl_dup_accounts.items():
+        _suffixed = _orig_name + '[비유동]'
+        _orig_cls = bs_map.get(_orig_name, {})
+        _orig_group = _orig_cls.get('group', '')
+        _new_group = _group_override_map.get(_orig_group, _orig_group)
+        _new_cat = 'non_current_liability' if _orig_cls.get('standard_category') == 'current_liability' else (
+            'non_current_asset' if _orig_cls.get('standard_category') == 'current_asset' else _orig_cls.get('standard_category', 'non_current_liability')
+        )
+        bs_map[_suffixed] = {
+            'raw_name': _suffixed,
+            'standard_category': _new_cat,
+            'display_name': _orig_cls.get('display_name', _orig_name),
+            'group': _new_group,
+            'sign': _orig_cls.get('sign', '+'),
+            '_is_ncl_override': True,
+            '_original_name': _orig_name,
+            '_ncl_row_idx': _ncl_row_idx,
+        }
+        print(f"[VCM-v2] ★ 비유동 오버라이드: {_suffixed} → cat={_new_cat}, group={_new_group}")
+
     # ========== 4. 값 추출 헬퍼 함수 ==========
     def get_value(df, acc_col, account_name, year_col):
         """DataFrame에서 특정 계정의 특정 연도 값 추출"""
+        # 비유동 오버라이드: '[비유동]' 접미사 → 원래 이름으로 검색하되 비유동 섹션의 행 사용
+        _cls = bs_map.get(account_name, {})
+        if _cls.get('_is_ncl_override'):
+            _orig = _cls['_original_name']
+            _ncl_idx = _cls['_ncl_row_idx']
+            rows = df[df[acc_col].astype(str).str.strip() == _orig]
+            if rows.empty:
+                return None
+            # 비유동 섹션의 행 찾기: _ncl_row_idx 이후의 행 사용
+            for _, row in rows.iterrows():
+                if row.name >= _ncl_idx:
+                    val = row.get(year_col)
+                    if val is not None and not (isinstance(val, float) and pd.isna(val)):
+                        try:
+                            if isinstance(val, str):
+                                val = val.replace(',', '').replace(' ', '').strip()
+                                if val.startswith('(') and val.endswith(')'):
+                                    val = '-' + val[1:-1]
+                                if not val or val == '-':
+                                    return None
+                                return float(val) * exchange_rate
+                            return float(val) * exchange_rate
+                        except (ValueError, TypeError):
+                            return None
+            return None
         rows = df[df[acc_col].astype(str).str.strip() == account_name]
         if rows.empty:
             return None
@@ -6836,6 +6996,32 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 group_totals[group] += val
                 group_items[group].append({'name': display, 'value': val})
 
+        # ========== BS 이름 충돌 해결 (유동/비유동 동명 항목) ==========
+        # 같은 display_name이 다른 BS 섹션에 존재하면 (유동)/(비유동) 접미사 추가
+        _names_cross_section = {}
+        for _cat_key in ('current_asset', 'non_current_asset', 'current_liability', 'non_current_liability'):
+            for _item in category_items.get(_cat_key, []):
+                _dn = _item['name']
+                if _dn not in _names_cross_section:
+                    _names_cross_section[_dn] = set()
+                _names_cross_section[_dn].add(_cat_key)
+
+        for _dn, _cats in _names_cross_section.items():
+            if len(_cats) <= 1:
+                continue
+            # 유동/비유동 충돌 → 접미사 추가
+            _suffix_map = {
+                'current_asset': '(유동)', 'non_current_asset': '(비유동)',
+                'current_liability': '(유동)', 'non_current_liability': '(비유동)',
+            }
+            for _cat_key in _cats:
+                _suffix = _suffix_map.get(_cat_key, '')
+                if _suffix:
+                    for _item in category_items[_cat_key]:
+                        if _item['name'] == _dn:
+                            _item['name'] = f"{_dn}{_suffix}"
+            print(f"[VCM-v2] 이름충돌 해결: '{_dn}' → {', '.join(sorted(_cats))} ({year_str})")
+
         # ========== BS 구조 조립 ==========
         bs_items = []
 
@@ -6911,8 +7097,17 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
 
                 # 그룹 하위항목 (툴팁용)
                 if cand['is_group'] and len(cand['items']) >= 1:
+                    # ★ 동명 하위항목 병합 (같은 display_name 다른 raw_name → 값 합산)
+                    _merged_subs = {}
+                    for sub in cand['items']:
+                        if sub['name'] in _merged_subs:
+                            _merged_subs[sub['name']]['value'] += sub['value']
+                        else:
+                            _merged_subs[sub['name']] = {'name': sub['name'], 'value': sub['value']}
+                    _merged_list = list(_merged_subs.values())
+
                     shown_sum = 0
-                    for sub in sorted(cand['items'], key=lambda x: abs(x['value']), reverse=True)[:5]:
+                    for sub in sorted(_merged_list, key=lambda x: abs(x['value']), reverse=True)[:5]:
                         sub_name = sub['name']
                         # H3 fix: 원래 이름(orig_name)과 비교 — [비유동] 접미사 후에도 정상 동작
                         if sub_name == orig_name or sub_name == cand_name:
@@ -6936,7 +7131,14 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 all_overflow_items = []
                 for c in overflow:
                     all_overflow_items.extend(c['items'])
-                sorted_overflow = sorted(all_overflow_items, key=lambda x: abs(x['value']), reverse=True)
+                # ★ 동명 overflow 항목 병합
+                _merged_overflow = {}
+                for _oi in all_overflow_items:
+                    if _oi['name'] in _merged_overflow:
+                        _merged_overflow[_oi['name']]['value'] += _oi['value']
+                    else:
+                        _merged_overflow[_oi['name']] = {'name': _oi['name'], 'value': _oi['value']}
+                sorted_overflow = sorted(_merged_overflow.values(), key=lambda x: abs(x['value']), reverse=True)
                 shown_sum = 0
                 for item in sorted_overflow[:5]:
                     child_name = item['name']
@@ -7016,6 +7218,7 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 continue
 
             val = get_value(is_df, is_acc_col, acc_name, year_col)
+            _is_null = val is None  # ★ 원본 None 여부 기록 (None→0 변환 전)
             if val is None:
                 val = 0
 
@@ -7035,23 +7238,29 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 'raw_name': acc_name,
                 'value': val,
                 'group': group,
+                'is_null': _is_null,  # ★ XBRL 원본이 None이었는지 추적
             })
 
         # 주요 IS 항목 추출
         def get_cat_total(cat_name):
             items = is_values.get(cat_name, [])
+            if not items:
+                return 0
+            # ★ 전부 is_null이면 0 반환 (None→0 변환된 것이므로 실제 데이터 없음)
+            if all(item.get('is_null') for item in items):
+                return 0
             # subtotal/total 행이 있으면 그 값 사용
             for item in items:
                 cls = is_map.get(item['raw_name'])
                 if cls and cls.get('standard_category') in ('subtotal', 'total'):
                     return item['value']
             # 없으면 합산
-            return sum(i['value'] for i in items) if items else 0
+            return sum(i['value'] for i in items)
 
         def get_cat_first(cat_name):
             items = is_values.get(cat_name, [])
             if not items:
-                return 0
+                return None  # ★ 항목 자체가 없으면 None (0이 아님)
             # 여러 항목이 있으면 sign '+'인 항목 우선 (당기순이익(손실) vs 당기순손실 구분)
             if len(items) > 1:
                 for item in items:
@@ -7062,12 +7271,15 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             for item in items:
                 if item['value'] != 0:
                     return item['value']
-            return items[0]['value']
+            # ★ 모든 값이 0 → 원본이 전부 None이었으면 None 반환 (데이터 없음)
+            if all(item.get('is_null') for item in items):
+                return None
+            return items[0]['value']  # 실제로 0인 경우
 
         매출 = get_cat_first('revenue') or 0
         원가 = get_cat_first('cogs') or 0
         매출총이익_direct = get_cat_first('gross_profit')
-        매출총이익 = 매출총이익_direct if 매출총이익_direct else (매출 - 원가)
+        매출총이익 = 매출총이익_direct if 매출총이익_direct else (매출 - abs(원가))
 
         # 판관비: sga 카테고리에서 합계행과 상세항목 분리
         sga_items = is_values.get('sga', [])
@@ -7106,6 +7318,9 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
 
         if not 판관비 and sga_details:
             판관비 = sum(i['value'] for i in sga_details)
+
+        # ★ 판관비 데이터 실제 존재 여부: SGA 항목 중 원본값이 None이 아닌 것이 있는지
+        _sga_found = any(not item.get('is_null') for item in sga_items) if sga_items else False
 
         # ★ 주석(notes)에서 감가상각비 추출 — EBITDA 계산용 (비용의 성격별 분류 = 전체 비용)
         # 주의: 주석은 전체 비용(매출원가+판관비)이므로 SGA 하위항목으로 넣으면 안 됨
@@ -7154,26 +7369,42 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 print(f"[VCM-v2] 주석 감가상각비: {_notes_감가상각비:,.0f}, 무형: {_notes_무형자산상각비:,.0f}, 사용권: {_notes_사용권자산상각비:,.0f} ({year_str})")
 
         영업이익_direct = get_cat_first('operating_income')
-        영업이익 = 영업이익_direct if 영업이익_direct else (매출총이익 - 판관비)
+        # ★ 데이터 없음(None/0) → 잘못된 파생값 방지: direct 값 > SGA 있을 때 파생 > None
+        if 영업이익_direct is not None:
+            영업이익 = 영업이익_direct
+        elif _sga_found or 판관비:
+            영업이익 = 매출총이익 - abs(판관비)
+        else:
+            영업이익 = None  # 판관비 데이터 없으면 계산 불가 (매출총이익=영업이익 오류 방지)
 
         금융수익 = get_cat_total('interest_income') or 0
         금융비용 = get_cat_total('interest_expense') or 0
         기타수익 = get_cat_total('other_income') or 0
         기타비용 = get_cat_total('other_expense') or 0
 
-        영업외수익 = 금융수익 + 기타수익
-        영업외비용 = 금융비용 + 기타비용
+        영업외수익 = abs(금융수익) + abs(기타수익)
+        영업외비용 = abs(금융비용) + abs(기타비용)
 
         세전이익_direct = get_cat_first('ebt')
-        세전이익 = 세전이익_direct if 세전이익_direct else (영업이익 + 영업외수익 - 영업외비용)
+        if 세전이익_direct is not None:
+            세전이익 = 세전이익_direct
+        elif 영업이익 is not None:
+            세전이익 = 영업이익 + 영업외수익 - 영업외비용
+        else:
+            세전이익 = None
 
         법인세 = get_cat_first('tax') or 0
 
         당기순이익_direct = get_cat_first('net_income')
-        당기순이익 = 당기순이익_direct if 당기순이익_direct else (세전이익 - 법인세)
+        if 당기순이익_direct is not None:
+            당기순이익 = 당기순이익_direct
+        elif 세전이익 is not None:
+            당기순이익 = 세전이익 - abs(법인세)
+        else:
+            당기순이익 = None
 
-        # 주석 필터링된 경우, 당기순이익이 0이면 전체 IS에서 당기순이익/당기순손실 검색
-        if _is_notes_filtered and 당기순이익 == 0:
+        # 주석 필터링된 경우, 당기순이익이 0 또는 None이면 전체 IS에서 당기순이익/당기순손실 검색
+        if _is_notes_filtered and (당기순이익 == 0 or 당기순이익 is None):
             for _acc in _full_is_accounts:
                 _norm = re.sub(r'\s', '', _acc)
                 if '당기순이익' in _norm or '당기순손실' in _norm or '당기순손익' in _norm:
@@ -7185,10 +7416,10 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                         print(f"[VCM-v2] 당기순이익 주석에서 복구: {_acc} = {_val:,.0f} ({year_str})")
                         break
 
-        # % of Sales 계산
+        # % of Sales 계산 (None 값 전파 방지)
         매출총이익_pct = 매출총이익 / 매출 if 매출 else None
-        영업이익_pct = 영업이익 / 매출 if 매출 else None
-        당기순이익_pct = 당기순이익 / 매출 if 매출 else None
+        영업이익_pct = (영업이익 / 매출) if (매출 and 영업이익 is not None) else None
+        당기순이익_pct = (당기순이익 / 매출) if (매출 and 당기순이익 is not None) else None
 
         # 감가상각비 (EBITDA용) — SGA에서 추출 + 주석(notes) 보완
         _sga_감가상각비 = 0
@@ -7208,11 +7439,11 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             감가상각비 = _sga_감가상각비
         무형자산상각비 = _notes_무형자산상각비 if _notes_무형자산상각비 else _sga_무형자산상각비
 
-        EBITDA = 영업이익 + 감가상각비 + 무형자산상각비
-        if 감가상각비 or 무형자산상각비:
+        EBITDA = (영업이익 + 감가상각비 + 무형자산상각비) if 영업이익 is not None else None
+        if EBITDA is not None and (감가상각비 or 무형자산상각비):
             print(f"[VCM-v2] EBITDA={EBITDA:,.0f} = 영업이익({영업이익:,.0f}) + 감가상각비({감가상각비:,.0f}) + 무형자산상각비({무형자산상각비:,.0f}) [source: {'notes' if (_notes_감가상각비 or _notes_사용권자산상각비) else 'sga'}]")
 
-        EBITDA_pct = (EBITDA / 매출) if 매출 and 매출 != 0 else None
+        EBITDA_pct = (EBITDA / 매출) if (매출 and 매출 != 0 and EBITDA is not None) else None
 
         # 매출/매출원가 하위항목 추출 (V1과 동일)
         revenue_sub = []  # [(display_name, value)]
@@ -7237,23 +7468,23 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         # 매출 하위항목
         for name, val in revenue_sub:
             values[f'  {name}'] = val if val else None
-        values['매출원가'] = 원가
-        # 매출원가 하위항목
+        values['매출원가'] = -abs(원가) if 원가 else 0
+        # 매출원가 하위항목 (비용이므로 항상 음수)
         for name, val in cogs_sub:
-            values[f'  {name}'] = val if val else None
+            values[f'  {name}'] = -abs(val) if val else None
         values.update({
             '매출총이익': 매출총이익,
             '% of Sales': 매출총이익_pct,
-            '판매비와관리비': 판관비,
+            '판매비와관리비': -abs(판관비) if 판관비 else (0 if _sga_found else None),
         })
         # (판관비 하위는 아래에서 별도 추가)
         _values_after_sga = {
             '영업이익': 영업이익,
             '% of Sales (영업이익)': 영업이익_pct,
             '영업외수익': 영업외수익,
-            '영업외비용': 영업외비용,
+            '영업외비용': -영업외비용 if 영업외비용 else 0,
             '법인세비용차감전이익': 세전이익,
-            '법인세비용': 법인세 if 법인세 else None,
+            '법인세비용': -abs(법인세) if 법인세 else None,
             '당기순이익': 당기순이익,
             '% of Sales (순이익)': 당기순이익_pct,
             'EBITDA': EBITDA,
@@ -7274,15 +7505,15 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
 
         sga_display = []
         if 인건비_total:
-            sga_display.append(('  인건비', 인건비_total))
+            sga_display.append(('  인건비', -abs(인건비_total) if 인건비_total else 0))
         for item in non_인건비[:5]:
-            sga_display.append((f"  {item['name']}", item['value']))
+            sga_display.append((f"  {item['name']}", -abs(item['value']) if item['value'] else 0))
 
         # 기타판관비
-        shown_sga = 인건비_total + sum(i['value'] for i in non_인건비[:5])
-        기타판관비 = 판관비 - shown_sga if 판관비 and shown_sga else 0
+        shown_sga = abs(인건비_total) + sum(abs(i['value']) for i in non_인건비[:5])
+        기타판관비 = abs(판관비) - shown_sga if 판관비 and shown_sga else 0
         if 기타판관비 and abs(기타판관비) > 0:
-            sga_display.append(('  기타판매비와관리비', 기타판관비))
+            sga_display.append(('  기타판매비와관리비', -abs(기타판관비)))
 
         for name, val in sga_display:
             values[name] = val
@@ -7290,11 +7521,15 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         # 영업이익~EBITDA 추가 (판관비 하위 다음에 위치하도록)
         values.update(_values_after_sga)
 
-        # 영업외 상세
+        # 영업외 상세 (수익은 양수, 비용은 음수)
         for cat_key, parent_name in [('interest_income', '영업외수익'), ('other_income', '영업외수익'),
                                       ('interest_expense', '영업외비용'), ('other_expense', '영업외비용')]:
+            _is_expense = cat_key in ('interest_expense', 'other_expense')
             for item in is_values.get(cat_key, []):
-                values[f"  {item['name']}"] = item['value']
+                v = item['value']
+                if _is_expense and v and v > 0:
+                    v = -v
+                values[f"  {item['name']}"] = v
 
         # 행 구조 생성/병합
         if not is_rows:
@@ -7394,22 +7629,28 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                     row[year_str] = None
 
     # ========== 7. BS 마스터 순서 결정 및 값 병합 ==========
+    # ★ (item_name, parent) 복합키 사용 — 동명 항목의 값 덮어쓰기 방지
     master_order = []
-    master_order_set = set()
+    master_order_set = set()  # set of (item_name, parent)
+    master_order_name_set = set()  # set of item_name (위치 추적용)
 
     for year_str in sorted(all_bs_items_by_year.keys(), reverse=True):
         bs_items = all_bs_items_by_year[year_str]
         if not master_order:
             for item_name, parent, val in bs_items:
-                if item_name not in master_order_set:
+                key = (item_name, parent)
+                if key not in master_order_set:
                     master_order.append((item_name, parent))
-                    master_order_set.add(item_name)
+                    master_order_set.add(key)
+                    master_order_name_set.add(item_name)
         else:
             insert_idx = 0
             for item_name, parent, val in bs_items:
-                if item_name not in master_order_set:
+                key = (item_name, parent)
+                if key not in master_order_set:
                     master_order.insert(insert_idx, (item_name, parent))
-                    master_order_set.add(item_name)
+                    master_order_set.add(key)
+                    master_order_name_set.add(item_name)
                 else:
                     for i, (name, _) in enumerate(master_order):
                         if name == item_name:
@@ -7420,14 +7661,16 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
     bs_rows = []
     item_to_row = {}
     for item_name, parent in master_order:
+        key = (item_name, parent)
         row = {'항목': item_name, '부모': parent}
         bs_rows.append(row)
-        item_to_row[item_name] = row
+        item_to_row[key] = row
 
     for year_str, bs_items in all_bs_items_by_year.items():
         for item_name, parent, val in bs_items:
-            if item_name in item_to_row:
-                item_to_row[item_name][year_str] = round(val) if val is not None and val != 0 else None
+            key = (item_name, parent)
+            if key in item_to_row:
+                item_to_row[key][year_str] = round(val) if val is not None and val != 0 else None
 
     # 빈 행 필터링
     filtered_bs_rows = [r for r in bs_rows
