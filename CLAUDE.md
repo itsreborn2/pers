@@ -1,5 +1,10 @@
 # PERS 프로젝트 개발 규칙
 
+> **관련 문서**: 수정 전 반드시 참고
+> - **[PROJECT_GUIDE.md](PROJECT_GUIDE.md)** — 프로젝트 전체 총괄 (수정절차, 배포절차, 아키텍처)
+> - **[MODIFICATION_HISTORY.md](MODIFICATION_HISTORY.md)** — 수정 히스토리 (과거 수정/부작용/교훈)
+> - 수정 후에는 MODIFICATION_HISTORY.md에 반드시 기록
+
 ## 개발/프로덕션 환경 분리 (★최우선★)
 
 ### 핵심 원칙
