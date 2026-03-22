@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-03-22
+
+### [FIX] EBITDA D&A fallback — 사업보고서 페이지 직접 접근
+- **문제**: DART XBRL에 주석 테이블 없고(tables=0), 기존 HTML 주석 추출이 간헐적으로 FY2023+ 누락 → EBITDA=영업이익(D&A=0)
+- **원인**: DART에 데이터 존재 확인 (FY2023/2024/2025 "비용의 성격별 분류" 페이지 모두 있음). 기존 HTML 추출 경로가 불안정.
+- **수정**: VCM v2 EBITDA 계산에서 D&A=0일 때 fallback 추가
+  - 해당 연도 사업보고서 검색 (dart_fss search_filings, pblntf_ty='A')
+  - 정정본 제외, 원본 사업보고서만
+  - Page 객체의 `.title`로 "비용의 성격별 분류" 페이지 탐색
+  - `.html` 속성으로 HTML 직접 파싱 → 감가상각비/사용권자산상각비/무형자산상각비 추출
+- **방어 순서**: Notes(기존) → D&A fallback(페이지 직접) → SGA fallback → D&A=0
+- **영향 범위**: `server.py` create_vcm_format_v2() EBITDA 계산 부분
+- **검증**: CJ대한통운 FY2023 D&A=579,184M, FY2024=621,803M, FY2025=657,888M (이전 0)
+- **부작용**: DART API 추가 호출 (D&A=0인 연도당 1회). 기존 D&A>0인 연도는 fallback 미실행.
+- **교훈**: dart_fss Page 객체는 dict 아님 — `.title`, `.html`, `.ele_id` 속성 사용. `load_page()` 메서드 아님.
+
+### [FIX] 비유동부채 이름 충돌 해결 (V1 설계 유지)
+- **문제**: 리스부채→기타비유동금융부채 오버라이드 시, DART 원본 `기타비유동금융부채`(group=기타금융부채)와 이름 충돌 → `기타비유동금융부채[비유동부채]` 접미사
+- **원인**: 오버라이드가 만든 그룹명과 LLM이 분류한 기존 계정의 group 매핑이 불일치
+- **수정**: 3-B 단계 추가 — `_group_override_map`을 통해 기존 계정의 group을 오버라이드 그룹으로 변환
+  - `기타비유동금융부채`(group=기타금융부채) → `_group_override_map['기타금융부채']='기타비유동금융부채'` → 합류
+  - 결과: 기타비유동금융부채 = 리스부채(1,360,281) + 원래 기타비유동금융부채(237,119) = 1,597,400 합산
+- **부작용**: 없음 (V1 설계와 동일한 합산 방식)
+- **교훈**: LLM 분류에서 group='기타금융부채'인 비유동 항목은 `_group_override_map`으로 변환 필요
+
+### [FIX] EBITDA Notes 사업보고서 XBRL 추가 시도 → 원복
+- **시도**: 상장사도 사업보고서(pblntf_ty='A')에서 XBRL 주석 추출
+- **부작용 발견**: XBRL 주석 단위(원)와 기존 HTML 주석(천원) 불일치 → 감가상각비 1000배 증폭
+- **결정**: 원복. 대신 D&A fallback(페이지 직접 접근)으로 해결
+- **교훈**: 주석 데이터 단위는 소스마다 다름 (XBRL=원, HTML=천원). 새 소스 추가 시 반드시 단위 검증.
+
+---
+
 ## 2026-03-21
 
 ### [FIX] V2 비유동차입부채 누락 수정 (동일계정명 유동/비유동 구분)
@@ -143,7 +176,7 @@
 
 | 이슈 | 심각도 | 상태 | 설명 |
 |------|--------|------|------|
-| EBITDA Notes FY2023+ | HIGH | Open | DART HTML 주석의 FY 커버리지 한계. V2 FY 컬럼 매핑 개선 필요 |
+| EBITDA Notes FY2023+ | HIGH | **Resolved** | D&A fallback으로 사업보고서 페이지 직접 접근 (2026-03-22) |
 | Normalized earnings bridge | P2 | Open | M&A critical |
 | Auditor opinion extraction | P3 | Open | |
 | YoY from pre-rounding values | P3 | Open | |

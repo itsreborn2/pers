@@ -6794,6 +6794,33 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         }
         print(f"[VCM-v2] ★ 비유동 오버라이드: {_suffixed} → cat={_new_cat}, group={_new_group}")
 
+    # ========== 3-B. 비유동 그룹 이름 충돌 해결 ==========
+    # 오버라이드가 만든 그룹명(예: 기타비유동금융부채)과 DART 원본 계정명이 동일하면
+    # 원본 계정을 해당 그룹의 하위항목으로 합산 (V1 설계: 기타금융부채_비유동에 리스+기타 전부 합산)
+    _override_groups_created = set()
+    for _v in bs_map.values():
+        if _v.get('_is_ncl_override') and _v.get('group'):
+            _override_groups_created.add(_v['group'])
+
+    if _override_groups_created:
+        for _acc_name, _cls in list(bs_map.items()):
+            if _cls.get('_is_ncl_override'):
+                continue
+            if _cls.get('standard_category') != 'non_current_liability':
+                continue
+            _cur_group = _cls.get('group', '')
+            _disp = _cls.get('display_name', '')
+            # Case 1: 현재 group이 _group_override_map의 키에 해당 → 오버라이드 그룹으로 변경
+            # 예: group='기타금융부채' → _group_override_map['기타금융부채']='기타비유동금융부채'
+            _mapped_group = _group_override_map.get(_cur_group)
+            if _mapped_group and _mapped_group in _override_groups_created:
+                _cls['group'] = _mapped_group
+                print(f"[VCM-v2] ★ 비유동 그룹 합산: '{_acc_name}' (group={_cur_group} → {_mapped_group})")
+            # Case 2: display_name이 오버라이드 그룹명과 동일 → 합류
+            elif not _cur_group and _disp in _override_groups_created:
+                _cls['group'] = _disp
+                print(f"[VCM-v2] ★ 비유동 그룹 합산: '{_acc_name}' → 오버라이드 그룹 '{_disp}'에 합류")
+
     # ========== 4. 값 추출 헬퍼 함수 ==========
     def get_value(df, acc_col, account_name, year_col):
         """DataFrame에서 특정 계정의 특정 연도 값 추출"""
@@ -7367,6 +7394,71 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                                 break
             if _notes_감가상각비 or _notes_무형자산상각비 or _notes_사용권자산상각비:
                 print(f"[VCM-v2] 주석 감가상각비: {_notes_감가상각비:,.0f}, 무형: {_notes_무형자산상각비:,.0f}, 사용권: {_notes_사용권자산상각비:,.0f} ({year_str})")
+
+        # ★ EBITDA D&A fallback: Notes에서 못 찾으면 사업보고서 "비용의 성격별 분류" 페이지 직접 접근
+        # DART에 데이터 있는데 기존 HTML 추출이 간헐적 실패하는 경우 대비 (CJ대한통운 FY2023+ 사례)
+        if not _notes_감가상각비 and not _notes_사용권자산상각비 and company_code and company_code != 'unknown':
+            try:
+                _fy_year = int(year_str.replace('FY', ''))
+                _report_bgn = f"{_fy_year + 1}0101"
+                _report_end = f"{_fy_year + 1}0401"
+                from dart_fss.filings import search as _search_filings
+                _filings_list = list(_search_filings(corp_code=company_code, bgn_de=_report_bgn, end_de=_report_end, pblntf_ty='A'))
+                # 정정본 제외, 원본 사업보고서만
+                _filings_list = [_f for _f in _filings_list
+                                 if '사업보고서' in str(getattr(_f, 'report_nm', _f))
+                                 and '정정' not in str(getattr(_f, 'report_nm', _f))
+                                 and '반기' not in str(getattr(_f, 'report_nm', _f))
+                                 and '분기' not in str(getattr(_f, 'report_nm', _f))]
+                for _filing in _filings_list:
+                    try:
+                        _pages = _filing.pages if hasattr(_filing, 'pages') else None
+                        if not _pages:
+                            continue
+                        for _page in _pages:
+                            # dart_fss Page 객체: .title, .ele_id, .html 속성
+                            _ptitle = _page.title if hasattr(_page, 'title') else str(_page)
+                            if '비용' in _ptitle and '성격' in _ptitle and '연결' in _ptitle:
+                                try:
+                                    from bs4 import BeautifulSoup as _BS
+                                    _html = _page.html  # Page 객체의 html 속성
+                                    _soup = _BS(_html, 'html.parser')
+                                    for _tr in _soup.find_all('tr'):
+                                        _cells = _tr.find_all(['td', 'th'])
+                                        if len(_cells) < 2:
+                                            continue
+                                        _cell_norm = re.sub(r'\s', '', _cells[0].get_text(strip=True))
+                                        if not _cell_norm:
+                                            continue
+                                        # 첫 번째 숫자 셀 값 추출 (당기)
+                                        _cv = _cells[1].get_text(strip=True).replace(',', '').replace('(', '-').replace(')', '').replace(' ', '')
+                                        if not _cv or _cv == '-':
+                                            continue
+                                        try:
+                                            _vf = abs(float(_cv)) * 1000  # 천원→원
+                                        except:
+                                            continue
+                                        if '감가상각비' in _cell_norm and '무형' not in _cell_norm and '사용권' not in _cell_norm:
+                                            if _vf > _notes_감가상각비:
+                                                _notes_감가상각비 = _vf
+                                        elif '사용권' in _cell_norm and ('감가상각' in _cell_norm or '상각' in _cell_norm):
+                                            if _vf > _notes_사용권자산상각비:
+                                                _notes_사용권자산상각비 = _vf
+                                        elif '무형자산상각' in _cell_norm:
+                                            if _vf > _notes_무형자산상각비:
+                                                _notes_무형자산상각비 = _vf
+                                    if _notes_감가상각비 or _notes_사용권자산상각비 or _notes_무형자산상각비:
+                                        print(f"[VCM-v2] ★ D&A fallback 성공 ({year_str}): 감가상각비={_notes_감가상각비:,.0f}, 사용권={_notes_사용권자산상각비:,.0f}, 무형={_notes_무형자산상각비:,.0f}")
+                                        break
+                                except Exception as _pe:
+                                    print(f"[VCM-v2] D&A fallback 페이지 파싱 실패 ({year_str}): {_pe}")
+                        if _notes_감가상각비 or _notes_사용권자산상각비:
+                            break
+                    except Exception as _fe2:
+                        print(f"[VCM-v2] D&A fallback 보고서 처리 실패 ({year_str}): {_fe2}")
+                        continue
+            except Exception as _fe:
+                print(f"[VCM-v2] D&A fallback 검색 실패 ({year_str}): {_fe}")
 
         영업이익_direct = get_cat_first('operating_income')
         # ★ 데이터 없음(None/0) → 잘못된 파생값 방지: direct 값 > SGA 있을 때 파생 > None
