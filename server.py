@@ -7395,9 +7395,19 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             if _notes_감가상각비 or _notes_무형자산상각비 or _notes_사용권자산상각비:
                 print(f"[VCM-v2] 주석 감가상각비: {_notes_감가상각비:,.0f}, 무형: {_notes_무형자산상각비:,.0f}, 사용권: {_notes_사용권자산상각비:,.0f} ({year_str})")
 
-        # ★ EBITDA D&A fallback: Notes에서 못 찾으면 사업보고서 "비용의 성격별 분류" 페이지 직접 접근
-        # DART에 데이터 있는데 기존 HTML 추출이 간헐적 실패하는 경우 대비 (CJ대한통운 FY2023+ 사례)
-        if not _notes_감가상각비 and not _notes_사용권자산상각비 and company_code and company_code != 'unknown':
+        # ★ EBITDA D&A fallback: Notes에서 D&A가 불완전하면 사업보고서 페이지 직접 접근
+        # 조건: (1) 감가상각비+사용권 모두 0, 또는 (2) 감가상각비는 있지만 사용권=0 (부분 누락)
+        _need_da_fallback = False
+        if not _notes_감가상각비 and not _notes_사용권자산상각비:
+            _need_da_fallback = True  # 완전 누락
+        elif _notes_감가상각비 and not _notes_사용권자산상각비:
+            # 사용권자산상각비만 누락 — 사용권자산 보유 기업이면 fallback 필요
+            _사용권자산_val = group_totals.get('사용권자산', 0) if group_totals else 0
+            if _사용권자산_val and abs(_사용권자산_val) > 1000000000:  # 10억 이상
+                _need_da_fallback = True
+                print(f"[VCM-v2] 사용권자산상각비 부분 누락 감지: 감가상각비={_notes_감가상각비:,.0f}, 사용권자산={_사용권자산_val:,.0f} ({year_str})")
+
+        if _need_da_fallback and company_code and company_code != 'unknown':
             try:
                 _fy_year = int(year_str.replace('FY', ''))
                 _report_bgn = f"{_fy_year + 1}0101"
