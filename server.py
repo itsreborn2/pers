@@ -6657,7 +6657,10 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         print(f"[VCM-v2] 환율 적용: 1 {reporting_currency} = {exchange_rate:,.2f} KRW")
 
     # ========== 2. 계정명 추출 (숫자 제외, 이름만) ==========
-    bs_accounts = [str(v).strip() for v in bs_df[bs_acc_col].dropna().unique() if str(v).strip()]
+    _bs_acc_series = bs_df[bs_acc_col]
+    if isinstance(_bs_acc_series, pd.DataFrame):
+        _bs_acc_series = _bs_acc_series.iloc[:, 0]  # 중복 컬럼 시 첫 번째만
+    bs_accounts = [str(v).strip() for v in _bs_acc_series.dropna().unique() if str(v).strip()]
 
     # ========== 2-A. 동일 계정명 유동/비유동 구분 (★Bug fix: CJ대한통운 비유동차입부채 2조원 누락★) ==========
     # DART BS에서 '차입금', '리스부채' 등이 유동부채/비유동부채 양쪽에 동일 이름으로 존재할 수 있음.
@@ -6710,7 +6713,10 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
 
     # IS: 주석(notes) 데이터 필터링 — 주석 항목이 IS 항목으로 오분류되는 것 방지
     _is_notes_filtered = False
-    _full_is_accounts = [str(v).strip() for v in is_df[is_acc_col].dropna().unique() if str(v).strip()]
+    _is_acc_series = is_df[is_acc_col]
+    if isinstance(_is_acc_series, pd.DataFrame):
+        _is_acc_series = _is_acc_series.iloc[:, 0]
+    _full_is_accounts = [str(v).strip() for v in _is_acc_series.dropna().unique() if str(v).strip()]
     if '분류1' in is_df.columns:
         # XBRL/DART 데이터: 분류1='포괄손익계산서 [개요]' 또는 '손익계산서' 또는 영문 URI인 행만 사용
         _main_mask = is_df['분류1'].astype(str).str.contains(
@@ -7318,6 +7324,8 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         매출총이익_direct = get_cat_first('gross_profit')
         매출총이익 = 매출총이익_direct if 매출총이익_direct else (매출 - abs(원가))
 
+        # (매출 역산은 통합 역산 레이어에서 처리)
+
         # 판관비: sga 카테고리에서 합계행과 상세항목 분리
         sga_items = is_values.get('sga', [])
         판관비 = 0
@@ -7506,6 +7514,13 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                                     _target_pages.insert(0, _page)  # 연결 우선
                                 else:
                                     _target_pages.append(_page)  # 별도는 후순위
+                        # Fix: 별도 페이지 없으면 통합 주석 페이지("연결재무제표 주석")에서도 검색
+                        if not _target_pages:
+                            for _page in _pages:
+                                _ptitle = _page.title if hasattr(_page, 'title') else str(_page)
+                                if '재무제표 주석' in _ptitle or '재무제표주석' in _ptitle.replace(' ', ''):
+                                    _target_pages.append(_page)
+                                    break
                         print(f"[VCM-v2] D&A fallback target_pages ({year_str}): {len(_target_pages)}개 {[p.title[:30] for p in _target_pages]}")
                         for _page in _target_pages:
                             try:
@@ -7559,26 +7574,7 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
 
         법인세 = get_cat_first('tax') or 0
 
-        # ★ IS 파생값 역산 fallback — 같은 항목이 다른 이름(주석 번호 차이)으로 존재하여
-        # 특정 연도에 None인 경우 역산으로 복구 (CJ대한통운 FY2021/2022 판관비/법인세 사례)
-        if not 판관비 and 매출총이익 and 영업이익 is not None:
-            판관비 = 매출총이익 - 영업이익
-            if 판관비:
-                print(f"[VCM-v2] ★ 판관비 역산: 매출총이익({매출총이익:,.0f}) - 영업이익({영업이익:,.0f}) = {판관비:,.0f} ({year_str})")
-
-        _ni_for_tax = get_cat_first('net_income')
-        if not 법인세 and 세전이익 is not None and _ni_for_tax is not None:
-            법인세 = _ni_for_tax - 세전이익
-            if 법인세:
-                print(f"[VCM-v2] ★ 법인세 역산: 당기순이익({_ni_for_tax:,.0f}) - 세전이익({세전이익:,.0f}) = {법인세:,.0f} ({year_str})")
-
-        if not 기타수익 and 영업외수익 and 금융수익:
-            _지분법 = get_cat_total('equity_method_income') or 0
-            기타수익 = 영업외수익 - abs(금융수익) - abs(_지분법)
-            if 기타수익 and abs(기타수익) > 0:
-                print(f"[VCM-v2] ★ 기타수익 역산: 영업외수익({영업외수익:,.0f}) - 금융수익({abs(금융수익):,.0f}) - 지분법({abs(_지분법):,.0f}) = {기타수익:,.0f} ({year_str})")
-            else:
-                기타수익 = 0
+        # (개별 역산은 통합 역산 레이어에서 일괄 처리)
 
         당기순이익_direct = get_cat_first('net_income')
         if 당기순이익_direct is not None:
@@ -7600,6 +7596,64 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                         당기순이익 = _val
                         print(f"[VCM-v2] 당기순이익 주석에서 복구: {_acc} = {_val:,.0f} ({year_str})")
                         break
+
+        # ============================================================
+        # ★★ 통합 역산 레이어 — IS 핵심 8개 항목 상호 검증 + 역산
+        # 상장사 IS: 매출→매출원가→매출총이익→판관비→영업이익→세전이익→법인세→당기순이익
+        # 어느 하나가 None/0이면 나머지에서 역산 가능. display 생성 전에 모두 보정.
+        # ============================================================
+        _is_fixed = []
+        # DEBUG: 항상 출력
+        print(f"[VCM-v2] IS값 ({year_str}): 매출={매출}, 원가={원가}, 매출총이익={매출총이익}, 판관비={판관비}, 영업이익={영업이익}, 법인세={법인세}, 당기순이익={당기순이익}")
+
+        # 1. 매출 = 매출총이익 + abs(매출원가)
+        if not 매출 and 매출총이익 and 원가:
+            매출 = 매출총이익 + abs(원가)
+            _is_fixed.append(f'매출={매출:,.0f}(역산)')
+
+        # 2. 매출총이익 = 매출 - abs(매출원가)
+        if not 매출총이익 and 매출 and 원가:
+            매출총이익 = 매출 - abs(원가)
+            _is_fixed.append(f'매출총이익={매출총이익:,.0f}(역산)')
+
+        # 3. 판관비 = 매출총이익 - 영업이익
+        if not 판관비 and 매출총이익 and 영업이익 is not None:
+            판관비 = 매출총이익 - 영업이익
+            if 판관비:
+                _is_fixed.append(f'판관비={판관비:,.0f}(역산)')
+
+        # 4. 영업이익 (이미 위에서 처리됨, 재확인)
+        if 영업이익 is None and 매출총이익 and 판관비:
+            영업이익 = 매출총이익 - abs(판관비)
+            _is_fixed.append(f'영업이익={영업이익:,.0f}(역산)')
+
+        # 5. 세전이익 = 영업이익 + 영업외수익 - 영업외비용
+        if 세전이익 is None and 영업이익 is not None:
+            세전이익 = 영업이익 + 영업외수익 - 영업외비용
+            _is_fixed.append(f'세전이익={세전이익:,.0f}(역산)')
+
+        # 6. 법인세 = 당기순이익(원본) - 세전이익
+        _ni_original = get_cat_first('net_income')  # 원본값만 사용 (순환참조 방지)
+        if not 법인세 and 세전이익 is not None and _ni_original is not None:
+            법인세 = _ni_original - 세전이익
+            if 법인세:
+                _is_fixed.append(f'법인세={법인세:,.0f}(역산)')
+
+        # 7. 당기순이익 = 세전이익 - abs(법인세)
+        if 당기순이익 is None and 세전이익 is not None and 법인세:
+            당기순이익 = 세전이익 - abs(법인세)
+            _is_fixed.append(f'당기순이익={당기순이익:,.0f}(역산)')
+
+        # 8. 영업외수익 하위 역산
+        if not 기타수익 and 영업외수익 and 금융수익:
+            기타수익 = 영업외수익 - abs(금융수익)
+            if 기타수익 and abs(기타수익) > 0:
+                _is_fixed.append(f'기타수익={기타수익:,.0f}(역산)')
+            else:
+                기타수익 = 0
+
+        if _is_fixed:
+            print(f"[VCM-v2] ★ 통합 역산 ({year_str}): {', '.join(_is_fixed)}")
 
         # % of Sales 계산 (None 값 전파 방지)
         매출총이익_pct = 매출총이익 / 매출 if 매출 else None
