@@ -722,12 +722,37 @@ def _validate_classification_results(llm_results: list, expected_names: list,
                     'reason': 'LLM 응답에서 누락',
                 }
 
-        # 카테고리 유효성 검증
+        # 카테고리 유효성 검증 + 한글→영문 정규화
+        _cat_normalize_map = {
+            # BS 한글 카테고리 → 영문
+            '유동자산': 'current_asset', '비유동자산': 'non_current_asset',
+            '유동부채': 'current_liability', '비유동부채': 'non_current_liability',
+            '자본': 'equity', '소계': 'subtotal', '합계': 'total',
+            # IS 한글 카테고리 → 영문
+            '매출': 'revenue', '매출수익': 'revenue', '영업수익': 'revenue',
+            '매출원가': 'cogs', '원가': 'cogs',
+            '매출총이익': 'gross_profit',
+            '판매비와관리비': 'sga', '판관비': 'sga', '판매관리비': 'sga',
+            '영업이익': 'operating_income', '영업손실': 'operating_income',
+            '금융수익': 'interest_income', '이자수익': 'interest_income',
+            '금융비용': 'interest_expense', '금융원가': 'interest_expense', '이자비용': 'interest_expense',
+            '기타수익': 'other_income', '기타비용': 'other_expense',
+            '법인세비용차감전이익': 'ebt', '세전이익': 'ebt',
+            '법인세비용': 'tax', '법인세': 'tax',
+            '당기순이익': 'net_income', '당기순손실': 'net_income',
+        }
         category = item.get('standard_category')
         if category and category not in valid_cats:
-            item['standard_category'] = None
-            item['confidence'] = min(item.get('confidence', 0), 0.3)
-            item['reason'] = f"무효 카테고리 '{category}' → null"
+            # 한글→영문 정규화 시도
+            normalized_cat = _cat_normalize_map.get(category)
+            if normalized_cat and normalized_cat in valid_cats:
+                print(f"[CLASSIFIER] 카테고리 정규화: '{category}' → '{normalized_cat}' ({name})")
+                item['standard_category'] = normalized_cat
+            else:
+                print(f"[CLASSIFIER] ★ 무효 카테고리: '{category}' → skip ({name})")
+                item['standard_category'] = None
+                item['confidence'] = min(item.get('confidence', 0), 0.3)
+                item['reason'] = f"무효 카테고리 '{category}' → null"
 
         # sign 유효성
         if item.get('sign') not in ('+', '-'):

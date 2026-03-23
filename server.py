@@ -6957,9 +6957,11 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         group_items = {}     # {group: [{'name': ..., 'value': ...}]}
         totals = {}          # {'자산총계': val, ...}
 
+        _bs_unmapped = 0
         for acc_name in bs_accounts:
             cls = bs_map.get(acc_name)
             if not cls:
+                _bs_unmapped += 1
                 continue
 
             cat = cls.get('standard_category')
@@ -7235,9 +7237,11 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         # IS 항목별 값 추출
         is_values = {}  # {category: [{'name': ..., 'value': ..., 'group': ...}]}
 
+        _is_unmapped = 0
         for acc_name in is_accounts:
             cls = is_map.get(acc_name)
             if not cls:
+                _is_unmapped += 1
                 continue
 
             cat = cls.get('standard_category')
@@ -7302,6 +7306,12 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             if all(item.get('is_null') for item in items):
                 return None
             return items[0]['value']  # 실제로 0인 경우
+
+        # ★ 매핑 실패 경고 — LLM 분류 키 불일치 조기 감지
+        if _bs_unmapped > len(bs_accounts) * 0.3:
+            print(f"[VCM-v2] ★★ 경고: BS 매핑 실패 {_bs_unmapped}/{len(bs_accounts)} (30%+ 미매칭) ({year_str})")
+        if _is_unmapped > len(is_accounts) * 0.3:
+            print(f"[VCM-v2] ★★ 경고: IS 매핑 실패 {_is_unmapped}/{len(is_accounts)} (30%+ 미매칭) ({year_str})")
 
         매출 = get_cat_first('revenue') or 0
         원가 = get_cat_first('cogs') or 0
