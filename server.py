@@ -7421,13 +7421,13 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
         elif _notes_감가상각비 and not _notes_사용권자산상각비:
             # 사용권자산상각비만 누락 — 사용권자산 보유 기업이면 fallback 필요
             # group_totals에 없을 수 있음 (group=None인 standalone 항목) → category_items에서 직접 확인
-            # BS 원본에서 직접 사용권자산 값 검색 (LLM 분류에 의존하지 않음)
+            # V2 LLM 분류 결과(category_items)에서 사용권자산 검색
             _사용권자산_val = 0
-            for _bs_acc in bs_accounts:
-                if '사용권' in str(_bs_acc):
-                    _v = get_value(bs_df, bs_acc_col, _bs_acc, year_col)
-                    if _v and abs(_v) > _사용권자산_val:
-                        _사용권자산_val = abs(_v)
+            for _nca_item in category_items.get('non_current_asset', []):
+                if '사용권' in str(_nca_item.get('name', '')):
+                    _v = _nca_item.get('value', 0)
+                    if _v and abs(_v) > abs(_사용권자산_val):
+                        _사용권자산_val = _v
             if _사용권자산_val and abs(_사용권자산_val) > 1000000000:  # 10억 이상
                 _need_da_fallback = True
                 print(f"[VCM-v2] 사용권자산상각비 부분 누락 감지: 감가상각비={_notes_감가상각비:,.0f}, 사용권자산={_사용권자산_val:,.0f} ({year_str})")
