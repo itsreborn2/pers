@@ -528,6 +528,50 @@ excludes = ['유동성', '유동', '전환']  # 기존 유지 + 새 조건 추�
 2. **조건 추가 방식**: exclude 리스트에 항목 추가, if 조건에 `and` 추가
 3. **테스트**: 새 케이스와 기존 케이스 모두 검증
 
+### 조건 분기 / Fallback 코드 작성 규칙 (★필수★)
+
+**CJ대한통운 EBITDA 3회 반복 실패 교훈에서 도출된 규칙.**
+
+#### 코드 작성 시
+
+1. **데이터 구조 키 이름을 가정하지 마라**
+   - `group_totals.get('사용권자산')` → LLM이 group=None으로 분류하면 키 자체가 없음
+   - 반드시 실제 DB/LLM 분류 결과에서 키 이름을 확인한 후 코드 작성
+   - `category_items`, `group_totals`, `is_values` 등 LLM 의존 데이터는 키 존재를 보장할 수 없음
+
+2. **fallback 조건은 "전부 없을 때"가 아니라 "일부라도 누락"도 포함**
+   - ❌ `if not A and not B:` → A만 있고 B가 없으면 미실행
+   - ✓ `if not A and not B:` (전부 누락) + `elif A and not B and B가_있어야_하는_조건:` (부분 누락)
+
+3. **모든 조건 변수의 실제 값을 로그로 출력**
+   ```python
+   # ❌ 잘못된 코드
+   if not _notes_감가상각비:
+       _run_fallback()
+
+   # ✓ 올바른 코드
+   print(f"[DEBUG] 감가상각비={_notes_감가상각비}, 사용권={_notes_사용권자산상각비}, 사용권자산={_사용권자산_val}")
+   if _need_fallback:
+       _run_fallback()
+   ```
+
+#### 검증 시
+
+4. **dev2 테스트 후 반드시 프로덕션 로그도 확인**
+   - dev2에서 성공해도 프로덕션에서 다른 결과가 나올 수 있음 (DART API 간헐성)
+   - `sudo journalctl -u pers --since "10 min ago" | grep "키워드"` 로 실제 실행 경로 확인
+
+5. **프론트엔드 값까지 확인**
+   - API 테스트(localhost)와 프론트엔드(pers.moatai.app)의 값이 다를 수 있음
+   - 반드시 실제 웹 프론트에서 최종 확인
+
+6. **LLM 분류 결과 사전 확인**
+   - 새로운 조건 분기 코드 작성 전, 해당 기업의 LLM 분류 캐시를 DB에서 확인
+   ```sql
+   SELECT account_name_raw, group_name FROM account_classification_cache
+   WHERE company_code='00113410' AND account_name_raw LIKE '%사용권%'
+   ```
+
 #### 예시 (2026-01 수정)
 - 문제: '유동전환사채'가 '비유동차입부채'로 잘못 분류
 - 원인: exclude에 '유동성'만 있고 '유동'이 없음

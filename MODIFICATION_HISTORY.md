@@ -7,6 +7,17 @@
 
 ## 2026-03-22
 
+### [FIX] EBITDA fallback 사용권자산 standalone 항목 검색 수정
+- **문제**: 이전 fallback 조건 개선 후에도 FY2024/2025 EBITDA 미수정 (프로덕션)
+- **원인**: LLM이 사용권자산을 group=None (standalone)으로 분류 → group_totals에 '사용권자산' 키 없음 → fallback 조건 `_사용권자산_val = group_totals.get('사용권자산', 0)` = 0 → 부분 누락 미감지
+- **수정**: category_items['non_current_asset']에서 '사용권' 포함 항목을 직접 검색하는 fallback 추가
+- **교훈 (3회 반복 실패)**:
+  1. 1차: fallback 조건이 "둘 다 0"만 체크 → 부분 누락 미대응
+  2. 2차: fallback 조건 개선했지만 group_totals 키 부재 → 사용권자산 미감지
+  3. 3차: category_items에서 직접 검색으로 해결
+  - **핵심**: LLM 분류 결과의 데이터 구조(키 이름, group 유무)를 실제 DB에서 확인 후 코드 작성해야 함
+  - CLAUDE.md에 "조건 분기 / Fallback 코드 작성 규칙" 6항목 추가
+
 ### [FIX] EBITDA D&A fallback 조건 개선 — 사용권자산상각비 부분 누락 대응
 - **문제**: FY2024/2025에서 Notes가 감가상각비(214B)만 가져오고 사용권자산상각비(346B)는 누락 → fallback 조건(`not _notes_감가상각비`)에 해당 안 되어 fallback 미실행 → EBITDA=805,829 (사용권 빠짐)
 - **원인**: fallback 조건이 "감가상각비+사용권 모두 0"이어야 실행 → 감가상각비만 있으면 실행 안 됨
