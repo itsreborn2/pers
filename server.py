@@ -7487,6 +7487,27 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
 
         법인세 = get_cat_first('tax') or 0
 
+        # ★ IS 파생값 역산 fallback — 같은 항목이 다른 이름(주석 번호 차이)으로 존재하여
+        # 특정 연도에 None인 경우 역산으로 복구 (CJ대한통운 FY2021/2022 판관비/법인세 사례)
+        if not 판관비 and 매출총이익 and 영업이익 is not None:
+            판관비 = 매출총이익 - 영업이익
+            if 판관비:
+                print(f"[VCM-v2] ★ 판관비 역산: 매출총이익({매출총이익:,.0f}) - 영업이익({영업이익:,.0f}) = {판관비:,.0f} ({year_str})")
+
+        _ni_for_tax = get_cat_first('net_income')
+        if not 법인세 and 세전이익 is not None and _ni_for_tax is not None:
+            법인세 = _ni_for_tax - 세전이익
+            if 법인세:
+                print(f"[VCM-v2] ★ 법인세 역산: 당기순이익({_ni_for_tax:,.0f}) - 세전이익({세전이익:,.0f}) = {법인세:,.0f} ({year_str})")
+
+        if not 기타수익 and 영업외수익 and 금융수익:
+            _지분법 = get_cat_total('equity_method_income') or 0
+            기타수익 = 영업외수익 - abs(금융수익) - abs(_지분법)
+            if 기타수익 and abs(기타수익) > 0:
+                print(f"[VCM-v2] ★ 기타수익 역산: 영업외수익({영업외수익:,.0f}) - 금융수익({abs(금융수익):,.0f}) - 지분법({abs(_지분법):,.0f}) = {기타수익:,.0f} ({year_str})")
+            else:
+                기타수익 = 0
+
         당기순이익_direct = get_cat_first('net_income')
         if 당기순이익_direct is not None:
             당기순이익 = 당기순이익_direct
