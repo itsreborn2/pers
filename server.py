@@ -7425,6 +7425,7 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 print(f"[VCM-v2] 사용권자산상각비 부분 누락 감지: 감가상각비={_notes_감가상각비:,.0f}, 사용권자산={_사용권자산_val:,.0f} ({year_str})")
 
         if _need_da_fallback and company_code and company_code != 'unknown':
+            print(f"[VCM-v2] D&A fallback 시작 ({year_str}): 감가={_notes_감가상각비:,.0f}, 사용권={_notes_사용권자산상각비:,.0f}")
             try:
                 _fy_year = int(year_str.replace('FY', ''))
                 # Fix 2: 검색 기간 확장 (사업보고서 4월 말 제출 → 6월까지 검색)
@@ -7433,11 +7434,15 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 from dart_fss.filings import search as _search_filings
                 _filings_list = list(_search_filings(corp_code=company_code, bgn_de=_report_bgn, end_de=_report_end, pblntf_ty='A'))
                 # 정정본 제외, 원본 사업보고서만
+                print(f"[VCM-v2] D&A fallback 검색 결과 ({year_str}): {len(_filings_list)}개 (bgn={_report_bgn}, end={_report_end})")
+                for _fl in _filings_list[:3]:
+                    print(f"[VCM-v2]   → {getattr(_fl, 'report_nm', str(_fl))}")
                 _filings_list = [_f for _f in _filings_list
                                  if '사업보고서' in str(getattr(_f, 'report_nm', _f))
                                  and '정정' not in str(getattr(_f, 'report_nm', _f))
                                  and '반기' not in str(getattr(_f, 'report_nm', _f))
                                  and '분기' not in str(getattr(_f, 'report_nm', _f))]
+                print(f"[VCM-v2] D&A fallback 필터 후 ({year_str}): {len(_filings_list)}개")
                 # 정정본 없으면 전체에서 가장 최신 사업보고서 사용
                 if not _filings_list:
                     _all_annual = [_f for _f in list(_search_filings(corp_code=company_code, bgn_de=_report_bgn, end_de=_report_end, pblntf_ty='A'))
@@ -7457,7 +7462,7 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                         _ths = _thead_tr.find_all(['td', 'th'])
                         for _ti, _th in enumerate(_ths):
                             _th_text = re.sub(r'\s', '', _th.get_text(strip=True))
-                            if '당기' in _th_text or f'제{_fy_year - 1929}기' in _th_text or f'{_fy_year}' in _th_text:
+                            if _ti >= 1 and ('당기' in _th_text or f'제{_fy_year - 1929}기' in _th_text or f'{_fy_year}' in _th_text):
                                 _당기_col_idx = _ti
                                 break
 
@@ -7493,6 +7498,7 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                             continue
                         # Fix 1: 연결 페이지 우선, 없으면 별도 페이지도 검색
                         _target_pages = []
+                        print(f"[VCM-v2] D&A fallback pages 수 ({year_str}): {len(_pages)}")
                         for _page in _pages:
                             _ptitle = _page.title if hasattr(_page, 'title') else str(_page)
                             if '비용' in _ptitle and '성격' in _ptitle:
@@ -7500,9 +7506,13 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                                     _target_pages.insert(0, _page)  # 연결 우선
                                 else:
                                     _target_pages.append(_page)  # 별도는 후순위
+                        print(f"[VCM-v2] D&A fallback target_pages ({year_str}): {len(_target_pages)}개 {[p.title[:30] for p in _target_pages]}")
                         for _page in _target_pages:
                             try:
-                                _da = _parse_da_from_page(_page.html)
+                                _page_html = _page.html
+                                print(f"[VCM-v2] D&A fallback HTML 로드 ({year_str}): {len(_page_html)} chars")
+                                _da = _parse_da_from_page(_page_html)
+                                print(f"[VCM-v2] D&A fallback 파싱 결과 ({year_str}): {_da}")
                                 if _da['감가상각비'] > _notes_감가상각비:
                                     _notes_감가상각비 = _da['감가상각비']
                                 if _da['사용권자산상각비'] > _notes_사용권자산상각비:
