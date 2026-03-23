@@ -7425,60 +7425,105 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                 print(f"[VCM-v2] 사용권자산상각비 부분 누락 감지: 감가상각비={_notes_감가상각비:,.0f}, 사용권자산={_사용권자산_val:,.0f} ({year_str})")
 
         if _need_da_fallback and company_code and company_code != 'unknown':
+            print(f"[VCM-v2] D&A fallback 시작 ({year_str}): 감가={_notes_감가상각비:,.0f}, 사용권={_notes_사용권자산상각비:,.0f}")
             try:
                 _fy_year = int(year_str.replace('FY', ''))
+                # Fix 2: 검색 기간 확장 (사업보고서 4월 말 제출 → 6월까지 검색)
                 _report_bgn = f"{_fy_year + 1}0101"
-                _report_end = f"{_fy_year + 1}0401"
+                _report_end = f"{_fy_year + 1}0601"
                 from dart_fss.filings import search as _search_filings
                 _filings_list = list(_search_filings(corp_code=company_code, bgn_de=_report_bgn, end_de=_report_end, pblntf_ty='A'))
                 # 정정본 제외, 원본 사업보고서만
+                print(f"[VCM-v2] D&A fallback 검색 결과 ({year_str}): {len(_filings_list)}개 (bgn={_report_bgn}, end={_report_end})")
+                for _fl in _filings_list[:3]:
+                    print(f"[VCM-v2]   → {getattr(_fl, 'report_nm', str(_fl))}")
                 _filings_list = [_f for _f in _filings_list
                                  if '사업보고서' in str(getattr(_f, 'report_nm', _f))
                                  and '정정' not in str(getattr(_f, 'report_nm', _f))
                                  and '반기' not in str(getattr(_f, 'report_nm', _f))
                                  and '분기' not in str(getattr(_f, 'report_nm', _f))]
+                print(f"[VCM-v2] D&A fallback 필터 후 ({year_str}): {len(_filings_list)}개")
+                # 정정본 없으면 전체에서 가장 최신 사업보고서 사용
+                if not _filings_list:
+                    _all_annual = [_f for _f in list(_search_filings(corp_code=company_code, bgn_de=_report_bgn, end_de=_report_end, pblntf_ty='A'))
+                                   if '사업보고서' in str(getattr(_f, 'report_nm', _f))]
+                    if _all_annual:
+                        _filings_list = _all_annual[:1]  # 가장 최신 (정정본 포함)
+
+                def _parse_da_from_page(_page_html):
+                    """비용의 성격별 분류 HTML에서 D&A 추출"""
+                    from bs4 import BeautifulSoup as _BS
+                    _soup = _BS(_page_html, 'html.parser')
+                    _da = {'감가상각비': 0, '사용권자산상각비': 0, '무형자산상각비': 0}
+
+                    # Fix 3: 당기 컬럼 위치 감지 (헤더에서 '당기' 찾기)
+                    _당기_col_idx = 1  # 기본값
+                    for _thead_tr in _soup.find_all('tr')[:3]:  # 상위 3행에서 헤더 탐색
+                        _ths = _thead_tr.find_all(['td', 'th'])
+                        for _ti, _th in enumerate(_ths):
+                            _th_text = re.sub(r'\s', '', _th.get_text(strip=True))
+                            if _ti >= 1 and ('당기' in _th_text or f'제{_fy_year - 1929}기' in _th_text or f'{_fy_year}' in _th_text):
+                                _당기_col_idx = _ti
+                                break
+
+                    for _tr in _soup.find_all('tr'):
+                        _cells = _tr.find_all(['td', 'th'])
+                        if len(_cells) <= _당기_col_idx:
+                            continue
+                        _cell_norm = re.sub(r'\s', '', _cells[0].get_text(strip=True))
+                        if not _cell_norm:
+                            continue
+                        _cv = _cells[_당기_col_idx].get_text(strip=True).replace(',', '').replace('(', '-').replace(')', '').replace(' ', '')
+                        if not _cv or _cv == '-':
+                            continue
+                        try:
+                            _vf = abs(float(_cv)) * 1000  # 천원→원
+                        except:
+                            continue
+                        if '감가상각비' in _cell_norm and '무형' not in _cell_norm and '사용권' not in _cell_norm:
+                            if _vf > _da['감가상각비']:
+                                _da['감가상각비'] = _vf
+                        elif '사용권' in _cell_norm and ('감가상각' in _cell_norm or '상각' in _cell_norm):
+                            if _vf > _da['사용권자산상각비']:
+                                _da['사용권자산상각비'] = _vf
+                        elif '무형자산상각' in _cell_norm:
+                            if _vf > _da['무형자산상각비']:
+                                _da['무형자산상각비'] = _vf
+                    return _da
+
                 for _filing in _filings_list:
                     try:
                         _pages = _filing.pages if hasattr(_filing, 'pages') else None
                         if not _pages:
                             continue
+                        # Fix 1: 연결 페이지 우선, 없으면 별도 페이지도 검색
+                        _target_pages = []
+                        print(f"[VCM-v2] D&A fallback pages 수 ({year_str}): {len(_pages)}")
                         for _page in _pages:
-                            # dart_fss Page 객체: .title, .ele_id, .html 속성
                             _ptitle = _page.title if hasattr(_page, 'title') else str(_page)
-                            if '비용' in _ptitle and '성격' in _ptitle and '연결' in _ptitle:
-                                try:
-                                    from bs4 import BeautifulSoup as _BS
-                                    _html = _page.html  # Page 객체의 html 속성
-                                    _soup = _BS(_html, 'html.parser')
-                                    for _tr in _soup.find_all('tr'):
-                                        _cells = _tr.find_all(['td', 'th'])
-                                        if len(_cells) < 2:
-                                            continue
-                                        _cell_norm = re.sub(r'\s', '', _cells[0].get_text(strip=True))
-                                        if not _cell_norm:
-                                            continue
-                                        # 첫 번째 숫자 셀 값 추출 (당기)
-                                        _cv = _cells[1].get_text(strip=True).replace(',', '').replace('(', '-').replace(')', '').replace(' ', '')
-                                        if not _cv or _cv == '-':
-                                            continue
-                                        try:
-                                            _vf = abs(float(_cv)) * 1000  # 천원→원
-                                        except:
-                                            continue
-                                        if '감가상각비' in _cell_norm and '무형' not in _cell_norm and '사용권' not in _cell_norm:
-                                            if _vf > _notes_감가상각비:
-                                                _notes_감가상각비 = _vf
-                                        elif '사용권' in _cell_norm and ('감가상각' in _cell_norm or '상각' in _cell_norm):
-                                            if _vf > _notes_사용권자산상각비:
-                                                _notes_사용권자산상각비 = _vf
-                                        elif '무형자산상각' in _cell_norm:
-                                            if _vf > _notes_무형자산상각비:
-                                                _notes_무형자산상각비 = _vf
-                                    if _notes_감가상각비 or _notes_사용권자산상각비 or _notes_무형자산상각비:
-                                        print(f"[VCM-v2] ★ D&A fallback 성공 ({year_str}): 감가상각비={_notes_감가상각비:,.0f}, 사용권={_notes_사용권자산상각비:,.0f}, 무형={_notes_무형자산상각비:,.0f}")
-                                        break
-                                except Exception as _pe:
-                                    print(f"[VCM-v2] D&A fallback 페이지 파싱 실패 ({year_str}): {_pe}")
+                            if '비용' in _ptitle and '성격' in _ptitle:
+                                if '연결' in _ptitle:
+                                    _target_pages.insert(0, _page)  # 연결 우선
+                                else:
+                                    _target_pages.append(_page)  # 별도는 후순위
+                        print(f"[VCM-v2] D&A fallback target_pages ({year_str}): {len(_target_pages)}개 {[p.title[:30] for p in _target_pages]}")
+                        for _page in _target_pages:
+                            try:
+                                _page_html = _page.html
+                                print(f"[VCM-v2] D&A fallback HTML 로드 ({year_str}): {len(_page_html)} chars")
+                                _da = _parse_da_from_page(_page_html)
+                                print(f"[VCM-v2] D&A fallback 파싱 결과 ({year_str}): {_da}")
+                                if _da['감가상각비'] > _notes_감가상각비:
+                                    _notes_감가상각비 = _da['감가상각비']
+                                if _da['사용권자산상각비'] > _notes_사용권자산상각비:
+                                    _notes_사용권자산상각비 = _da['사용권자산상각비']
+                                if _da['무형자산상각비'] > _notes_무형자산상각비:
+                                    _notes_무형자산상각비 = _da['무형자산상각비']
+                                if _notes_감가상각비 or _notes_사용권자산상각비 or _notes_무형자산상각비:
+                                    print(f"[VCM-v2] ★ D&A fallback 성공 ({year_str}): 감가상각비={_notes_감가상각비:,.0f}, 사용권={_notes_사용권자산상각비:,.0f}, 무형={_notes_무형자산상각비:,.0f} [page: {_page.title[:40]}]")
+                                    break
+                            except Exception as _pe:
+                                print(f"[VCM-v2] D&A fallback 페이지 파싱 실패 ({year_str}): {_pe}")
                         if _notes_감가상각비 or _notes_사용권자산상각비:
                             break
                     except Exception as _fe2:
