@@ -7459,15 +7459,21 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                     _soup = _BS(_page_html, 'html.parser')
                     _da = {'감가상각비': 0, '사용권자산상각비': 0, '무형자산상각비': 0}
 
-                    # Fix 3: 당기 컬럼 위치 감지 (헤더에서 '당기' 찾기)
-                    _당기_col_idx = 1  # 기본값
-                    for _thead_tr in _soup.find_all('tr')[:3]:  # 상위 3행에서 헤더 탐색
+                    # Fix 3: 당기 컬럼 위치 감지
+                    _당기_col_idx = 1
+                    for _thead_tr in _soup.find_all('tr')[:3]:
                         _ths = _thead_tr.find_all(['td', 'th'])
                         for _ti, _th in enumerate(_ths):
                             _th_text = re.sub(r'\s', '', _th.get_text(strip=True))
-                            if _ti >= 1 and ('당기' in _th_text or f'제{_fy_year - 1929}기' in _th_text or f'{_fy_year}' in _th_text):
+                            if _ti >= 1 and '합계' in _th_text:
                                 _당기_col_idx = _ti
                                 break
+                        else:
+                            for _ti, _th in enumerate(_ths):
+                                _th_text = re.sub(r'\s', '', _th.get_text(strip=True))
+                                if _ti >= 1 and ('당기' in _th_text or f'제{_fy_year - 1929}기' in _th_text or f'{_fy_year}' in _th_text):
+                                    _당기_col_idx = _ti
+                                    break
 
                     for _tr in _soup.find_all('tr'):
                         _cells = _tr.find_all(['td', 'th'])
