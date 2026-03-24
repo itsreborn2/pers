@@ -7507,12 +7507,15 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                         print(f"[VCM-v2] D&A fallback pages 수 ({year_str}): {len(_pages)}")
                         for _page in _pages:
                             _ptitle = _page.title if hasattr(_page, 'title') else str(_page)
-                            if '비용' in _ptitle and '성격' in _ptitle:
+                            _ptitle_norm = _ptitle.replace(' ', '')
+                            # "비용의 성격별 분류" 또는 "영업비용" (NAVER 등)
+                            _is_expense_page = ('비용' in _ptitle and '성격' in _ptitle) or ('영업비용' in _ptitle_norm)
+                            if _is_expense_page:
                                 if '연결' in _ptitle:
-                                    _target_pages.insert(0, _page)  # 연결 우선
+                                    _target_pages.insert(0, _page)
                                 else:
-                                    _target_pages.append(_page)  # 별도는 후순위
-                        # Fix: 별도 페이지 없으면 통합 주석 페이지("연결재무제표 주석")에서도 검색
+                                    _target_pages.append(_page)
+                        # 없으면 통합 주석 페이지에서도 검색
                         if not _target_pages:
                             for _page in _pages:
                                 _ptitle = _page.title if hasattr(_page, 'title') else str(_page)
