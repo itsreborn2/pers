@@ -7426,6 +7426,14 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             _need_da_fallback = True
         elif _has_tangible_assets and not _notes_사용권자산상각비:
             _need_da_fallback = True
+        if not _need_da_fallback and _has_tangible_assets and _notes_감가상각비:
+            _tangible_total = 0
+            for _nca in category_items.get('non_current_asset', []):
+                if '유형자산' in str(_nca.get('name', '')) and '투자' not in str(_nca.get('name', '')):
+                    _tangible_total = abs(_nca.get('value', 0))
+                    break
+            if _tangible_total > 0 and (_notes_감가상각비 + _notes_사용권자산상각비) < _tangible_total * 0.01:
+                _need_da_fallback = True
 
         if _need_da_fallback and company_code and company_code != 'unknown':
             print(f"[VCM-v2] D&A fallback 시작 ({year_str}): 감가={_notes_감가상각비:,.0f}, 사용권={_notes_사용권자산상각비:,.0f}")
