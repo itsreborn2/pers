@@ -7509,7 +7509,9 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
                             _ptitle = _page.title if hasattr(_page, 'title') else str(_page)
                             _ptitle_norm = _ptitle.replace(' ', '')
                             # "비용의 성격별 분류" 또는 "영업비용" (NAVER 등)
-                            _is_expense_page = ('비용' in _ptitle and '성격' in _ptitle) or ('영업비용' in _ptitle_norm)
+                            _is_expense_page = (('비용' in _ptitle and '성격' in _ptitle)
+                                               or ('영업비용' in _ptitle_norm)
+                                               or ('계속영업' in _ptitle_norm and '손익' in _ptitle_norm))
                             if _is_expense_page:
                                 if '연결' in _ptitle:
                                     _target_pages.insert(0, _page)
