@@ -7413,24 +7413,19 @@ async def create_vcm_format_v2(fs_data, excel_filepath=None, company_code='unkno
             if _notes_감가상각비 or _notes_무형자산상각비 or _notes_사용권자산상각비:
                 print(f"[VCM-v2] 주석 감가상각비: {_notes_감가상각비:,.0f}, 무형: {_notes_무형자산상각비:,.0f}, 사용권: {_notes_사용권자산상각비:,.0f} ({year_str})")
 
-        # ★ EBITDA D&A fallback: Notes에서 D&A가 불완전하면 사업보고서 페이지 직접 접근
-        # 조건: (1) 감가상각비+사용권 모두 0, 또는 (2) 감가상각비는 있지만 사용권=0 (부분 누락)
+        # ★ D&A fallback 조건: 유형자산/사용권자산 보유 기업에서 D&A가 불완전하면 무조건 사업보고서 확인
         _need_da_fallback = False
+        _has_tangible_assets = False
+        for _nca_item in category_items.get('non_current_asset', []):
+            _nca_name = str(_nca_item.get('name', ''))
+            if ('유형자산' in _nca_name or '사용권' in _nca_name) and _nca_item.get('value', 0):
+                if abs(_nca_item['value']) > 1000000000:
+                    _has_tangible_assets = True
+                    break
         if not _notes_감가상각비 and not _notes_사용권자산상각비:
-            _need_da_fallback = True  # 완전 누락
-        elif _notes_감가상각비 and not _notes_사용권자산상각비:
-            # 사용권자산상각비만 누락 — 사용권자산 보유 기업이면 fallback 필요
-            # group_totals에 없을 수 있음 (group=None인 standalone 항목) → category_items에서 직접 확인
-            # V2 LLM 분류 결과(category_items)에서 사용권자산 검색
-            _사용권자산_val = 0
-            for _nca_item in category_items.get('non_current_asset', []):
-                if '사용권' in str(_nca_item.get('name', '')):
-                    _v = _nca_item.get('value', 0)
-                    if _v and abs(_v) > abs(_사용권자산_val):
-                        _사용권자산_val = _v
-            if _사용권자산_val and abs(_사용권자산_val) > 1000000000:  # 10억 이상
-                _need_da_fallback = True
-                print(f"[VCM-v2] 사용권자산상각비 부분 누락 감지: 감가상각비={_notes_감가상각비:,.0f}, 사용권자산={_사용권자산_val:,.0f} ({year_str})")
+            _need_da_fallback = True
+        elif _has_tangible_assets and not _notes_사용권자산상각비:
+            _need_da_fallback = True
 
         if _need_da_fallback and company_code and company_code != 'unknown':
             print(f"[VCM-v2] D&A fallback 시작 ({year_str}): 감가={_notes_감가상각비:,.0f}, 사용권={_notes_사용권자산상각비:,.0f}")
